@@ -1,0 +1,431 @@
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
+import { useTokenTrading } from '@/hooks/useTokenTrading';
+import { useWallet } from '@/hooks/useWallet';
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Slider } from '@/components/ui/slider';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  ArrowDown,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  RefreshCw,
+  Wallet,
+} from 'lucide-react';
+
+interface TokenTradeModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  token: {
+    address: string;
+    name: string;
+    symbol: string;
+    logo?: string;
+    price: number;
+    reserveRatio: number;
+  };
+}
+
+export const TokenTradeModal = ({ isOpen, onClose, token }: TokenTradeModalProps) => {
+  const { isConnected } = useWallet();
+  const {
+    buyTokens,
+    sellTokens,
+    calculateTokensForEth,
+    calculateEthForTokens,
+    getTokenBalance,
+    isLoading,
+    error,
+  } = useTokenTrading();
+
+  // State
+  const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy');
+  const [ethAmount, setEthAmount] = useState<string>('0.01');
+  const [tokenAmount, setTokenAmount] = useState<string>('0');
+  const [estimatedTokens, setEstimatedTokens] = useState<string>('0');
+  const [estimatedEth, setEstimatedEth] = useState<string>('0');
+  const [slippage, setSlippage] = useState<number>(5); // Default 5% slippage
+  const [tokenBalance, setTokenBalance] = useState<string>('0');
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [txSuccess, setTxSuccess] = useState<boolean>(false);
+
+  // Load token balance
+  const loadTokenBalance = useCallback(async () => {
+    if (token.address) {
+      const balance = await getTokenBalance(token.address);
+      setTokenBalance(balance);
+    }
+  }, [token.address, getTokenBalance]);
+
+  // Calculate estimated tokens for ETH
+  const calculateEstimatedTokens = useCallback(async () => {
+    if (parseFloat(ethAmount) > 0) {
+      const tokens = await calculateTokensForEth(token.address, ethAmount);
+      setEstimatedTokens(tokens);
+    } else {
+      setEstimatedTokens('0');
+    }
+  }, [ethAmount, token.address, calculateTokensForEth]);
+
+  // Calculate estimated ETH for tokens
+  const calculateEstimatedEth = useCallback(async () => {
+    if (parseFloat(tokenAmount) > 0) {
+      const eth = await calculateEthForTokens(token.address, tokenAmount);
+      setEstimatedEth(eth);
+    } else {
+      setEstimatedEth('0');
+    }
+  }, [tokenAmount, token.address, calculateEthForTokens]);
+
+  // Load token balance when modal opens
+  useEffect(() => {
+    if (isOpen && isConnected && token.address) {
+      loadTokenBalance();
+    }
+  }, [isOpen, isConnected, token.address, loadTokenBalance]);
+
+  // Calculate estimated tokens/ETH when inputs change
+  useEffect(() => {
+    if (activeTab === 'buy' && parseFloat(ethAmount) > 0) {
+      calculateEstimatedTokens();
+    } else if (activeTab === 'sell' && parseFloat(tokenAmount) > 0) {
+      calculateEstimatedEth();
+    }
+  }, [ethAmount, tokenAmount, activeTab, calculateEstimatedTokens, calculateEstimatedEth]);
+
+  // Handle buy tokens
+  const handleBuyTokens = async () => {
+    if (parseFloat(ethAmount) <= 0) return;
+    
+    const result = await buyTokens(
+      token.address,
+      ethAmount,
+      estimatedTokens,
+      slippage
+    );
+
+    if (result.success && result.hash) {
+      setTxHash(result.hash);
+      setTxSuccess(true);
+      loadTokenBalance(); // Refresh balance
+      
+      // Trigger marketplace refresh after successful transaction
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('tokenDataChanged', { 
+          detail: { tokenAddress: token.address } 
+        }));
+      }, 2000); // Wait 2 seconds for blockchain confirmation
+    }
+  };
+
+  // Handle sell tokens
+  const handleSellTokens = async () => {
+    if (parseFloat(tokenAmount) <= 0) return;
+    
+    const result = await sellTokens(
+      token.address,
+      tokenAmount,
+      estimatedEth,
+      slippage
+    );
+
+    if (result.success && result.hash) {
+      setTxHash(result.hash);
+      setTxSuccess(true);
+      loadTokenBalance(); // Refresh balance
+      
+      // Trigger marketplace refresh after successful transaction
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('tokenDataChanged', { 
+          detail: { tokenAddress: token.address } 
+        }));
+      }, 2000); // Wait 2 seconds for blockchain confirmation
+    }
+  };
+
+  // Reset state when modal closes
+  const handleClose = () => {
+    setEthAmount('0.01');
+    setTokenAmount('0');
+    setEstimatedTokens('0');
+    setEstimatedEth('0');
+    setTxHash(null);
+    setTxSuccess(false);
+    onClose();
+  };
+
+  // Format number with commas
+  const formatNumber = (value: string, decimals: number = 6): string => {
+    const num = parseFloat(value);
+    if (isNaN(num)) return '0';
+    return num.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: decimals,
+    });
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {token.logo ? (
+              <Image
+                src={token.logo.startsWith('ipfs://') 
+                  ? `https://ipfs.io/ipfs/${token.logo.replace('ipfs://', '')}` 
+                  : token.logo
+                }
+                alt={`${token.name} logo`}
+                width={24}
+                height={24}
+                className="rounded-full"
+              />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-white text-xs font-bold">
+                {token.symbol.slice(0, 2)}
+              </div>
+            )}
+            Trade {token.name} ({token.symbol})
+          </DialogTitle>
+          <DialogDescription>
+            Current price: {token.price.toFixed(6)} ETH per token
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Wallet Connection Warning */}
+        {!isConnected && (
+          <Alert className="mb-4 bg-amber-50 text-amber-800 border-amber-200">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Please connect your wallet to trade tokens
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Token Balance */}
+        {isConnected && (
+          <div className="flex items-center justify-between mb-4 p-2 bg-muted/50 rounded-md">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Your Balance:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{formatNumber(tokenBalance)}</span>
+              <span className="text-sm text-muted-foreground">{token.symbol}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={loadTokenBalance}
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Trading Tabs */}
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as 'buy' | 'sell')}
+          className="w-full"
+        >
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="buy">Buy</TabsTrigger>
+            <TabsTrigger value="sell">Sell</TabsTrigger>
+          </TabsList>
+
+          {/* Buy Tab */}
+          <TabsContent value="buy" className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="ethAmount">ETH Amount</Label>
+              <Input
+                id="ethAmount"
+                type="number"
+                step="0.001"
+                min="0"
+                value={ethAmount}
+                onChange={(e) => setEthAmount(e.target.value)}
+                disabled={isLoading || !isConnected}
+              />
+              <div className="text-xs text-muted-foreground text-right">
+                ≈ ${(parseFloat(ethAmount) * 3000).toFixed(2)} USD
+              </div>
+            </div>
+
+            <div className="flex justify-center my-2">
+              <ArrowDown className="text-muted-foreground" />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <Label htmlFor="estimatedTokens">Estimated Tokens</Label>
+                <span className="text-xs text-muted-foreground">
+                  Min. received with slippage: {formatNumber(
+                    (parseFloat(estimatedTokens) * (100 - slippage) / 100).toString()
+                  )}
+                </span>
+              </div>
+              <div className="p-3 bg-muted rounded-md flex justify-between items-center">
+                <span className="font-medium text-lg">
+                  {formatNumber(estimatedTokens)}
+                </span>
+                <span className="text-muted-foreground">{token.symbol}</span>
+              </div>
+            </div>
+
+            <Button
+              className="w-full"
+              onClick={handleBuyTokens}
+              disabled={isLoading || !isConnected || parseFloat(ethAmount) <= 0}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Buying...
+                </>
+              ) : (
+                `Buy ${token.symbol}`
+              )}
+            </Button>
+          </TabsContent>
+
+          {/* Sell Tab */}
+          <TabsContent value="sell" className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <Label htmlFor="tokenAmount">Token Amount</Label>
+                {parseFloat(tokenBalance) > 0 && (
+                  <button
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => setTokenAmount(tokenBalance)}
+                  >
+                    Max: {formatNumber(tokenBalance)}
+                  </button>
+                )}
+              </div>
+              <Input
+                id="tokenAmount"
+                type="number"
+                step="0.001"
+                min="0"
+                value={tokenAmount}
+                onChange={(e) => setTokenAmount(e.target.value)}
+                disabled={isLoading || !isConnected}
+              />
+            </div>
+
+            <div className="flex justify-center my-2">
+              <ArrowDown className="text-muted-foreground" />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <Label htmlFor="estimatedEth">Estimated ETH</Label>
+                <span className="text-xs text-muted-foreground">
+                  Min. received with slippage: {formatNumber(
+                    (parseFloat(estimatedEth) * (100 - slippage) / 100).toString()
+                  )}
+                </span>
+              </div>
+              <div className="p-3 bg-muted rounded-md flex justify-between items-center">
+                <span className="font-medium text-lg">
+                  {formatNumber(estimatedEth)}
+                </span>
+                <span className="text-muted-foreground">ETH</span>
+              </div>
+              <div className="text-xs text-muted-foreground text-right">
+                ≈ ${(parseFloat(estimatedEth) * 3000).toFixed(2)} USD
+              </div>
+            </div>
+
+            <Button
+              className="w-full"
+              onClick={handleSellTokens}
+              disabled={
+                isLoading || 
+                !isConnected || 
+                parseFloat(tokenAmount) <= 0 ||
+                parseFloat(tokenAmount) > parseFloat(tokenBalance)
+              }
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Selling...
+                </>
+              ) : (
+                `Sell ${token.symbol}`
+              )}
+            </Button>
+          </TabsContent>
+        </Tabs>
+
+        {/* Slippage Settings */}
+        <div className="space-y-2 pt-2">
+          <div className="flex justify-between">
+            <Label htmlFor="slippage">Slippage Tolerance: {slippage}%</Label>
+          </div>
+          <div className="flex gap-2 items-center">
+            <Slider
+              id="slippage"
+              min={0.1}
+              max={10}
+              step={0.1}
+              value={[slippage]}
+              onValueChange={(values) => setSlippage(values[0])}
+            />
+            <div className="w-12 text-right">{slippage}%</div>
+          </div>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <Alert className="mt-4 bg-red-50 text-red-800 border-red-200">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Success Message */}
+        {txSuccess && txHash && (
+          <Alert className="mt-4 bg-green-50 text-green-800 border-green-200">
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertDescription className="break-all">
+              Transaction successful!{' '}
+              <a
+                href={`https://donut.push.network/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline font-medium"
+              >
+                View on Explorer
+              </a>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <DialogFooter className="flex flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={handleClose} className="sm:w-auto w-full">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};

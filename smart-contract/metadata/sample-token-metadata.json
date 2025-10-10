@@ -1,0 +1,74 @@
+{
+  "name": "Sample Launchpad Token",
+  "symbol": "SLT",
+  "description": "A sample token created through the launchpad platform demonstrating the full functionality of our bonding curve marketplace.",
+  "image": "ipfs://QmSampleImageHash123456789012345678901234567890",
+  "external_url": "https://your-launchpad-platform.com",
+  "attributes": [
+    {
+      "trait_type": "Token Type",
+      "value": "Launchpad Token"
+    },
+    {
+      "trait_type": "Total Supply",
+      "value": "10,000,000"
+    },
+    {
+      "trait_type": "Reserve Ratio",
+      "value": "50%"
+    },
+    {
+      "trait_type": "Creation Date",
+      "value": "2024-01-01"
+    },
+    {
+      "trait_type": "Creator",
+      "value": "0x1234567890123456789012345678901234567890"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Ethereum"
+    }
+  ],
+  "properties": {
+    "category": "DeFi",
+    "tags": ["launchpad", "bonding-curve", "defi", "token"],
+    "website": "https://sample-token.com",
+    "twitter": "https://twitter.com/sampletoken",
+    "telegram": "https://t.me/sampletoken",
+    "discord": "https://discord.gg/sampletoken"
+  },
+  "tokenomics": {
+    "totalSupply": "10000000000000000000000000",
+    "decimals": 18,
+    "reserveRatio": 5000,
+    "liquidityThreshold": "100000000000000000000",
+    "creationFee": "10000000000000000",
+    "platformFee": 100,
+    "creatorFee": 50
+  },
+  "contract": {
+    "standard": "ERC-20",
+    "features": [
+      "Burnable",
+      "Pausable",
+      "AccessControl",
+      "Bonding Curve",
+      "Marketplace Integration"
+    ],
+    "security": [
+      "ReentrancyGuard",
+      "Custom Errors",
+      "Input Validation",
+      "Slippage Protection"
+    ]
+  },
+  "launchpad": {
+    "version": "1.0.0",
+    "platform": "Token Launchpad",
+    "bondingCurve": "Bancor-inspired",
+    "tradingEnabled": false,
+    "marketCap": "0",
+    "currentSupply": "0"
+  }
+}
