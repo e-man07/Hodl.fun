@@ -1,160 +1,76 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { 
-  Wallet, 
-  TrendingUp, 
-  TrendingDown, 
+import React, { useState } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Wallet,
+  TrendingUp,
+  TrendingDown,
   Plus,
-  ArrowUpRight, 
+  ArrowUpRight,
   ArrowDownRight,
   Coins,
   BarChart3,
-  Clock,
   Star,
   ExternalLink,
   Copy,
   Settings,
   History,
   PieChart,
-  Activity
-} from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
-import { formatCurrency, formatNumber, formatPercentage, truncateAddress } from '@/lib/utils';
-
-interface UserToken {
-  id: string;
-  name: string;
-  symbol: string;
-  balance: number;
-  value: number;
-  price: number;
-  priceChange24h: number;
-  isCreator: boolean;
-  createdAt?: string;
-  marketCap?: number;
-  holders?: number;
-}
-
-interface Transaction {
-  id: string;
-  type: 'buy' | 'sell' | 'create';
-  tokenSymbol: string;
-  tokenName: string;
-  amount: number;
-  price: number;
-  value: number;
-  timestamp: string;
-  txHash: string;
-}
+  Activity,
+  RefreshCw,
+  Loader2,
+} from "lucide-react";
+import Navbar from "@/components/layout/Navbar";
+import {
+  formatCurrency,
+  formatNumber,
+  formatPercentage,
+  truncateAddress,
+} from "@/lib/utils";
+import { useWallet } from "@/hooks/useWallet";
+import { useUserPortfolio } from "@/hooks/useUserPortfolio";
 
 const DashboardPage = () => {
-  const [activeTab, setActiveTab] = useState<'portfolio' | 'created' | 'transactions'>('portfolio');
-  
-  // Mock user data
-  const userAddress = '0x1234567890123456789012345678901234567890';
-  
-  const mockPortfolio: UserToken[] = [
-    {
-      id: '1',
-      name: 'DeFi Revolution',
-      symbol: 'DEFI',
-      balance: 15000,
-      value: 67.5,
-      price: 0.0045,
-      priceChange24h: 12.5,
-      isCreator: false
-    },
-    {
-      id: '2',
-      name: 'GameFi Token',
-      symbol: 'GAME',
-      balance: 8500,
-      value: 27.2,
-      price: 0.0032,
-      priceChange24h: -5.2,
-      isCreator: false
-    },
-    {
-      id: '3',
-      name: 'My Awesome Token',
-      symbol: 'MAT',
-      balance: 50000,
-      value: 125.0,
-      price: 0.0025,
-      priceChange24h: 8.7,
-      isCreator: true,
-      createdAt: '2024-01-15',
-      marketCap: 250000,
-      holders: 450
-    }
-  ];
+  const [activeTab, setActiveTab] = useState<
+    "portfolio" | "created" | "transactions"
+  >("portfolio");
 
-  const mockTransactions: Transaction[] = [
-    {
-      id: '1',
-      type: 'buy',
-      tokenSymbol: 'DEFI',
-      tokenName: 'DeFi Revolution',
-      amount: 5000,
-      price: 0.0042,
-      value: 21.0,
-      timestamp: '2024-01-20T10:30:00Z',
-      txHash: '0xabcd1234...'
-    },
-    {
-      id: '2',
-      type: 'create',
-      tokenSymbol: 'MAT',
-      tokenName: 'My Awesome Token',
-      amount: 50000,
-      price: 0.0025,
-      value: 125.0,
-      timestamp: '2024-01-15T14:20:00Z',
-      txHash: '0xefgh5678...'
-    },
-    {
-      id: '3',
-      type: 'sell',
-      tokenSymbol: 'GAME',
-      tokenName: 'GameFi Token',
-      amount: 2000,
-      price: 0.0035,
-      value: 7.0,
-      timestamp: '2024-01-18T09:15:00Z',
-      txHash: '0xijkl9012...'
-    }
-  ];
+  // Get wallet connection state and user data
+  const { isConnected, address } = useWallet();
+  const {
+    tokens,
+    stats: portfolioStats,
+    isLoading,
+    error,
+    refreshPortfolio,
+  } = useUserPortfolio(isConnected ? address : null);
 
-  const createdTokens = mockPortfolio.filter(token => token.isCreator);
-  const totalPortfolioValue = mockPortfolio.reduce((sum, token) => sum + token.value, 0);
-  const totalPnL = mockPortfolio.reduce((sum, token) => {
-    const change = (token.priceChange24h / 100) * token.value;
-    return sum + change;
-  }, 0);
-  const totalPnLPercentage = (totalPnL / totalPortfolioValue) * 100;
+  // Get created tokens (user is creator)
+  const createdTokens = tokens.filter((token) => token.isCreator);
 
-  const stats = {
-    totalValue: totalPortfolioValue,
-    totalPnL: totalPnL,
-    totalPnLPercentage: totalPnLPercentage,
-    tokensOwned: mockPortfolio.length,
-    tokensCreated: createdTokens.length,
-    totalTransactions: mockTransactions.length
-  };
-
-  const TokenRow = ({ token }: { token: UserToken }) => (
+  const TokenRow = ({
+    token,
+  }: {
+    token: import("@/hooks/useUserPortfolio").UserToken;
+  }) => (
     <div className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-muted/30 transition-colors">
       <div className="flex items-center space-x-4">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
+        <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center text-primary font-bold text-sm">
           {token.symbol.slice(0, 2)}
         </div>
         <div>
           <div className="flex items-center space-x-2">
-            <p className="font-medium">{token.name}</p>
+            <p className="font-medium text-foreground">{token.name}</p>
             {token.isCreator && (
               <Badge variant="secondary" className="text-xs">
                 <Star className="w-3 h-3 mr-1" />
@@ -163,16 +79,18 @@ const DashboardPage = () => {
             )}
           </div>
           <p className="text-sm text-muted-foreground">
-            {formatNumber(token.balance)} {token.symbol}
+            {token.balanceFormatted} {token.symbol}
           </p>
         </div>
       </div>
-      
+
       <div className="text-right">
-        <p className="font-medium">{formatCurrency(token.value)}</p>
-        <p className={`text-sm flex items-center justify-end ${
-          token.priceChange24h >= 0 ? 'text-green-600' : 'text-red-600'
-        }`}>
+        <p className="font-medium text-foreground">{formatCurrency(token.value)}</p>
+        <p
+          className={`text-sm flex items-center justify-end ${
+            token.priceChange24h >= 0 ? "text-primary" : "text-destructive"
+          }`}
+        >
           {token.priceChange24h >= 0 ? (
             <ArrowUpRight className="w-3 h-3 mr-1" />
           ) : (
@@ -184,64 +102,37 @@ const DashboardPage = () => {
     </div>
   );
 
-  const TransactionRow = ({ transaction }: { transaction: Transaction }) => (
-    <div className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-muted/30 transition-colors">
-      <div className="flex items-center space-x-4">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${
-          transaction.type === 'buy' ? 'bg-green-500' :
-          transaction.type === 'sell' ? 'bg-red-500' : 'bg-blue-500'
-        }`}>
-          {transaction.type === 'buy' ? <ArrowDownRight className="w-5 h-5" /> :
-           transaction.type === 'sell' ? <ArrowUpRight className="w-5 h-5" /> :
-           <Plus className="w-5 h-5" />}
-        </div>
-        <div>
-          <div className="flex items-center space-x-2">
-            <p className="font-medium capitalize">{transaction.type}</p>
-            <Badge variant="outline" className="text-xs">
-              {transaction.tokenSymbol}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {formatNumber(transaction.amount)} tokens @ {formatCurrency(transaction.price)}
-          </p>
-        </div>
-      </div>
-      
-      <div className="text-right">
-        <p className="font-medium">{formatCurrency(transaction.value)}</p>
-        <p className="text-sm text-muted-foreground">
-          {new Date(transaction.timestamp).toLocaleDateString()}
-        </p>
-      </div>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
+
       <div className="container mx-auto px-4 py-12">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-12">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight mb-2">
+            <Badge variant="secondary" className="mb-4 px-4 py-2">
+              <Activity className="mr-2 h-4 w-4" />
+              Portfolio Dashboard
+            </Badge>
+            <h1 className="text-4xl font-bold tracking-tight mb-3 sm:text-5xl">
               Dashboard
             </h1>
             <div className="flex items-center space-x-2 text-muted-foreground">
               <Wallet className="h-4 w-4" />
-              <span className="text-sm">{truncateAddress(userAddress)}</span>
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+              <span className="text-sm font-mono">
+                {address ? truncateAddress(address) : "Not connected"}
+              </span>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-primary/10">
                 <Copy className="h-3 w-3" />
               </Button>
             </div>
           </div>
-          <div className="flex space-x-2 mt-4 md:mt-0">
-            <Button variant="outline">
+          <div className="flex space-x-3 mt-6 md:mt-0">
+            <Button variant="outline" className="hover:bg-primary/10">
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </Button>
-            <Button>
+            <Button className="shadow-lg hover:shadow-xl transition-all duration-300">
               <Plus className="mr-2 h-4 w-4" />
               Create Token
             </Button>
@@ -250,59 +141,96 @@ const DashboardPage = () => {
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
+          <Card className="border-2 hover:border-primary/20 transition-colors">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Portfolio Value</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.totalValue)}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Portfolio Value
+                  </p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {formatCurrency(portfolioStats.totalValue)}
+                  </p>
                 </div>
-                <Wallet className="h-8 w-8 text-primary" />
+                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <Wallet className="h-6 w-6 text-primary" />
+                </div>
               </div>
             </CardContent>
           </Card>
-          
-          <Card>
+
+          <Card className="border-2 hover:border-primary/20 transition-colors">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">24h P&L</p>
-                  <p className={`text-2xl font-bold ${stats.totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {stats.totalPnL >= 0 ? '+' : ''}{formatCurrency(stats.totalPnL)}
+                  <p
+                    className={`text-2xl font-bold ${
+                      portfolioStats.totalPnL >= 0
+                        ? "text-primary"
+                        : "text-destructive"
+                    }`}
+                  >
+                    {portfolioStats.totalPnL >= 0 ? "+" : ""}
+                    {formatCurrency(portfolioStats.totalPnL)}
                   </p>
-                  <p className={`text-xs ${stats.totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatPercentage(Math.abs(stats.totalPnLPercentage))}
+                  <p
+                    className={`text-xs ${
+                      portfolioStats.totalPnL >= 0
+                        ? "text-primary"
+                        : "text-destructive"
+                    }`}
+                  >
+                    {formatPercentage(
+                      Math.abs(portfolioStats.totalPnLPercentage)
+                    )}
                   </p>
                 </div>
-                {stats.totalPnL >= 0 ? (
-                  <TrendingUp className="h-8 w-8 text-green-600" />
-                ) : (
-                  <TrendingDown className="h-8 w-8 text-red-600" />
-                )}
+                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                  portfolioStats.totalPnL >= 0 
+                    ? "bg-primary/10" 
+                    : "bg-destructive/10"
+                }`}>
+                  {portfolioStats.totalPnL >= 0 ? (
+                    <TrendingUp className="h-6 w-6 text-primary" />
+                  ) : (
+                    <TrendingDown className="h-6 w-6 text-destructive" />
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
-          
-          <Card>
+
+          <Card className="border-2 hover:border-primary/20 transition-colors">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Tokens Owned</p>
-                  <p className="text-2xl font-bold">{stats.tokensOwned}</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {portfolioStats.tokensOwned}
+                  </p>
                 </div>
-                <Coins className="h-8 w-8 text-blue-500" />
+                <div className="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center">
+                  <Coins className="h-6 w-6 text-secondary" />
+                </div>
               </div>
             </CardContent>
           </Card>
-          
-          <Card>
+
+          <Card className="border-2 hover:border-primary/20 transition-colors">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Tokens Created</p>
-                  <p className="text-2xl font-bold">{stats.tokensCreated}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Tokens Created
+                  </p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {portfolioStats.tokensCreated}
+                  </p>
                 </div>
-                <Star className="h-8 w-8 text-yellow-500" />
+                <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center">
+                  <Star className="h-6 w-6 text-accent-foreground" />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -311,15 +239,19 @@ const DashboardPage = () => {
         {/* Navigation Tabs */}
         <div className="flex space-x-1 mb-6 bg-muted p-1 rounded-lg w-fit">
           {[
-            { key: 'portfolio', label: 'Portfolio', icon: PieChart },
-            { key: 'created', label: 'Created Tokens', icon: Star },
-            { key: 'transactions', label: 'Transactions', icon: Activity }
+            { key: "portfolio", label: "Portfolio", icon: PieChart },
+            { key: "created", label: "Created Tokens", icon: Star },
+            { key: "transactions", label: "Transactions", icon: Activity },
           ].map((tab) => (
             <Button
               key={tab.key}
-              variant={activeTab === tab.key ? 'default' : 'ghost'}
+              variant={activeTab === tab.key ? "default" : "ghost"}
               size="sm"
-              onClick={() => setActiveTab(tab.key as any)}
+              onClick={() =>
+                setActiveTab(
+                  tab.key as "portfolio" | "created" | "transactions"
+                )
+              }
               className="flex items-center space-x-2"
             >
               <tab.icon className="h-4 w-4" />
@@ -329,40 +261,92 @@ const DashboardPage = () => {
         </div>
 
         {/* Content based on active tab */}
-        {activeTab === 'portfolio' && (
+        {!isConnected ? (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <PieChart className="mr-2 h-5 w-5" />
-                Portfolio Overview
-              </CardTitle>
-              <CardDescription>
-                Your token holdings and their current values
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              {mockPortfolio.length > 0 ? (
-                mockPortfolio.map((token) => (
-                  <TokenRow key={token.id} token={token} />
-                ))
-              ) : (
-                <div className="text-center py-12">
-                  <Coins className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-medium mb-2">No tokens yet</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Start by creating or buying your first token
-                  </p>
-                  <div className="space-x-2">
-                    <Button>Create Token</Button>
-                    <Button variant="outline">Browse Marketplace</Button>
-                  </div>
-                </div>
-              )}
+            <CardContent className="text-center py-12">
+              <Wallet className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-lg font-medium mb-2">Connect Your Wallet</h3>
+              <p className="text-muted-foreground mb-4">
+                Connect your wallet to view your portfolio and trading activity
+              </p>
+              <Button asChild>
+                <Link href="/">Connect Wallet</Link>
+              </Button>
             </CardContent>
           </Card>
+        ) : (
+          activeTab === "portfolio" && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center">
+                      <PieChart className="mr-2 h-5 w-5" />
+                      Portfolio Overview
+                    </CardTitle>
+                    <CardDescription>
+                      Your token holdings and their current values
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={refreshPortfolio}
+                    disabled={isLoading}
+                  >
+                    <RefreshCw
+                      className={`mr-2 h-4 w-4 ${
+                        isLoading ? "animate-spin" : ""
+                      }`}
+                    />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {isLoading ? (
+                  <div className="text-center py-12">
+                    <Loader2 className="h-8 w-8 mx-auto mb-4 text-muted-foreground animate-spin" />
+                    <p className="text-muted-foreground">
+                      Loading your portfolio...
+                    </p>
+                  </div>
+                ) : error ? (
+                  <div className="text-center py-12">
+                    <div className="text-red-500 mb-4">
+                      Error loading portfolio: {error}
+                    </div>
+                    <Button variant="outline" onClick={refreshPortfolio}>
+                      Try Again
+                    </Button>
+                  </div>
+                ) : tokens.length > 0 ? (
+                  tokens.map((token) => (
+                    <TokenRow key={token.address} token={token} />
+                  ))
+                ) : (
+                  <div className="text-center py-12">
+                    <Coins className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                    <h3 className="text-lg font-medium mb-2">No tokens yet</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Start by creating or buying your first token
+                    </p>
+                    <div className="space-x-2">
+                      <Button asChild>
+                        <Link href="/launch">Create Token</Link>
+                      </Button>
+                      <Button variant="outline" asChild>
+                        <Link href="/marketplace">Browse Marketplace</Link>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
         )}
 
-        {activeTab === 'created' && (
+        {isConnected && activeTab === "created" && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -370,21 +354,33 @@ const DashboardPage = () => {
                 Created Tokens
               </CardTitle>
               <CardDescription>
-                Tokens you've created and their performance
+                Tokens you have created and their performance
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {createdTokens.length > 0 ? (
+              {isLoading ? (
+                <div className="text-center py-12">
+                  <Loader2 className="h-8 w-8 mx-auto mb-4 text-muted-foreground animate-spin" />
+                  <p className="text-muted-foreground">
+                    Loading your created tokens...
+                  </p>
+                </div>
+              ) : createdTokens.length > 0 ? (
                 createdTokens.map((token) => (
-                  <div key={token.id} className="p-4 border-b last:border-b-0">
+                  <div
+                    key={token.address}
+                    className="p-4 border-b last:border-b-0"
+                  >
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-white font-bold">
+                        <div className="w-12 h-12 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary font-bold">
                           {token.symbol.slice(0, 2)}
                         </div>
                         <div>
                           <h3 className="font-medium text-lg">{token.name}</h3>
-                          <p className="text-sm text-muted-foreground">{token.symbol}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {token.symbol}
+                          </p>
                         </div>
                       </div>
                       <div className="flex space-x-2">
@@ -392,30 +388,42 @@ const DashboardPage = () => {
                           <BarChart3 className="w-4 h-4 mr-1" />
                           Analytics
                         </Button>
-                        <Button size="sm">
-                          <ExternalLink className="w-4 h-4 mr-1" />
-                          View
+                        <Button size="sm" asChild>
+                          <Link href={`/marketplace?token=${token.address}`}>
+                            <ExternalLink className="w-4 h-4 mr-1" />
+                            View
+                          </Link>
                         </Button>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                       <div>
-                        <p className="text-muted-foreground">Market Cap</p>
-                        <p className="font-medium">{formatCurrency(token.marketCap || 0)}</p>
+                        <p className="text-muted-foreground">Current Price</p>
+                        <p className="font-medium">
+                          {formatCurrency(token.price)}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Holders</p>
-                        <p className="font-medium">{formatNumber(token.holders || 0)}</p>
+                        <p className="text-muted-foreground">Total Supply</p>
+                        <p className="font-medium">
+                          {token.totalSupply
+                            ? formatNumber(parseFloat(token.balanceFormatted))
+                            : "N/A"}
+                        </p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Your Balance</p>
-                        <p className="font-medium">{formatNumber(token.balance)} {token.symbol}</p>
+                        <p className="font-medium">
+                          {token.balanceFormatted} {token.symbol}
+                        </p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Created</p>
                         <p className="font-medium">
-                          {token.createdAt ? new Date(token.createdAt).toLocaleDateString() : 'N/A'}
+                          {token.createdAt
+                            ? new Date(token.createdAt).toLocaleDateString()
+                            : "N/A"}
                         </p>
                       </div>
                     </div>
@@ -424,13 +432,17 @@ const DashboardPage = () => {
               ) : (
                 <div className="text-center py-12">
                   <Star className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-medium mb-2">No tokens created</h3>
+                  <h3 className="text-lg font-medium mb-2">
+                    No tokens created
+                  </h3>
                   <p className="text-muted-foreground mb-4">
                     Launch your first token and start building your community
                   </p>
-                  <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Your First Token
+                  <Button asChild>
+                    <Link href="/launch">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Your First Token
+                    </Link>
                   </Button>
                 </div>
               )}
@@ -438,7 +450,7 @@ const DashboardPage = () => {
           </Card>
         )}
 
-        {activeTab === 'transactions' && (
+        {isConnected && activeTab === "transactions" && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -450,22 +462,20 @@ const DashboardPage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {mockTransactions.length > 0 ? (
-                mockTransactions.map((transaction) => (
-                  <TransactionRow key={transaction.id} transaction={transaction} />
-                ))
-              ) : (
-                <div className="text-center py-12">
-                  <History className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-medium mb-2">No transactions yet</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Your trading history will appear here
-                  </p>
-                  <Button variant="outline">
-                    Browse Marketplace
-                  </Button>
-                </div>
-              )}
+              <div className="text-center py-12">
+                <History className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-medium mb-2">
+                  Transaction History Coming Soon
+                </h3>
+                <p className="text-muted-foreground mb-4">
+                  We are working on bringing you comprehensive transaction
+                  history. For now, you can view individual transactions on the
+                  block explorer.
+                </p>
+                <Button variant="outline" asChild>
+                  <Link href="/marketplace">Browse Marketplace</Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}

@@ -33,6 +33,7 @@ export const useWallet = () => {
   });
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   // Check if MetaMask is installed
   const isMetaMaskInstalled = useCallback(() => {
@@ -204,8 +205,15 @@ export const useWallet = () => {
     };
   }, [walletState.address, updateBalance, checkNetwork, disconnectWallet]);
 
+  // Set mounted state after component mounts
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Check if already connected on mount
   useEffect(() => {
+    if (!mounted) return;
+    
     const checkConnection = async () => {
       if (!window.ethereum) return;
 
@@ -226,7 +234,7 @@ export const useWallet = () => {
     };
 
     checkConnection();
-  }, [checkNetwork, updateBalance]);
+  }, [mounted, checkNetwork, updateBalance]);
 
   return {
     ...walletState,
@@ -235,7 +243,8 @@ export const useWallet = () => {
     connectWallet,
     disconnectWallet,
     switchToPushChain,
-    isMetaMaskInstalled: isMetaMaskInstalled(),
+    isMetaMaskInstalled: mounted ? isMetaMaskInstalled() : false,
+    mounted,
   };
 };
 
