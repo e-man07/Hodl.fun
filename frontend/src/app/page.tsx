@@ -18,6 +18,7 @@ import {
   Globe,
   Clock
 } from 'lucide-react';
+import Image from 'next/image';
 import Navbar from '@/components/layout/Navbar';
 
 const HomePage = () => {
@@ -95,7 +96,7 @@ const HomePage = () => {
               
               <h1 className="mb-6 text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
                 Professional Token
-                <span className="block text-primary mt-1">Launchpad Platform</span>
+                <span className="block text-primary mt-1">Platform - hodl.fun</span>
               </h1>
               
               <p className="mx-auto mb-8 max-w-3xl text-lg text-muted-foreground sm:text-xl leading-relaxed">
@@ -291,10 +292,16 @@ const HomePage = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
             <div className="flex items-center space-x-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary shadow-md">
-                <Zap className="h-6 w-6 text-primary-foreground" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg overflow-hidden shadow-md">
+                <Image 
+                  src="/hodl-logo.png" 
+                  alt="hodl.fun logo" 
+                  width={40} 
+                  height={40} 
+                  className="object-contain"
+                />
               </div>
-              <span className="text-2xl font-bold text-primary">TokenLaunch</span>
+              <span className="text-2xl font-bold text-primary">hodl.fun</span>
             </div>
             <div className="flex flex-col items-center gap-4 md:flex-row md:gap-8">
               <nav className="flex gap-6">
@@ -309,7 +316,7 @@ const HomePage = () => {
                 </Link>
               </nav>
               <p className="text-sm text-muted-foreground">
-                © 2024 TokenLaunch. Professional token infrastructure.
+                © 2024 hodl.fun. Professional token infrastructure.
               </p>
             </div>
           </div>

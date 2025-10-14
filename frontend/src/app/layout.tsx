@@ -14,8 +14,44 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TokenLaunch - Retro Token Launchpad",
-  description: "Create and trade tokens with bonding curve mechanics on Push Chain",
+  title: "hodl.fun - Retro Token Platform",
+  description: "Create and trade tokens with bonding curve mechanics on Push Chain - hodl.fun",
+  keywords: "token, crypto, blockchain, hodl, push chain, bonding curve, defi, trading",
+  authors: [{ name: "hodl.fun" }],
+  creator: "hodl.fun",
+  publisher: "hodl.fun",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  icons: {
+    icon: '/hodl-logo.png',
+    shortcut: '/hodl-logo.png',
+    apple: '/hodl-logo.png',
+  },
+  openGraph: {
+    title: "hodl.fun - Retro Token Platform",
+    description: "Create and trade tokens with bonding curve mechanics on Push Chain",
+    url: "https://hodl.fun",
+    siteName: "hodl.fun",
+    images: [
+      {
+        url: '/hodl-logo.png',
+        width: 1200,
+        height: 630,
+        alt: 'hodl.fun - Retro Token Platform',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: "hodl.fun - Retro Token Platform",
+    description: "Create and trade tokens with bonding curve mechanics on Push Chain",
+    images: ['/hodl-logo.png'],
+  },
 };
 
 export default function RootLayout({

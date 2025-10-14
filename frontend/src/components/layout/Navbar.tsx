@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { WalletButton } from '@/components/WalletButton';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, Zap, Rocket } from 'lucide-react';
+import { Menu, Rocket } from 'lucide-react';
+import Image from 'next/image';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -21,10 +22,16 @@ const Navbar = () => {
       <div className="container flex h-16 items-center justify-between px-4 max-w-none">
         {/* Logo */}
         <Link href="/" className="flex items-center space-x-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-            <Zap className="h-6 w-6 text-primary-foreground" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg overflow-hidden">
+            <Image 
+              src="/hodl-logo.png" 
+              alt="hodl.fun logo" 
+              width={40} 
+              height={40} 
+              className="object-contain"
+            />
           </div>
-          <span className="text-2xl font-bold text-primary">TokenLaunch</span>
+          <span className="text-2xl font-bold text-primary">hodl.fun</span>
         </Link>
 
         {/* Desktop Navigation */}
@@ -65,10 +72,16 @@ const Navbar = () => {
           <SheetContent side="right" className="w-[300px] sm:w-[400px]">
             <div className="flex flex-col space-y-4 mt-6">
               <div className="flex items-center space-x-3 mb-6">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                  <Zap className="h-5 w-5 text-primary-foreground" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
+                  <Image 
+                    src="/hodl-logo.png" 
+                    alt="hodl.fun logo" 
+                    width={32} 
+                    height={32} 
+                    className="object-contain"
+                  />
                 </div>
-                <span className="text-xl font-bold text-primary">TokenLaunch</span>
+                <span className="text-xl font-bold text-primary">hodl.fun</span>
               </div>
               
               <nav className="flex flex-col space-y-2">

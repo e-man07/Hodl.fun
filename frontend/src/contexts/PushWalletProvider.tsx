@@ -8,9 +8,9 @@ import {
 
 // App metadata for Push Universal Wallet
 const appMetadata = {
-  logoUrl: '/logo.png', // Add your app logo
-  title: 'TokenLaunch - Retro Token Launchpad',
-  description: 'Create and trade tokens with bonding curve mechanics on Push Chain',
+  logoUrl: '/hodl-logo.png', // Add your app logo
+  title: 'hodl.fun - Retro Token Platform',
+  description: 'Create and trade tokens with bonding curve mechanics on Push Chain - hodl.fun',
 };
 
 // Wallet configuration

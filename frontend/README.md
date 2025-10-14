@@ -1,3 +1,16 @@
+# hodl.fun - Retro Token Platform
+
+A professional token launchpad built on Push Chain with bonding curve mechanics. Create, deploy, and trade ERC20 tokens with automated marketplace listing and enterprise-grade security.
+
+## Features
+
+- 🚀 **Instant Token Creation** - Launch ERC20 tokens in minutes
+- 📈 **Bonding Curve Pricing** - Automated price discovery and fair distribution
+- 🔒 **Enterprise Security** - Built with OpenZeppelin contracts
+- 🏪 **Auto Marketplace** - Automatic listing with built-in trading
+- 📊 **Advanced Analytics** - Real-time metrics and performance tracking
+- 🌐 **Push Chain Integration** - Native support for Push Chain testnet
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

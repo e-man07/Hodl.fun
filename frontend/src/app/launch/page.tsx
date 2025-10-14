@@ -243,7 +243,7 @@ const LaunchPage = () => {
         <div className="text-center mb-12">
           <Badge variant="secondary" className="mb-6 px-4 py-2">
             <Rocket className="mr-2 h-4 w-4" />
-            Professional Token Launchpad
+            Professional Token Platform
           </Badge>
           
           <h1 className="text-4xl font-bold tracking-tight mb-4 sm:text-5xl">
