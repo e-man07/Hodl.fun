@@ -48,7 +48,7 @@ export const useWallet = () => {
       const balance = await window.ethereum.request({
         method: 'eth_getBalance',
         params: [address, 'latest'],
-      });
+      }) as string;
       // Convert from wei to ether
       const balanceInEth = parseInt(balance, 16) / Math.pow(10, 18);
       setWalletState(prev => ({ ...prev, balance: balanceInEth.toFixed(4) }));
@@ -62,7 +62,7 @@ export const useWallet = () => {
     if (!window.ethereum) return false;
     
     try {
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' }) as string;
       const currentChainId = parseInt(chainId, 16);
       const isCorrect = currentChainId === PUSH_CHAIN_ID;
       
@@ -90,9 +90,9 @@ export const useWallet = () => {
         params: [{ chainId: PUSH_CHAIN_CONFIG.chainId }],
       });
       return true;
-    } catch (switchError: any) {
+    } catch (switchError: unknown) {
       // If network doesn't exist, add it
-      if (switchError.code === 4902) {
+      if (switchError && typeof switchError === 'object' && 'code' in switchError && (switchError as { code: number }).code === 4902) {
         try {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
@@ -123,9 +123,9 @@ export const useWallet = () => {
 
     try {
       // Request account access
-      const accounts = await window.ethereum.request({
+      const accounts = await window.ethereum!.request({
         method: 'eth_requestAccounts',
-      });
+      }) as string[];
 
       if (accounts.length === 0) {
         throw new Error('No accounts found');
@@ -156,9 +156,9 @@ export const useWallet = () => {
       await updateBalance(address);
 
       console.log('✅ Wallet connected:', address);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Error connecting wallet:', error);
-      setError(error.message || 'Failed to connect wallet');
+      setError(error instanceof Error ? error.message : 'Failed to connect wallet');
     } finally {
       setIsConnecting(false);
     }
@@ -181,7 +181,8 @@ export const useWallet = () => {
   useEffect(() => {
     if (!window.ethereum) return;
 
-    const handleAccountsChanged = (accounts: string[]) => {
+    const handleAccountsChanged = (...args: unknown[]) => {
+      const accounts = args[0] as string[];
       if (accounts.length === 0) {
         disconnectWallet();
       } else if (accounts[0] !== walletState.address) {
@@ -218,7 +219,7 @@ export const useWallet = () => {
       if (!window.ethereum) return;
 
       try {
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' }) as string[];
         if (accounts.length > 0) {
           setWalletState(prev => ({
             ...prev,
@@ -252,9 +253,9 @@ export const useWallet = () => {
 declare global {
   interface Window {
     ethereum?: {
-      request: (args: { method: string; params?: any[] }) => Promise<any>;
-      on: (event: string, callback: (...args: any[]) => void) => void;
-      removeListener: (event: string, callback: (...args: any[]) => void) => void;
+      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+      on: (event: string, callback: (...args: unknown[]) => void) => void;
+      removeListener: (event: string, callback: (...args: unknown[]) => void) => void;
     };
   }
 }

@@ -1,6 +1,15 @@
 // Debug utility to help troubleshoot contract issues
 
-export const debugTokenParams = (params: any) => {
+interface TokenParams {
+  name?: string;
+  symbol?: string;
+  totalSupply?: string | number | bigint;
+  reserveRatio?: number;
+  creator?: string;
+  metadataURI?: string;
+}
+
+export const debugTokenParams = (params: TokenParams) => {
   console.log('🔍 DEBUGGING TOKEN PARAMETERS:');
   
   // Check name
@@ -14,7 +23,12 @@ export const debugTokenParams = (params: any) => {
   console.log(`   ✅ Valid length (2-10): ${symbolLength >= 2 && symbolLength <= 10}`);
   
   // Check total supply
-  const totalSupply = BigInt(params.totalSupply || 0);
+  let totalSupply: bigint;
+  if (typeof params.totalSupply === 'bigint') {
+    totalSupply = params.totalSupply;
+  } else {
+    totalSupply = BigInt(params.totalSupply || 0);
+  }
   const minSupply = BigInt('1000000000000000000000000'); // 1M * 10^18
   const maxSupply = BigInt('100000000000000000000000000'); // 100M * 10^18
   console.log(`💰 Total Supply: ${totalSupply.toString()}`);
@@ -54,7 +68,16 @@ export const commonIssues = {
   INSUFFICIENT_GAS: 'Transaction ran out of gas'
 };
 
-export const suggestFix = (validation: any) => {
+interface ValidationResult {
+  nameValid: boolean;
+  symbolValid: boolean;
+  supplyValid: boolean;
+  ratioValid: boolean;
+  creatorValid: boolean;
+  metadataValid: boolean;
+}
+
+export const suggestFix = (validation: ValidationResult) => {
   const issues = [];
   
   if (!validation.nameValid) issues.push(commonIssues.INVALID_NAME);

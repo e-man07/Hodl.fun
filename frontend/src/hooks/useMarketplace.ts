@@ -108,7 +108,7 @@ export const useMarketplace = () => {
     }
   };
 
-  const fetchMarketplaceTokens = async () => {
+  const fetchMarketplaceTokens = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
@@ -235,21 +235,10 @@ export const useMarketplace = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const refreshTokens = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const fetchedTokens = await fetchMarketplaceTokens();
-      setTokens(fetchedTokens);
-    } catch (err) {
-      console.error('Error refreshing tokens:', err);
-      setError(err instanceof Error ? err.message : 'Failed to refresh tokens');
-    } finally {
-      setIsLoading(false);
-    }
+    await fetchMarketplaceTokens();
   }, [fetchMarketplaceTokens]);
 
   // Listen for token data changes (from trading transactions)

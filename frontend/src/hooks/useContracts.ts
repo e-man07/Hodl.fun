@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -36,7 +37,7 @@ export const useContracts = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Check if wallet is connected
-  const isConnected = connectionStatus === 'CONNECTED' as any;
+  const isConnected = String(connectionStatus).toLowerCase() === 'connected';
 
   // Clear error
   const clearError = useCallback(() => setError(null), []);
@@ -86,7 +87,7 @@ export const useContracts = () => {
       };
 
       // Create token
-      const result = await pushChainClient.universal.writeContract({
+      const result = await (pushChainClient as any).universal.writeContract({
         address: CONTRACT_ADDRESSES.TokenFactory,
         abi: TOKEN_FACTORY_ABI,
         functionName: 'createToken',
@@ -109,7 +110,7 @@ export const useContracts = () => {
     if (!pushChainClient) return [];
 
     try {
-      const result = await pushChainClient.universal.readContract({
+      const result = await (pushChainClient as any).universal.readContract({
         address: CONTRACT_ADDRESSES.TokenFactory,
         abi: TOKEN_FACTORY_ABI,
         functionName: 'getTokensByCreator',
@@ -138,7 +139,7 @@ export const useContracts = () => {
     setError(null);
 
     try {
-      const result = await pushChainClient.universal.writeContract({
+      const result = await (pushChainClient as any).universal.writeContract({
         address: CONTRACT_ADDRESSES.TokenMarketplace,
         abi: TOKEN_MARKETPLACE_ABI,
         functionName: 'buyTokens',
@@ -171,7 +172,7 @@ export const useContracts = () => {
 
     try {
       // First approve tokens for marketplace
-      await pushChainClient.universal.writeContract({
+      await (pushChainClient as any).universal.writeContract({
         address: tokenAddress,
         abi: LAUNCHPAD_TOKEN_ABI,
         functionName: 'approve',
@@ -179,7 +180,7 @@ export const useContracts = () => {
       });
 
       // Then sell tokens
-      const result = await pushChainClient.universal.writeContract({
+      const result = await (pushChainClient as any).universal.writeContract({
         address: CONTRACT_ADDRESSES.TokenMarketplace,
         abi: TOKEN_MARKETPLACE_ABI,
         functionName: 'sellTokens',
@@ -205,7 +206,7 @@ export const useContracts = () => {
     if (!pushChainClient) return null;
 
     try {
-      const result = await pushChainClient.universal.readContract({
+      const result = await (pushChainClient as any).universal.readContract({
         address: CONTRACT_ADDRESSES.TokenMarketplace,
         abi: TOKEN_MARKETPLACE_ABI,
         functionName: 'getTokenInfo',
@@ -227,7 +228,7 @@ export const useContracts = () => {
     if (!pushChainClient) return null;
 
     try {
-      const result = await pushChainClient.universal.readContract({
+      const result = await (pushChainClient as any).universal.readContract({
         address: CONTRACT_ADDRESSES.TokenMarketplace,
         abi: TOKEN_MARKETPLACE_ABI,
         functionName: 'calculatePurchaseReturn',
@@ -249,7 +250,7 @@ export const useContracts = () => {
     if (!pushChainClient) return null;
 
     try {
-      const result = await pushChainClient.universal.readContract({
+      const result = await (pushChainClient as any).universal.readContract({
         address: CONTRACT_ADDRESSES.TokenMarketplace,
         abi: TOKEN_MARKETPLACE_ABI,
         functionName: 'calculateSaleReturn',
@@ -268,7 +269,7 @@ export const useContracts = () => {
     if (!pushChainClient) return null;
 
     try {
-      const result = await pushChainClient.universal.readContract({
+      const result = await (pushChainClient as any).universal.readContract({
         address: CONTRACT_ADDRESSES.TokenMarketplace,
         abi: TOKEN_MARKETPLACE_ABI,
         functionName: 'getCurrentPrice',
@@ -287,7 +288,7 @@ export const useContracts = () => {
     if (!pushChainClient) return [];
 
     try {
-      const result = await pushChainClient.universal.readContract({
+      const result = await (pushChainClient as any).universal.readContract({
         address: CONTRACT_ADDRESSES.TokenMarketplace,
         abi: TOKEN_MARKETPLACE_ABI,
         functionName: 'getAllTokens',
@@ -308,7 +309,7 @@ export const useContracts = () => {
     if (!pushChainClient) return null;
 
     try {
-      const result = await pushChainClient.universal.readContract({
+      const result = await (pushChainClient as any).universal.readContract({
         address: tokenAddress,
         abi: LAUNCHPAD_TOKEN_ABI,
         functionName: 'balanceOf',
