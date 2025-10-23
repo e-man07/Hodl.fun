@@ -57,6 +57,19 @@ export const useMarketplace = () => {
 
   const fetchTokenMetadata = async (metadataURI: string): Promise<TokenMetadata | null> => {
     try {
+      // Handle data URIs (inline JSON)
+      if (metadataURI && metadataURI.startsWith('data:application/json,')) {
+        try {
+          const jsonData = decodeURIComponent(metadataURI.replace('data:application/json,', ''));
+          const metadata = JSON.parse(jsonData);
+          console.log('Successfully parsed inline metadata:', metadata);
+          return metadata;
+        } catch (parseError) {
+          console.warn('Failed to parse inline metadata:', parseError);
+          return null;
+        }
+      }
+      
       if (!metadataURI || !metadataURI.startsWith('ipfs://')) {
         console.warn('Invalid metadata URI:', metadataURI);
         return null;
@@ -71,23 +84,41 @@ export const useMarketplace = () => {
         return null;
       }
       
-      const gatewayUrl = `https://ipfs.io/ipfs/${ipfsHash}`;
-      console.log('Fetching metadata from:', gatewayUrl);
+      // Try multiple IPFS gateways for better reliability
+      const gateways = [
+        `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
+        `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`,
+        `https://ipfs.io/ipfs/${ipfsHash}`,
+        `https://dweb.link/ipfs/${ipfsHash}`
+      ];
       
-      const response = await fetch(gatewayUrl, {
-        headers: {
-          'Accept': 'application/json'
+      for (const gatewayUrl of gateways) {
+        try {
+          console.log('Fetching metadata from:', gatewayUrl);
+          
+          const response = await fetch(gatewayUrl, {
+            headers: {
+              'Accept': 'application/json'
+            },
+            signal: AbortSignal.timeout(10000) // 10 second timeout
+          });
+          
+          if (response.ok) {
+            const metadata = await response.json();
+            console.log('Successfully fetched metadata from:', gatewayUrl, metadata);
+            return metadata;
+          } else {
+            console.warn(`Failed to fetch from ${gatewayUrl} (Status: ${response.status})`);
+          }
+        } catch (gatewayError) {
+          console.warn(`Gateway ${gatewayUrl} failed:`, gatewayError);
+          continue; // Try next gateway
         }
-      });
-      
-      if (!response.ok) {
-        console.warn(`Failed to fetch metadata from: ${gatewayUrl} (Status: ${response.status})`);
-        return null;
       }
       
-      const metadata = await response.json();
-      console.log('Successfully fetched metadata:', metadata);
-      return metadata;
+      console.warn('All IPFS gateways failed for hash:', ipfsHash);
+      return null;
+      
     } catch (error) {
       console.warn('Error fetching metadata:', error);
       return null;
@@ -105,6 +136,59 @@ export const useMarketplace = () => {
     } catch (error) {
       console.warn('Error fetching token details for:', tokenAddress, error);
       return null;
+    }
+  };
+
+  const fetchTokenHolderCount = async (tokenAddress: string, provider: ethers.Provider): Promise<number> => {
+    try {
+      console.log(`🔍 Fetching holder count for token: ${tokenAddress}`);
+      const tokenContract = new ethers.Contract(tokenAddress, LAUNCHPAD_TOKEN_ABI, provider);
+      
+      // Get all Transfer events from the token contract
+      const transferFilter = tokenContract.filters.Transfer();
+      const events = await tokenContract.queryFilter(transferFilter, 0, 'latest');
+      
+      if (events.length === 0) {
+        console.log(`No transfer events found for ${tokenAddress}`);
+        return 0;
+      }
+      
+      console.log(`Found ${events.length} transfer events for ${tokenAddress}`);
+      
+      // Track unique addresses that have received tokens
+      const potentialHolders = new Set<string>();
+      
+      for (const event of events) {
+        const { to, from } = event.args!;
+        
+        // Add recipient to potential holders (if not zero address)
+        if (to !== ethers.ZeroAddress) {
+          potentialHolders.add(to.toLowerCase());
+        }
+      }
+      
+      console.log(`Found ${potentialHolders.size} potential holders for ${tokenAddress}`);
+      
+      // Check current balances for all potential holders
+      const holderPromises = Array.from(potentialHolders).map(async (holderAddress) => {
+        try {
+          const balance = await tokenContract.balanceOf(holderAddress);
+          return balance > 0n ? holderAddress : null;
+        } catch (error) {
+          console.warn(`Error checking balance for ${holderAddress}:`, error);
+          return null;
+        }
+      });
+      
+      const results = await Promise.all(holderPromises);
+      const actualHolders = results.filter(holder => holder !== null);
+      
+      console.log(`✅ Token ${tokenAddress} has ${actualHolders.length} holders`);
+      return actualHolders.length;
+      
+    } catch (error) {
+      console.warn('Error fetching holder count for:', tokenAddress, error);
+      return 0;
     }
   };
 
@@ -185,6 +269,14 @@ export const useMarketplace = () => {
           const currentSupply = parseFloat(ethers.formatEther(tokenInfo.currentSupply));
           const reserveBalance = parseFloat(ethers.formatEther(tokenInfo.reserveBalance));
 
+          // Fetch holder count from blockchain
+          let holderCount = 0;
+          try {
+            holderCount = await fetchTokenHolderCount(address, provider);
+          } catch (holderError) {
+            console.warn(`⚠️ Could not fetch holder count for ${address}:`, holderError);
+          }
+
           const marketplaceToken: MarketplaceToken = {
             address,
             name: tokenDetails.name,
@@ -194,7 +286,7 @@ export const useMarketplace = () => {
             priceChange24h: 0, // TODO: Calculate from historical data
             marketCap,
             volume24h: 0, // TODO: Calculate from events
-            holders: 0, // TODO: Calculate from token contract
+            holders: holderCount,
             createdAt: new Date(Number(tokenInfo.launchTimestamp) * 1000).toISOString().split('T')[0],
             creator: tokenInfo.creator,
             reserveRatio: Number(tokenInfo.reserveRatio) / 100, // Convert from basis points

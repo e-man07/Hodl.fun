@@ -15,7 +15,7 @@ const appMetadata = {
 
 // Wallet configuration
 const walletConfig = {
-  network: PushUI.CONSTANTS.PUSH_NETWORK.TESTNET, // Push Chain Testnet
+  network: PushUI.CONSTANTS.PUSH_NETWORK.TESTNET_DONUT, // Push Chain Testnet Donut
   login: {
     email: true,
     google: true,

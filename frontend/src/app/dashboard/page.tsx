@@ -37,7 +37,7 @@ import {
   formatPercentage,
   truncateAddress,
 } from "@/lib/utils";
-import { useWallet } from "@/hooks/useWallet";
+import { usePushWalletContext, usePushChainClient, PushUI } from '@pushchain/ui-kit';
 import { useUserPortfolio } from "@/hooks/useUserPortfolio";
 
 const DashboardPage = () => {
@@ -46,14 +46,18 @@ const DashboardPage = () => {
   >("portfolio");
 
   // Get wallet connection state and user data
-  const { isConnected, address } = useWallet();
+  const { connectionStatus } = usePushWalletContext();
+  const { pushChainClient } = usePushChainClient();
+  
+  const isConnected = connectionStatus === PushUI.CONSTANTS.CONNECTION.STATUS.CONNECTED;
+  const address = pushChainClient?.universal?.account;
   const {
     tokens,
     stats: portfolioStats,
     isLoading,
     error,
     refreshPortfolio,
-  } = useUserPortfolio(isConnected ? address : null);
+  } = useUserPortfolio(isConnected && address ? address : null);
 
   // Get created tokens (user is creator)
   const createdTokens = tokens.filter((token) => token.isCreator);

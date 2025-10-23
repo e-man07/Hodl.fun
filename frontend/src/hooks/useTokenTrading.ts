@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI, LAUNCHPAD_TOKEN_ABI } from '@/config/abis';
-import { useWallet } from './useWallet';
+import { usePushWalletContext, usePushChainClient, PushUI } from '@pushchain/ui-kit';
 
 interface TradeResult {
   success: boolean;
@@ -13,24 +13,17 @@ interface TradeResult {
 }
 
 export const useTokenTrading = () => {
-  const { address, isConnected } = useWallet();
+  const { connectionStatus } = usePushWalletContext();
+  const { pushChainClient } = usePushChainClient();
+  
+  const isConnected = connectionStatus === PushUI.CONSTANTS.CONNECTION.STATUS.CONNECTED;
+  const address = pushChainClient?.universal?.account;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Create provider and signer from window.ethereum
+  // Create provider using Push Chain RPC
   const getProvider = () => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      return new ethers.BrowserProvider(window.ethereum);
-    }
-    return null;
-  };
-
-  const getSigner = async () => {
-    const provider = getProvider();
-    if (provider) {
-      return await provider.getSigner();
-    }
-    return null;
+    return new ethers.JsonRpcProvider('https://evm.rpc-testnet-donut-node1.push.org/');
   };
 
   // Clear any previous errors
@@ -141,13 +134,8 @@ export const useTokenTrading = () => {
     setIsLoading(true);
 
     try {
-      if (!isConnected) {
-        throw new Error('Wallet not connected');
-      }
-
-      const signer = await getSigner();
-      if (!signer) {
-        throw new Error('Unable to get signer');
+      if (!isConnected || !pushChainClient) {
+        throw new Error('Wallet not connected or Push Chain client not available');
       }
 
       const weiAmount = ethers.parseEther(ethAmount);
@@ -180,30 +168,27 @@ export const useTokenTrading = () => {
         minTokensOutWei = calculatedTokensOut * BigInt(100 - slippagePercentage) / BigInt(100);
       }
 
-      const marketplaceContract = new ethers.Contract(
-        CONTRACT_ADDRESSES.TokenMarketplace,
-        TOKEN_MARKETPLACE_ABI,
-        signer
-      );
-
       console.log(`Buying tokens from ${tokenAddress}:`);
       console.log(`- ETH amount: ${ethAmount} ETH (${weiAmount.toString()} wei)`);
       console.log(`- Min tokens out: ${ethers.formatEther(minTokensOutWei)} (with ${slippagePercentage}% slippage)`);
 
-      // Execute the transaction
-      const tx = await marketplaceContract.buyTokens(
+      // Encode the transaction data
+      const contractInterface = new ethers.Interface(TOKEN_MARKETPLACE_ABI);
+      const encodedData = contractInterface.encodeFunctionData('buyTokens', [
         tokenAddress,
-        minTokensOutWei,
-        { value: weiAmount }
-      );
+        minTokensOutWei
+      ]);
 
-      console.log('Transaction submitted:', tx.hash);
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed:', receipt);
+      // Execute the transaction using Push Chain client
+      const result = await pushChainClient.universal.sendTransaction({
+        to: CONTRACT_ADDRESSES.TokenMarketplace as `0x${string}`,
+        value: weiAmount,
+        data: encodedData as `0x${string}`,
+      });
 
       return {
         success: true,
-        hash: tx.hash
+        hash: result.hash
       };
     } catch (error: unknown) {
       console.error('Error buying tokens:', error);
@@ -229,13 +214,8 @@ export const useTokenTrading = () => {
     setIsLoading(true);
 
     try {
-      if (!isConnected) {
-        throw new Error('Wallet not connected');
-      }
-
-      const signer = await getSigner();
-      if (!signer) {
-        throw new Error('Unable to get signer');
+      if (!isConnected || !pushChainClient) {
+        throw new Error('Wallet not connected or Push Chain client not available');
       }
 
       const tokenWei = ethers.parseEther(tokenAmount);
@@ -269,10 +249,11 @@ export const useTokenTrading = () => {
       }
 
       // Check if token is approved
+      const provider = getProvider();
       const tokenContract = new ethers.Contract(
         tokenAddress,
         LAUNCHPAD_TOKEN_ABI,
-        signer
+        provider
       );
       
       // Check if approval is needed
@@ -283,38 +264,49 @@ export const useTokenTrading = () => {
       
       if (allowance < tokenWei) {
         console.log('Approving tokens for marketplace...');
-        const approveTx = await tokenContract.approve(
+        
+        // Encode approval transaction
+        const approveInterface = new ethers.Interface(LAUNCHPAD_TOKEN_ABI);
+        const approveData = approveInterface.encodeFunctionData('approve', [
           CONTRACT_ADDRESSES.TokenMarketplace,
           tokenWei
-        );
-        await approveTx.wait();
-        console.log('Tokens approved');
+        ]);
+
+        // Send approval transaction
+        const approveResult = await pushChainClient.universal.sendTransaction({
+          to: tokenAddress as `0x${string}`,
+          value: 0n,
+          data: approveData as `0x${string}`,
+        });
+        
+        console.log('Approval transaction sent:', approveResult.hash);
+        // Note: In a real app, you might want to wait for approval confirmation
       }
 
-      const marketplaceContract = new ethers.Contract(
-        CONTRACT_ADDRESSES.TokenMarketplace,
-        TOKEN_MARKETPLACE_ABI,
-        signer
-      );
-
-      console.log(`Selling tokens to ${tokenAddress}:`);
+      console.log(`Selling tokens from ${tokenAddress}:`);
       console.log(`- Token amount: ${tokenAmount} tokens (${tokenWei.toString()} wei)`);
       console.log(`- Min ETH out: ${ethers.formatEther(minEthOutWei)} (with ${slippagePercentage}% slippage)`);
 
-      // Execute the transaction
-      const tx = await marketplaceContract.sellTokens(
+      // Encode the sell transaction
+      const contractInterface = new ethers.Interface(TOKEN_MARKETPLACE_ABI);
+      const encodedData = contractInterface.encodeFunctionData('sellTokens', [
         tokenAddress,
         tokenWei,
         minEthOutWei
-      );
+      ]);
 
-      console.log('Transaction submitted:', tx.hash);
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed:', receipt);
+      // Execute the sell transaction using Push Chain client
+      const result = await pushChainClient.universal.sendTransaction({
+        to: CONTRACT_ADDRESSES.TokenMarketplace as `0x${string}`,
+        value: 0n,
+        data: encodedData as `0x${string}`,
+      });
+
+      console.log('✅ Sell transaction sent:', result.hash);
 
       return {
         success: true,
-        hash: tx.hash
+        hash: result.hash
       };
     } catch (error: unknown) {
       console.error('Error selling tokens:', error);

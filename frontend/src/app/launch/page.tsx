@@ -3,24 +3,10 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useWallet } from '@/hooks/useWallet';
+import { usePushWalletContext, usePushChainClient, PushUI } from '@pushchain/ui-kit';
 import { WalletButton } from '@/components/WalletButton';
-import { useRealContracts } from '@/hooks/useRealContracts';
-interface TokenParams {
-  name: string;
-  symbol: string;
-  description: string;
-  totalSupply: string;
-  metadataURI: string;
-  reserveRatio: number;
-  creator: string;
-  socialLinks?: {
-    website?: string;
-    twitter?: string;
-    telegram?: string;
-  };
-  logoFile?: File;
-}
+import { useContracts } from '@/hooks/useContracts';
+import { getTokenAddressFromTx, getTransactionUrl } from '@/utils/getTokenAddress';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,13 +17,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { 
   Rocket, 
   CheckCircle, 
-  AlertCircle, 
-  Shield, 
-  TrendingUp, 
-  Zap, 
+  ArrowRight, 
+  Upload,
+  Zap,
+  Shield,
+  TrendingUp,
+  Users,
+  Sparkles,
+  Globe,
+  Coins,
   Info, 
-  Coins, 
-  ArrowRight 
+  AlertCircle
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 
@@ -54,8 +44,12 @@ interface TokenFormData {
 }
 
 const LaunchPage = () => {
-  const { isConnected, address, isCorrectNetwork } = useWallet();
-  const { createToken, isLoading, error, clearError } = useRealContracts();
+  const { connectionStatus } = usePushWalletContext();
+  const { pushChainClient } = usePushChainClient();
+  
+  const isConnected = connectionStatus === PushUI.CONSTANTS.CONNECTION.STATUS.CONNECTED;
+  const address = pushChainClient?.universal?.account;
+  const { createToken, isLoading, error, clearError } = useContracts();
   
   const [formData, setFormData] = useState<TokenFormData>({
     name: '',
@@ -71,6 +65,7 @@ const LaunchPage = () => {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [tokenAddress, setTokenAddress] = useState<string | null>(null);
 
   const handleInputChange = (field: keyof TokenFormData, value: string | File | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -131,31 +126,56 @@ const LaunchPage = () => {
       }
 
       // Create token parameters with actual user data
-      const tokenParams: TokenParams = {
+      const tokenParams = {
         name: formData.name,
         symbol: formData.symbol,
-        description: formData.description,
+        description: formData.description || 'Token created on hodl.fun',
         totalSupply: formData.totalSupply,
-        metadataURI: '', // Will be set by the contract hook after IPFS upload
-        reserveRatio: parseInt(formData.reserveRatio) * 100, // Convert to basis points
+        reserveRatio: parseInt(formData.reserveRatio), // Will be converted to basis points in hook
         creator: address,
         socialLinks: {
           website: formData.website,
           twitter: formData.twitter,
           telegram: formData.telegram
         },
-        logoFile: formData.logoFile || undefined
+        logoFile: formData.logoFile
       };
 
-      // Call contract function
-      const hash = await createToken(tokenParams);
+      console.log('🚀 Launching token with params:', tokenParams);
       
-      if (hash) {
-        setTxHash(hash);
+      // Call contract function
+      const result = await createToken(tokenParams);
+      
+      if (result) {
+        console.log('✅ Token creation successful! Hash:', result.hash);
+        console.log('🔗 Transaction URL:', getTransactionUrl(result.hash));
+        
+        setTxHash(result.hash);
         setCurrentStep(5); // Go to success step
+        
+        // Extract token address from transaction (async)
+        if (result.tokenAddress) {
+          console.log('🎯 Token contract address:', result.tokenAddress);
+          setTokenAddress(result.tokenAddress);
+        } else {
+          // Try to extract from transaction receipt
+          console.log('🔍 Extracting token address from transaction...');
+          getTokenAddressFromTx(result.hash).then((address) => {
+            if (address) {
+              console.log('🎯 Token contract address extracted:', address);
+              setTokenAddress(address);
+            }
+          }).catch((error) => {
+            console.error('Failed to extract token address:', error);
+          });
+        }
+      } else {
+        console.error('❌ Token creation returned null');
+        // Error should already be set by the createToken function
       }
     } catch (err) {
-      console.error('Token launch failed:', err);
+      console.error('❌ Token launch failed:', err);
+      // Additional error handling if needed
     }
   };
 
@@ -206,19 +226,49 @@ const LaunchPage = () => {
                   </p>
                 </div>
                 
-                <div className="bg-background rounded-lg p-4 border">
-                  <p className="text-sm text-muted-foreground mb-1">Transaction Hash:</p>
-                  <p className="font-mono text-sm break-all">{txHash}</p>
+                <div className="bg-background rounded-lg p-4 border space-y-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Transaction Hash:</p>
+                    <p className="font-mono text-sm break-all">{txHash}</p>
+                  </div>
+                  
+                  {tokenAddress && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Token Contract Address:</p>
+                      <p className="font-mono text-sm break-all text-primary">{tokenAddress}</p>
+                    </div>
+                  )}
+                  
+                  {!tokenAddress && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Token Contract Address:</p>
+                      <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                        🔍 Extracting from transaction... Please wait a moment.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <Button 
-                    onClick={() => window.open(`https://donut.push.network/tx/${txHash}`, '_blank')}
+                    onClick={() => window.open(getTransactionUrl(txHash), '_blank')}
                     className="flex items-center gap-2"
                   >
                     <ArrowRight className="h-4 w-4" />
-                    View on Explorer
+                    View Transaction
                   </Button>
+                  
+                  {tokenAddress && (
+                    <Button 
+                      onClick={() => window.open(`https://donut.push.network/address/${tokenAddress}`, '_blank')}
+                      className="flex items-center gap-2"
+                      variant="outline"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                      View Token Contract
+                    </Button>
+                  )}
+                  
                   <Button variant="outline" asChild>
                     <Link href="/marketplace">
                       <Coins className="h-4 w-4 mr-2" />
@@ -280,38 +330,14 @@ const LaunchPage = () => {
           </div>
         )}
 
-        {/* Wrong Network Warning */}
-        {isConnected && !isCorrectNetwork && (
-          <div className="text-center mb-8 max-w-md mx-auto">
-            <Card className="border-2 border-orange-200 bg-orange-50 dark:bg-orange-950 dark:border-orange-800">
-              <CardContent className="p-6">
-                <div className="flex flex-col items-center space-y-3">
-                  <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900 rounded-full flex items-center justify-center">
-                    <AlertCircle className="h-6 w-6 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-orange-800 dark:text-orange-200 mb-1">
-                      Switch to Push Chain
-                    </h3>
-                    <p className="text-sm text-orange-700 dark:text-orange-300">
-                      Please switch to Push Chain network to continue
-                    </p>
-                  </div>
-                  <WalletButton />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Main Form - Only show when wallet is connected and on correct network */}
-        {isConnected && isCorrectNetwork && (
+        {/* Main Form - Only show when wallet is connected */}
+        {isConnected && (
           <div className="flex flex-col lg:flex-row gap-8">
             {/* Main Form */}
             <div className="flex-1 lg:flex-[2]">
-              <Card className="shadow-xl border-2 hover:border-primary/20 transition-colors">
-              <CardHeader className="pb-6">
-                <div className="flex items-center justify-between">
+              <Card className="border-2 border-primary/20 bg-card">
+                <CardHeader className="border-b border-border/50">
+                  <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="text-2xl text-foreground">Create Token</CardTitle>
                     <CardDescription className="text-base mt-1">

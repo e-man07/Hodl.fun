@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useTokenTrading } from '@/hooks/useTokenTrading';
-import { useWallet } from '@/hooks/useWallet';
+import { usePushWalletContext, PushUI } from '@pushchain/ui-kit';
+import { getIPFSImageUrl } from '@/utils/ipfsImage';
 
 import {
   Dialog,
@@ -42,7 +43,8 @@ interface TokenTradeModalProps {
 }
 
 export const TokenTradeModal = ({ isOpen, onClose, token }: TokenTradeModalProps) => {
-  const { isConnected } = useWallet();
+  const { connectionStatus } = usePushWalletContext();
+  const isConnected = connectionStatus === PushUI.CONSTANTS.CONNECTION.STATUS.CONNECTED;
   const {
     buyTokens,
     sellTokens,
@@ -186,10 +188,7 @@ export const TokenTradeModal = ({ isOpen, onClose, token }: TokenTradeModalProps
           <DialogTitle className="flex items-center gap-2">
             {token.logo ? (
               <Image
-                src={token.logo.startsWith('ipfs://') 
-                  ? `https://ipfs.io/ipfs/${token.logo.replace('ipfs://', '')}` 
-                  : token.logo
-                }
+                src={getIPFSImageUrl(token.logo)}
                 alt={`${token.name} logo`}
                 width={24}
                 height={24}

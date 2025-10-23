@@ -25,8 +25,9 @@ import {
 import Navbar from '@/components/layout/Navbar';
 import { formatCurrency, formatNumber, formatPercentage } from '@/lib/utils';
 import { useMarketplace } from '@/hooks/useMarketplace';
-import { TokenTradeModal } from '@/components/TokenTradeModal';
 import { useDebounce } from '@/hooks/useDebounce';
+import { TokenTradeModal } from '@/components/TokenTradeModal';
+import { getIPFSImageUrl } from '@/utils/ipfsImage';
 
 interface Token {
   address: string;
@@ -162,10 +163,7 @@ const MarketplacePage = () => {
             {token.logo ? (
               <div className="relative w-12 h-12 flex-shrink-0 overflow-hidden rounded-full">
                 <Image
-                  src={token.logo.startsWith('ipfs://') 
-                    ? `https://ipfs.io/ipfs/${token.logo.replace('ipfs://', '')}` 
-                    : token.logo
-                  }
+                  src={getIPFSImageUrl(token.logo)}
                   alt={`${token.name} logo`}
                   width={48}
                   height={48}
