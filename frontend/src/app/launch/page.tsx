@@ -17,14 +17,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { 
   Rocket, 
   CheckCircle, 
-  ArrowRight, 
-  Upload,
+  ArrowRight,
   Zap,
   Shield,
   TrendingUp,
-  Users,
-  Sparkles,
-  Globe,
   Coins,
   Info, 
   AlertCircle
@@ -40,7 +36,7 @@ interface TokenFormData {
   website: string;
   twitter: string;
   telegram: string;
-  logoFile: File | null;
+  logoFile: File | undefined;
 }
 
 const LaunchPage = () => {
@@ -60,19 +56,19 @@ const LaunchPage = () => {
     website: '',
     twitter: '',
     telegram: '',
-    logoFile: null
+    logoFile: undefined
   });
 
   const [currentStep, setCurrentStep] = useState(1);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [tokenAddress, setTokenAddress] = useState<string | null>(null);
 
-  const handleInputChange = (field: keyof TokenFormData, value: string | File | null) => {
+  const handleInputChange = (field: keyof TokenFormData, value: string | File | undefined) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] || null;
+    const file = event.target.files?.[0];
     if (file) {
       // Validate file type
       const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
@@ -420,7 +416,7 @@ const LaunchPage = () => {
                               type="button"
                               variant="outline"
                               size="sm"
-                              onClick={() => handleInputChange('logoFile', null)}
+                              onClick={() => handleInputChange('logoFile', undefined)}
                             >
                               Remove
                             </Button>

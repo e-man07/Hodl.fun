@@ -159,11 +159,14 @@ export const useMarketplace = () => {
       const potentialHolders = new Set<string>();
       
       for (const event of events) {
-        const { to, from } = event.args!;
-        
-        // Add recipient to potential holders (if not zero address)
-        if (to !== ethers.ZeroAddress) {
-          potentialHolders.add(to.toLowerCase());
+        // Cast to EventLog to access args property
+        if ('args' in event) {
+          const { to } = event.args!;
+          
+          // Add recipient to potential holders (if not zero address)
+          if (to !== ethers.ZeroAddress) {
+            potentialHolders.add(to.toLowerCase());
+          }
         }
       }
       
@@ -173,7 +176,7 @@ export const useMarketplace = () => {
       const holderPromises = Array.from(potentialHolders).map(async (holderAddress) => {
         try {
           const balance = await tokenContract.balanceOf(holderAddress);
-          return balance > 0n ? holderAddress : null;
+          return balance > BigInt(0) ? holderAddress : null;
         } catch (error) {
           console.warn(`Error checking balance for ${holderAddress}:`, error);
           return null;

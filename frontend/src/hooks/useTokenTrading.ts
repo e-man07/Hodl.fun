@@ -275,7 +275,7 @@ export const useTokenTrading = () => {
         // Send approval transaction
         const approveResult = await pushChainClient.universal.sendTransaction({
           to: tokenAddress as `0x${string}`,
-          value: 0n,
+          value: BigInt(0),
           data: approveData as `0x${string}`,
         });
         
@@ -298,7 +298,7 @@ export const useTokenTrading = () => {
       // Execute the sell transaction using Push Chain client
       const result = await pushChainClient.universal.sendTransaction({
         to: CONTRACT_ADDRESSES.TokenMarketplace as `0x${string}`,
-        value: 0n,
+        value: BigInt(0),
         data: encodedData as `0x${string}`,
       });
 

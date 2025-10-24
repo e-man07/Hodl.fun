@@ -33,7 +33,9 @@ export const WalletButton: React.FC<WalletButtonProps> = ({
             <p className="text-sm font-mono text-foreground">{shortAddress}</p>
           </div>
         )}
-        <PushUniversalAccountButton className={`w-full ${className}`} />
+        <div className={`w-full ${className}`}>
+          <PushUniversalAccountButton />
+        </div>
       </div>
     );
   }
@@ -47,10 +49,16 @@ export const WalletButton: React.FC<WalletButtonProps> = ({
             <div className="font-mono text-foreground text-xs">{shortAddress}</div>
           </div>
         </div>
-        <PushUniversalAccountButton className={className} />
+        <div className={className}>
+          <PushUniversalAccountButton />
+        </div>
       </div>
     );
   }
 
-  return <PushUniversalAccountButton className={className} />;
+  return (
+    <div className={className}>
+      <PushUniversalAccountButton />
+    </div>
+  );
 };
