@@ -45,7 +45,7 @@ export const useUserPortfolio = (userAddress: string | null) => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchUserTokens = useCallback(async () => {
-    if (!userAddress || !window.ethereum) {
+    if (!userAddress) {
       setTokens([]);
       return;
     }
@@ -54,7 +54,8 @@ export const useUserPortfolio = (userAddress: string | null) => {
     setError(null);
 
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      // Use Push Chain RPC provider for reading data
+      const provider = new ethers.JsonRpcProvider('https://evm.rpc-testnet-donut-node1.push.org/');
       const marketplace = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenMarketplace,
         TOKEN_MARKETPLACE_ABI,
@@ -62,8 +63,32 @@ export const useUserPortfolio = (userAddress: string | null) => {
       );
 
       // Get all token addresses from the marketplace
-      const allTokenAddresses = await marketplace.getAllTokens();
+      let allTokenAddresses: string[] = [];
+      try {
+        allTokenAddresses = await marketplace.getAllTokens();
+        console.log('📋 Found tokens in marketplace:', allTokenAddresses);
+      } catch (getAllTokensError) {
+        console.error('❌ Failed to get all tokens from marketplace:', getAllTokensError);
+        // If getAllTokens fails, set empty array and continue
+        allTokenAddresses = [];
+      }
+      
       const userTokens: UserToken[] = [];
+      
+      // If no tokens in marketplace, return early
+      if (allTokenAddresses.length === 0) {
+        console.log('ℹ️ No tokens found in marketplace');
+        setTokens([]);
+        setStats({
+          totalValue: 0,
+          totalPnL: 0,
+          totalPnLPercentage: 0,
+          tokensOwned: 0,
+          tokensCreated: 0,
+        });
+        setIsLoading(false);
+        return;
+      }
 
       for (const tokenAddress of allTokenAddresses) {
         try {
