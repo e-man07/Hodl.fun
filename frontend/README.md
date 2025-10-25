@@ -1,4 +1,4 @@
-# hodl.fun - Retro Token Platform
+# hodl.fun - Retro Token Platform Launchpad
 
 A professional token launchpad built on Push Chain with bonding curve mechanics. Create, deploy, and trade ERC20 tokens with automated marketplace listing and enterprise-grade security.
 
