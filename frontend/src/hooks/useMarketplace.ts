@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI, LAUNCHPAD_TOKEN_ABI } from '@/config/abis';
+import { getCachedToken, setCachedToken } from '@/lib/tokenCache';
 
 interface TokenInfo {
   tokenAddress: string;
@@ -223,90 +224,85 @@ export const useMarketplace = () => {
         return;
       }
 
-      // Fetch detailed info for each token
+      // Fetch detailed info for each token with progressive loading
       const tokenPromises = tokenAddresses.map(async (address): Promise<MarketplaceToken | null> => {
         try {
+          // Check cache first
+          const cached = getCachedToken<MarketplaceToken>(address);
+          if (cached) {
+            console.log(`✅ Using cached data for ${address}`);
+            return cached;
+          }
+          
           console.log(`🔍 Fetching info for token: ${address}`);
           
-          // Get token info from marketplace
-          const tokenInfo: TokenInfo = await marketplaceContract.getTokenInfo(address);
-          console.log(`📊 Token info for ${address}:`, {
-            creator: tokenInfo.creator,
-            metadataURI: tokenInfo.metadataURI,
-            totalSupply: tokenInfo.totalSupply.toString(),
-            currentSupply: tokenInfo.currentSupply.toString(),
-            reserveBalance: tokenInfo.reserveBalance.toString(),
-            marketCap: tokenInfo.marketCap.toString(),
-            tradingEnabled: tokenInfo.tradingEnabled
-          });
+          // Fetch essential data in parallel for speed
+          const [tokenInfo, tokenDetails, priceWei] = await Promise.all([
+            marketplaceContract.getTokenInfo(address),
+            fetchTokenDetails(address, provider),
+            marketplaceContract.getCurrentPrice(address).catch(() => BigInt(0))
+          ]);
           
-          // Get token name and symbol
-          const tokenDetails = await fetchTokenDetails(address, provider);
           if (!tokenDetails) {
             console.warn(`⚠️ Could not fetch token details for ${address}`);
             return null;
           }
 
-          // Get current price
-          let currentPrice = 0;
-          try {
-            const priceWei = await marketplaceContract.getCurrentPrice(address);
-            currentPrice = parseFloat(ethers.formatEther(priceWei));
-          } catch (priceError) {
-            console.warn(`⚠️ Could not fetch price for ${address}:`, priceError);
-          }
-
-          // Fetch metadata from IPFS (with error handling)
-          let metadata: TokenMetadata | null = null;
-          try {
-            metadata = await fetchTokenMetadata(tokenInfo.metadataURI);
-          } catch (metadataError) {
-            console.warn(`Failed to fetch metadata for ${address}:`, metadataError);
-          }
-
-          // Calculate market cap (tokenInfo.marketCap is already a BigInt)
+          const currentPrice = parseFloat(ethers.formatEther(priceWei));
           const marketCap = parseFloat(ethers.formatEther(tokenInfo.marketCap));
-
-          // Convert BigInt values to numbers
           const totalSupply = parseFloat(ethers.formatEther(tokenInfo.totalSupply));
           const currentSupply = parseFloat(ethers.formatEther(tokenInfo.currentSupply));
           const reserveBalance = parseFloat(ethers.formatEther(tokenInfo.reserveBalance));
 
-          // Fetch holder count from blockchain
-          let holderCount = 0;
-          try {
-            holderCount = await fetchTokenHolderCount(address, provider);
-          } catch (holderError) {
-            console.warn(`⚠️ Could not fetch holder count for ${address}:`, holderError);
-          }
-
+          // Create token with essential data immediately
           const marketplaceToken: MarketplaceToken = {
             address,
             name: tokenDetails.name,
             symbol: tokenDetails.symbol,
-            description: metadata?.description || 'No description available',
+            description: 'Loading...', // Will be updated
             price: currentPrice,
-            priceChange24h: 0, // TODO: Calculate from historical data
+            priceChange24h: 0,
             marketCap,
-            volume24h: 0, // TODO: Calculate from events
-            holders: holderCount,
+            volume24h: 0,
+            holders: 0, // Will be updated
             createdAt: new Date(Number(tokenInfo.launchTimestamp) * 1000).toISOString().split('T')[0],
             creator: tokenInfo.creator,
-            reserveRatio: Number(tokenInfo.reserveRatio) / 100, // Convert from basis points
+            reserveRatio: Number(tokenInfo.reserveRatio) / 100,
             isTrading: tokenInfo.tradingEnabled,
-            logo: metadata?.image || undefined,
+            logo: undefined, // Will be updated
             currentSupply,
             totalSupply,
             reserveBalance
           };
 
-          console.log(`✅ Successfully fetched data for ${tokenDetails.symbol}:`, {
-            name: marketplaceToken.name,
-            symbol: marketplaceToken.symbol,
-            price: marketplaceToken.price,
-            marketCap: marketplaceToken.marketCap,
-            isTrading: marketplaceToken.isTrading
+          // Cache the basic token data
+          setCachedToken(address, marketplaceToken);
+
+          // Fetch metadata and holder count asynchronously (non-blocking)
+          Promise.all([
+            fetchTokenMetadata(tokenInfo.metadataURI).catch(() => null),
+            fetchTokenHolderCount(address, provider).catch(() => 0)
+          ]).then(([metadata, holderCount]) => {
+            // Update token with additional data
+            const updatedToken = {
+              ...marketplaceToken,
+              description: metadata?.description || 'No description available',
+              logo: metadata?.image || undefined,
+              holders: holderCount
+            };
+            
+            // Update cache
+            setCachedToken(address, updatedToken);
+            
+            // Update state
+            setTokens(prevTokens =>
+              prevTokens.map(t => t.address === address ? updatedToken : t)
+            );
+            
+            console.log(`📊 Updated ${tokenDetails.symbol} with metadata and holders: ${holderCount}`);
           });
+
+          console.log(`✅ Loaded basic data for ${tokenDetails.symbol}`);
           return marketplaceToken;
 
         } catch (error) {
