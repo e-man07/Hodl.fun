@@ -1,17 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Search, 
-  TrendingUp, 
-  ArrowUpRight, 
-  ArrowDownRight,
+import {
+  Search,
+  TrendingUp,
   Coins,
   Users,
   Clock,
@@ -23,7 +21,7 @@ import {
   SortAsc
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
-import { formatCurrency, formatNumber, formatPercentage } from '@/lib/utils';
+import { formatCurrency, formatNumber } from '@/lib/utils';
 import { useMarketplace } from '@/hooks/useMarketplace';
 import { useDebounce } from '@/hooks/useDebounce';
 import { TokenTradeModal } from '@/components/TokenTradeModal';
@@ -35,9 +33,7 @@ interface Token {
   symbol: string;
   description: string;
   price: number;
-  priceChange24h: number;
   marketCap: number;
-  volume24h: number;
   holders: number;
   createdAt: string;
   creator: string;
@@ -51,8 +47,8 @@ interface Token {
 
 const MarketplacePage = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'marketCap' | 'volume24h' | 'priceChange24h' | 'createdAt'>('marketCap');
-  const [filterBy, setFilterBy] = useState<'all' | 'trending' | 'new' | 'trading'>('all');
+  const [sortBy, setSortBy] = useState<'marketCap' | 'holders' | 'createdAt'>('marketCap');
+  const [filterBy, setFilterBy] = useState<'all' | 'new' | 'trading'>('all');
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
   const [showRefreshNotification, setShowRefreshNotification] = useState(false);
@@ -61,61 +57,31 @@ const MarketplacePage = () => {
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   
   // Fetch real tokens from blockchain
-  const { tokens: realTokens, isLoading, error, refreshTokens } = useMarketplace();
-
-  // Mock data for fallback - will be replaced by real data
-  const mockTokens: Token[] = [
-    // Fallback data - only shown if no real tokens are available
-    {
-      address: '0x0000000000000000000000000000000000000000',
-      name: 'No Tokens Found',
-      symbol: 'EMPTY',
-      description: 'No tokens have been created yet. Be the first to launch a token!',
-      price: 0,
-      priceChange24h: 0,
-      marketCap: 0,
-      volume24h: 0,
-      holders: 0,
-      createdAt: new Date().toISOString().split('T')[0],
-      creator: '0x0000000000000000000000000000000000000000',
-      reserveRatio: 0,
-      isTrading: false,
-      currentSupply: 0,
-      totalSupply: 0,
-      reserveBalance: 0
-    }
-  ];
-
-  // Use real tokens if available, otherwise use mock data
-  const tokensToDisplay = realTokens.length > 0 ? realTokens : (isLoading ? [] : mockTokens);
+  const { tokens, isLoading, error, refreshTokens } = useMarketplace();
   
-  const filteredTokens = tokensToDisplay
+  const filteredTokens = tokens
     .filter(token => {
       // Use debounced search query for better performance
-      const matchesSearch = debouncedSearchQuery === '' || 
+      const matchesSearch = debouncedSearchQuery === '' ||
                           token.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
                           token.symbol.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
                           token.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
-      
+
       switch (filterBy) {
-        case 'trending':
-          return matchesSearch && token.priceChange24h > 5; // At least 5% gain
         case 'new':
           return matchesSearch && new Date(token.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Last 7 days
         case 'trading':
-          return matchesSearch && token.isTrading && token.volume24h > 0;
+          return matchesSearch && token.isTrading;
         default:
-          return matchesSearch && token.address !== '0x0000000000000000000000000000000000000000'; // Filter out mock data
+          return matchesSearch;
       }
     })
     .sort((a, b) => {
       switch (sortBy) {
         case 'marketCap':
           return b.marketCap - a.marketCap;
-        case 'volume24h':
-          return b.volume24h - a.volume24h;
-        case 'priceChange24h':
-          return b.priceChange24h - a.priceChange24h;
+        case 'holders':
+          return b.holders - a.holders;
         case 'createdAt':
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         default:
@@ -124,10 +90,10 @@ const MarketplacePage = () => {
     });
 
   const marketStats = {
-    totalTokens: tokensToDisplay.length,
-    totalMarketCap: tokensToDisplay.reduce((sum, token) => sum + token.marketCap, 0),
-    totalVolume24h: tokensToDisplay.reduce((sum, token) => sum + token.volume24h, 0),
-    activeTraders: tokensToDisplay.reduce((sum, token) => sum + token.holders, 0)
+    totalTokens: tokens.length,
+    totalMarketCap: tokens.reduce((sum, token) => sum + token.marketCap, 0),
+    totalHolders: tokens.reduce((sum, token) => sum + token.holders, 0),
+    tradingTokens: tokens.filter(token => token.isTrading).length
   };
 
   const handleOpenTradeModal = (token: Token) => {
@@ -155,13 +121,44 @@ const MarketplacePage = () => {
     };
   }, []);
 
-  const TokenCard = ({ token }: { token: Token }) => (
-    <Card className="hover:shadow-lg hover:border-primary/50 transition-all duration-300 cursor-pointer group border-2 overflow-hidden">
-      <CardHeader className="pb-3">
+  const TokenCard = ({ token, index }: { token: Token; index: number }) => {
+    const [isVisible, setIsVisible] = useState(false);
+    const cardRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            setTimeout(() => setIsVisible(true), index * 50); // Stagger animation
+          }
+        },
+        { threshold: 0.1 }
+      );
+
+      const currentRef = cardRef.current;
+      if (currentRef) {
+        observer.observe(currentRef);
+      }
+
+      return () => {
+        if (currentRef) {
+          observer.unobserve(currentRef);
+        }
+      };
+    }, [index]);
+
+    return (
+      <Card
+        ref={cardRef}
+        className={`hover:shadow-xl hover:border-primary/50 transition-all duration-500 cursor-pointer group border-2 overflow-hidden hover:-translate-y-1 ${
+          isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+        }`}
+      >
+        <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3 min-w-0 flex-1">
             {token.logo ? (
-              <div className="relative w-12 h-12 flex-shrink-0 overflow-hidden rounded-full">
+              <div className="relative w-12 h-12 flex-shrink-0 overflow-hidden rounded-full group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
                 <Image
                   src={getIPFSImageUrl(token.logo)}
                   alt={`${token.name} logo`}
@@ -178,7 +175,7 @@ const MarketplacePage = () => {
                 />
               </div>
             ) : (
-              <div className="w-12 h-12 flex-shrink-0 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary font-bold text-sm">
+              <div className="w-12 h-12 flex-shrink-0 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary font-bold text-sm group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
                 {token.symbol.slice(0, 2)}
               </div>
             )}
@@ -205,19 +202,8 @@ const MarketplacePage = () => {
           
           {/* Price Section */}
           <div className="text-right flex-shrink-0 ml-3">
-            <p className="text-lg font-bold">{formatCurrency(token.price)}</p>
-            <div className={`text-sm flex items-center justify-end ${
-              token.priceChange24h >= 0 ? 'text-primary' : 'text-destructive'
-            }`}>
-              {token.priceChange24h >= 0 ? (
-                <ArrowUpRight className="w-3 h-3 mr-1" />
-              ) : (
-                <ArrowDownRight className="w-3 h-3 mr-1" />
-              )}
-              <span className="font-medium">
-                {token.priceChange24h >= 0 ? '+' : ''}{formatPercentage(token.priceChange24h)}
-              </span>
-            </div>
+            <p className="text-sm text-muted-foreground">Current Price</p>
+            <p className="text-lg font-bold text-primary">{formatCurrency(token.price)}</p>
           </div>
         </div>
       </CardHeader>
@@ -228,43 +214,50 @@ const MarketplacePage = () => {
         </p>
         
         {/* Metrics Grid */}
-        <div className="grid grid-cols-2 gap-4 text-sm mb-4 p-3 bg-muted/30 rounded-lg">
+        <div className="grid grid-cols-2 gap-4 text-sm mb-4 p-3 bg-muted/30 rounded-lg border border-border/50">
           <div className="space-y-1">
-            <p className="text-muted-foreground text-xs">Market Cap</p>
-            <p className="font-semibold">{formatCurrency(token.marketCap)}</p>
+            <p className="text-muted-foreground text-xs flex items-center gap-1">
+              <TrendingUp className="w-3 h-3" />
+              Market Cap
+            </p>
+            <p className="font-semibold text-foreground">{formatCurrency(token.marketCap)}</p>
           </div>
           <div className="space-y-1">
-            <p className="text-muted-foreground text-xs">24h Volume</p>
-            <p className="font-semibold">{formatCurrency(token.volume24h)}</p>
+            <p className="text-muted-foreground text-xs flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              Holders
+            </p>
+            <p className="font-semibold text-foreground">{formatNumber(token.holders)}</p>
           </div>
           <div className="space-y-1">
-            <p className="text-muted-foreground text-xs">Holders</p>
-            <p className="font-semibold">{formatNumber(token.holders)}</p>
+            <p className="text-muted-foreground text-xs flex items-center gap-1">
+              <Coins className="w-3 h-3" />
+              Supply
+            </p>
+            <p className="font-semibold text-foreground">{formatNumber(token.currentSupply)}</p>
           </div>
           <div className="space-y-1">
-            <p className="text-muted-foreground text-xs">Reserve Ratio</p>
-            <p className="font-semibold">{token.reserveRatio}%</p>
+            <p className="text-muted-foreground text-xs flex items-center gap-1">
+              <BarChart3 className="w-3 h-3" />
+              Reserve
+            </p>
+            <p className="font-semibold text-foreground">{token.reserveRatio}%</p>
           </div>
         </div>
-        
+
         {/* Action Buttons */}
-        <div className="flex space-x-2">
-          <Button 
-            size="sm" 
-            className="flex-1 h-9"
-            onClick={() => handleOpenTradeModal(token)}
-          >
-            <Coins className="w-4 h-4 mr-2" />
-            Trade
-          </Button>
-          <Button size="sm" variant="outline" className="flex-1 h-9">
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Analytics
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          className="w-full h-9 group"
+          onClick={() => handleOpenTradeModal(token)}
+        >
+          <Coins className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform duration-200" />
+          Trade Token
+        </Button>
       </CardContent>
     </Card>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -317,7 +310,7 @@ const MarketplacePage = () => {
             </div>
           )}
           
-          {!isLoading && !error && realTokens.length === 0 && (
+          {!isLoading && !error && tokens.length === 0 && (
             <div className="mt-4 p-4 bg-muted/30 border border-border rounded-lg text-muted-foreground">
               <p>No tokens found on the marketplace yet. Be the first to launch a token!</p>
             </div>
@@ -326,43 +319,43 @@ const MarketplacePage = () => {
 
         {/* Market Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card className="border-2 hover:border-primary/20 transition-colors">
+          <Card className="border-2 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group">
             <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3">
+              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
                 <Coins className="h-6 w-6 text-primary" />
               </div>
               <p className="text-2xl font-bold text-foreground">{marketStats.totalTokens}</p>
               <p className="text-sm text-muted-foreground">Total Tokens</p>
             </CardContent>
           </Card>
-          
-          <Card className="border-2 hover:border-primary/20 transition-colors">
+
+          <Card className="border-2 hover:border-secondary/30 transition-all duration-300 hover:shadow-lg group">
             <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center mx-auto mb-3">
+              <div className="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
                 <TrendingUp className="h-6 w-6 text-secondary" />
               </div>
               <p className="text-2xl font-bold text-foreground">{formatCurrency(marketStats.totalMarketCap)}</p>
-              <p className="text-sm text-muted-foreground">Market Cap</p>
+              <p className="text-sm text-muted-foreground">Total Market Cap</p>
             </CardContent>
           </Card>
-          
-          <Card className="border-2 hover:border-primary/20 transition-colors">
+
+          <Card className="border-2 hover:border-accent/30 transition-all duration-300 hover:shadow-lg group">
             <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center mx-auto mb-3">
+              <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
                 <BarChart3 className="h-6 w-6 text-accent-foreground" />
               </div>
-              <p className="text-2xl font-bold text-foreground">{formatCurrency(marketStats.totalVolume24h)}</p>
-              <p className="text-sm text-muted-foreground">24h Volume</p>
+              <p className="text-2xl font-bold text-foreground">{marketStats.tradingTokens}</p>
+              <p className="text-sm text-muted-foreground">Trading Active</p>
             </CardContent>
           </Card>
-          
-          <Card className="border-2 hover:border-primary/20 transition-colors">
+
+          <Card className="border-2 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group">
             <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3">
+              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
                 <Users className="h-6 w-6 text-primary" />
               </div>
-              <p className="text-2xl font-bold text-foreground">{formatNumber(marketStats.activeTraders)}</p>
-              <p className="text-sm text-muted-foreground">Active Traders</p>
+              <p className="text-2xl font-bold text-foreground">{formatNumber(marketStats.totalHolders)}</p>
+              <p className="text-sm text-muted-foreground">Total Holders</p>
             </CardContent>
           </Card>
         </div>
@@ -383,28 +376,26 @@ const MarketplacePage = () => {
             
             {/* Filter Controls */}
             <div className="flex flex-wrap gap-2">
-              <Select value={filterBy} onValueChange={(value) => setFilterBy(value as 'all' | 'trending' | 'new' | 'trading')}>
+              <Select value={filterBy} onValueChange={(value) => setFilterBy(value as 'all' | 'new' | 'trading')}>
                 <SelectTrigger className="w-[140px] h-10">
                   <Filter className="mr-2 h-4 w-4" />
                   <SelectValue placeholder="Filter" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Tokens</SelectItem>
-                  <SelectItem value="trending">🔥 Trending</SelectItem>
                   <SelectItem value="new">✨ New</SelectItem>
                   <SelectItem value="trading">📈 Trading</SelectItem>
                 </SelectContent>
               </Select>
-              
-              <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'marketCap' | 'volume24h' | 'priceChange24h' | 'createdAt')}>
+
+              <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'marketCap' | 'holders' | 'createdAt')}>
                 <SelectTrigger className="w-[140px] h-10">
                   <SortAsc className="mr-2 h-4 w-4" />
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="marketCap">Market Cap</SelectItem>
-                  <SelectItem value="volume24h">Volume</SelectItem>
-                  <SelectItem value="priceChange24h">Price Change</SelectItem>
+                  <SelectItem value="holders">Holders</SelectItem>
                   <SelectItem value="createdAt">Newest</SelectItem>
                 </SelectContent>
               </Select>
@@ -426,15 +417,13 @@ const MarketplacePage = () => {
             )}
             {filterBy !== 'all' && (
               <Badge variant="secondary" className="text-xs">
-                Filter: {filterBy === 'trending' ? '🔥 Trending' : 
-                        filterBy === 'new' ? '✨ New' : 
+                Filter: {filterBy === 'new' ? '✨ New' :
                         filterBy === 'trading' ? '📈 Trading' : filterBy}
               </Badge>
             )}
             <Badge variant="secondary" className="text-xs">
               Sort: {sortBy === 'marketCap' ? 'Market Cap' :
-                    sortBy === 'volume24h' ? 'Volume' :
-                    sortBy === 'priceChange24h' ? 'Price Change' : 'Newest'}
+                    sortBy === 'holders' ? 'Holders' : 'Newest'}
             </Badge>
           </div>
         </div>
@@ -442,8 +431,8 @@ const MarketplacePage = () => {
         {/* Token Grid */}
         {!isLoading && filteredTokens.length > 0 ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTokens.map((token) => (
-              <TokenCard key={token.address} token={token} />
+            {filteredTokens.map((token, index) => (
+              <TokenCard key={token.address} token={token} index={index} />
             ))}
           </div>
         ) : !isLoading ? (
@@ -453,21 +442,21 @@ const MarketplacePage = () => {
                 <Search className="h-8 w-8 text-muted-foreground" />
               </div>
               <h3 className="text-xl font-semibold mb-3 text-foreground">
-                {realTokens.length === 0 ? 'No tokens launched yet' : 'No tokens found'}
+                {tokens.length === 0 ? 'No tokens launched yet' : 'No tokens found'}
               </h3>
               <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                {realTokens.length === 0 
-                  ? 'Be the first to launch a token on our platform!' 
+                {tokens.length === 0
+                  ? 'Be the first to launch a token on our platform!'
                   : 'Try adjusting your search or filter criteria'
                 }
               </p>
               <div className="flex gap-2 justify-center">
-                {realTokens.length === 0 ? (
+                {tokens.length === 0 ? (
                   <Button asChild>
                     <a href="/launch">Launch Your Token</a>
                   </Button>
                 ) : (
-                  <Button 
+                  <Button
                     variant="outline"
                     onClick={() => {
                       setSearchQuery('');

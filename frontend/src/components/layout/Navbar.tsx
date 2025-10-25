@@ -1,20 +1,20 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { WalletButton } from '@/components/WalletButton';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, Rocket } from 'lucide-react';
-import Image from 'next/image';
+import React, { useState } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { WalletButton } from "@/components/WalletButton";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Menu } from "lucide-react";
+import Image from "next/image";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
   const navItems = [
-    { href: '/launch', label: 'Launch Token' },
-    { href: '/marketplace', label: 'Marketplace' },
-    { href: '/dashboard', label: 'Dashboard' },
+    { href: "/launch", label: "Launch Token" },
+    { href: "/marketplace", label: "Marketplace" },
+    { href: "/dashboard", label: "Dashboard" },
   ];
 
   return (
@@ -23,11 +23,11 @@ const Navbar = () => {
         {/* Logo */}
         <Link href="/" className="flex items-center space-x-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg overflow-hidden">
-            <Image 
-              src="/hodl-logo.png" 
-              alt="hodl.fun logo" 
-              width={40} 
-              height={40} 
+            <Image
+              src="/hodl-logo.png"
+              alt="hodl.fun logo"
+              width={40}
+              height={40}
               className="object-contain"
             />
           </div>
@@ -43,9 +43,7 @@ const Navbar = () => {
               className="text-sm font-medium"
               asChild
             >
-              <Link href={item.href}>
-                {item.label}
-              </Link>
+              <Link href={item.href}>{item.label}</Link>
             </Button>
           ))}
         </nav>
@@ -53,12 +51,6 @@ const Navbar = () => {
         {/* Desktop Actions */}
         <div className="hidden md:flex items-center space-x-2">
           <WalletButton />
-          <Button size="sm" asChild>
-            <Link href="/launch">
-              <Rocket className="mr-2 h-4 w-4" />
-              Launch Token
-            </Link>
-          </Button>
         </div>
 
         {/* Mobile Navigation */}
@@ -73,17 +65,17 @@ const Navbar = () => {
             <div className="flex flex-col space-y-4 mt-6">
               <div className="flex items-center space-x-3 mb-6">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
-                  <Image 
-                    src="/hodl-logo.png" 
-                    alt="hodl.fun logo" 
-                    width={32} 
-                    height={32} 
+                  <Image
+                    src="/hodl-logo.png"
+                    alt="hodl.fun logo"
+                    width={32}
+                    height={32}
                     className="object-contain"
                   />
                 </div>
                 <span className="text-xl font-bold text-primary">hodl.fun</span>
               </div>
-              
+
               <nav className="flex flex-col space-y-2">
                 {navItems.map((item) => (
                   <Button
@@ -93,21 +85,13 @@ const Navbar = () => {
                     asChild
                     onClick={() => setIsOpen(false)}
                   >
-                    <Link href={item.href}>
-                      {item.label}
-                    </Link>
+                    <Link href={item.href}>{item.label}</Link>
                   </Button>
                 ))}
               </nav>
-              
+
               <div className="flex flex-col space-y-3 pt-4 border-t">
                 <WalletButton variant="mobile" />
-                <Button className="w-full" asChild>
-                  <Link href="/launch" onClick={() => setIsOpen(false)}>
-                    <Rocket className="mr-2 h-4 w-4" />
-                    Launch Token
-                  </Link>
-                </Button>
               </div>
             </div>
           </SheetContent>

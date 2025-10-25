@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,42 +14,35 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   Wallet,
-  TrendingUp,
-  TrendingDown,
   Plus,
-  ArrowUpRight,
-  ArrowDownRight,
   Coins,
   BarChart3,
   Star,
   ExternalLink,
   Copy,
-  Settings,
-  History,
   PieChart,
   Activity,
   RefreshCw,
   Loader2,
+  Check,
 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import {
   formatCurrency,
-  formatNumber,
-  formatPercentage,
   truncateAddress,
 } from "@/lib/utils";
 import { usePushWalletContext, usePushChainClient, PushUI } from '@pushchain/ui-kit';
 import { useUserPortfolio } from "@/hooks/useUserPortfolio";
 
 const DashboardPage = () => {
-  const [activeTab, setActiveTab] = useState<
-    "portfolio" | "created" | "transactions"
-  >("portfolio");
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"portfolio" | "created">("portfolio");
+  const [copiedAddress, setCopiedAddress] = useState(false);
 
   // Get wallet connection state and user data
   const { connectionStatus } = usePushWalletContext();
   const { pushChainClient } = usePushChainClient();
-  
+
   const isConnected = connectionStatus === PushUI.CONSTANTS.CONNECTION.STATUS.CONNECTED;
   const address = pushChainClient?.universal?.account;
   const {
@@ -62,14 +56,23 @@ const DashboardPage = () => {
   // Get created tokens (user is creator)
   const createdTokens = tokens.filter((token) => token.isCreator);
 
+  // Handle copy address
+  const handleCopyAddress = async () => {
+    if (address) {
+      await navigator.clipboard.writeText(address);
+      setCopiedAddress(true);
+      setTimeout(() => setCopiedAddress(false), 2000);
+    }
+  };
+
   const TokenRow = ({
     token,
   }: {
     token: import("@/hooks/useUserPortfolio").UserToken;
   }) => (
-    <div className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+    <div className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-muted/30 transition-all duration-300 hover:translate-x-1 hover:shadow-sm cursor-pointer group">
       <div className="flex items-center space-x-4">
-        <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+        <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center text-primary font-bold text-sm group-hover:scale-110 group-hover:border-primary/40 transition-all duration-300">
           {token.symbol.slice(0, 2)}
         </div>
         <div>
@@ -90,17 +93,8 @@ const DashboardPage = () => {
 
       <div className="text-right">
         <p className="font-medium text-foreground">{formatCurrency(token.value)}</p>
-        <p
-          className={`text-sm flex items-center justify-end ${
-            token.priceChange24h >= 0 ? "text-primary" : "text-destructive"
-          }`}
-        >
-          {token.priceChange24h >= 0 ? (
-            <ArrowUpRight className="w-3 h-3 mr-1" />
-          ) : (
-            <ArrowDownRight className="w-3 h-3 mr-1" />
-          )}
-          {formatPercentage(Math.abs(token.priceChange24h))}
+        <p className="text-sm text-muted-foreground">
+          @ {formatCurrency(token.price)}
         </p>
       </div>
     </div>
@@ -112,13 +106,13 @@ const DashboardPage = () => {
 
       <div className="container mx-auto px-4 py-12">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-12">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-12 animate-in fade-in slide-in-from-top-4 duration-700">
           <div>
-            <Badge variant="secondary" className="mb-4 px-4 py-2">
+            <Badge variant="secondary" className="mb-4 px-4 py-2 hover:scale-105 transition-transform duration-300">
               <Activity className="mr-2 h-4 w-4" />
               Portfolio Dashboard
             </Badge>
-            <h1 className="text-4xl font-bold tracking-tight mb-3 sm:text-5xl">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight mb-3">
               Dashboard
             </h1>
             <div className="flex items-center space-x-2 text-muted-foreground">
@@ -126,17 +120,28 @@ const DashboardPage = () => {
               <span className="text-sm font-mono">
                 {address ? truncateAddress(address) : "Not connected"}
               </span>
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-primary/10">
-                <Copy className="h-3 w-3" />
-              </Button>
+              {address && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 hover:bg-primary/10 transition-all duration-300"
+                  onClick={handleCopyAddress}
+                  title="Copy address"
+                >
+                  {copiedAddress ? (
+                    <Check className="h-3 w-3 text-primary animate-in zoom-in-50 duration-200" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </Button>
+              )}
             </div>
           </div>
           <div className="flex space-x-3 mt-6 md:mt-0">
-            <Button variant="outline" className="hover:bg-primary/10">
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
-            </Button>
-            <Button className="shadow-lg hover:shadow-xl transition-all duration-300">
+            <Button
+              onClick={() => router.push('/launch')}
+              className="shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+            >
               <Plus className="mr-2 h-4 w-4" />
               Create Token
             </Button>
@@ -145,7 +150,7 @@ const DashboardPage = () => {
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="border-2 hover:border-primary/20 transition-colors">
+          <Card className="border-2 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:scale-105 animate-in fade-in slide-in-from-bottom-3 duration-500 group cursor-pointer">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -156,56 +161,33 @@ const DashboardPage = () => {
                     {formatCurrency(portfolioStats.totalValue)}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:scale-110 group-hover:rotate-12 transition-all duration-300">
                   <Wallet className="h-6 w-6 text-primary" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-2 hover:border-primary/20 transition-colors">
+          <Card className="border-2 hover:border-blue-500/30 transition-all duration-300 hover:shadow-lg hover:scale-105 animate-in fade-in slide-in-from-bottom-3 duration-500 delay-75 group cursor-pointer">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">24h P&L</p>
-                  <p
-                    className={`text-2xl font-bold ${
-                      portfolioStats.totalPnL >= 0
-                        ? "text-primary"
-                        : "text-destructive"
-                    }`}
-                  >
-                    {portfolioStats.totalPnL >= 0 ? "+" : ""}
-                    {formatCurrency(portfolioStats.totalPnL)}
+                  <p className="text-sm text-muted-foreground">Total Invested</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {formatCurrency(portfolioStats.totalValue)}
                   </p>
-                  <p
-                    className={`text-xs ${
-                      portfolioStats.totalPnL >= 0
-                        ? "text-primary"
-                        : "text-destructive"
-                    }`}
-                  >
-                    {formatPercentage(
-                      Math.abs(portfolioStats.totalPnLPercentage)
-                    )}
+                  <p className="text-xs text-muted-foreground">
+                    Across {portfolioStats.tokensOwned} token{portfolioStats.tokensOwned !== 1 ? 's' : ''}
                   </p>
                 </div>
-                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                  portfolioStats.totalPnL >= 0 
-                    ? "bg-primary/10" 
-                    : "bg-destructive/10"
-                }`}>
-                  {portfolioStats.totalPnL >= 0 ? (
-                    <TrendingUp className="h-6 w-6 text-primary" />
-                  ) : (
-                    <TrendingDown className="h-6 w-6 text-destructive" />
-                  )}
+                <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center group-hover:scale-110 group-hover:rotate-12 transition-all duration-300">
+                  <BarChart3 className="h-6 w-6 text-blue-500" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-2 hover:border-primary/20 transition-colors">
+          <Card className="border-2 hover:border-secondary/30 transition-all duration-300 hover:shadow-lg hover:scale-105 animate-in fade-in slide-in-from-bottom-3 duration-500 delay-150 group cursor-pointer">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -214,14 +196,14 @@ const DashboardPage = () => {
                     {portfolioStats.tokensOwned}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center">
+                <div className="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center group-hover:scale-110 group-hover:rotate-12 transition-all duration-300">
                   <Coins className="h-6 w-6 text-secondary" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-2 hover:border-primary/20 transition-colors">
+          <Card className="border-2 hover:border-accent/30 transition-all duration-300 hover:shadow-lg hover:scale-105 animate-in fade-in slide-in-from-bottom-3 duration-500 delay-200 group cursor-pointer">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -232,7 +214,7 @@ const DashboardPage = () => {
                     {portfolioStats.tokensCreated}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center">
+                <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center group-hover:scale-110 group-hover:rotate-12 transition-all duration-300">
                   <Star className="h-6 w-6 text-accent-foreground" />
                 </div>
               </div>
@@ -245,18 +227,15 @@ const DashboardPage = () => {
           {[
             { key: "portfolio", label: "Portfolio", icon: PieChart },
             { key: "created", label: "Created Tokens", icon: Star },
-            { key: "transactions", label: "Transactions", icon: Activity },
           ].map((tab) => (
             <Button
               key={tab.key}
               variant={activeTab === tab.key ? "default" : "ghost"}
               size="sm"
               onClick={() =>
-                setActiveTab(
-                  tab.key as "portfolio" | "created" | "transactions"
-                )
+                setActiveTab(tab.key as "portfolio" | "created")
               }
-              className="flex items-center space-x-2"
+              className="flex items-center space-x-2 transition-all duration-300"
             >
               <tab.icon className="h-4 w-4" />
               <span>{tab.label}</span>
@@ -266,7 +245,7 @@ const DashboardPage = () => {
 
         {/* Content based on active tab */}
         {!isConnected ? (
-          <Card>
+          <Card className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <CardContent className="text-center py-12">
               <Wallet className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-lg font-medium mb-2">Connect Your Wallet</h3>
@@ -280,7 +259,7 @@ const DashboardPage = () => {
           </Card>
         ) : (
           activeTab === "portfolio" && (
-            <Card>
+            <Card className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
@@ -351,7 +330,7 @@ const DashboardPage = () => {
         )}
 
         {isConnected && activeTab === "created" && (
-          <Card>
+          <Card className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Star className="mr-2 h-5 w-5" />
@@ -370,14 +349,16 @@ const DashboardPage = () => {
                   </p>
                 </div>
               ) : createdTokens.length > 0 ? (
-                createdTokens.map((token) => (
+                createdTokens.map((token, index) => (
                   <div
                     key={token.address}
-                    className="p-4 border-b last:border-b-0"
+                    className={`p-4 border-b last:border-b-0 hover:bg-muted/30 transition-all duration-300 animate-in fade-in slide-in-from-left-3 ${
+                      `delay-${index * 100}`
+                    }`}
                   >
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary font-bold">
+                        <div className="w-12 h-12 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary font-bold hover:scale-110 transition-transform duration-300">
                           {token.symbol.slice(0, 2)}
                         </div>
                         <div>
@@ -388,14 +369,10 @@ const DashboardPage = () => {
                         </div>
                       </div>
                       <div className="flex space-x-2">
-                        <Button size="sm" variant="outline">
-                          <BarChart3 className="w-4 h-4 mr-1" />
-                          Analytics
-                        </Button>
-                        <Button size="sm" asChild>
-                          <Link href={`/marketplace?token=${token.address}`}>
+                        <Button size="sm" asChild variant="outline" className="hover:bg-primary/10 transition-colors">
+                          <Link href={`/marketplace`}>
                             <ExternalLink className="w-4 h-4 mr-1" />
-                            View
+                            View on Marketplace
                           </Link>
                         </Button>
                       </div>
@@ -409,11 +386,9 @@ const DashboardPage = () => {
                         </p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Total Supply</p>
+                        <p className="text-muted-foreground">Market Cap</p>
                         <p className="font-medium">
-                          {token.totalSupply
-                            ? formatNumber(parseFloat(token.balanceFormatted))
-                            : "N/A"}
+                          {formatCurrency(token.marketCap || 0)}
                         </p>
                       </div>
                       <div>
@@ -454,35 +429,6 @@ const DashboardPage = () => {
           </Card>
         )}
 
-        {isConnected && activeTab === "transactions" && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Activity className="mr-2 h-5 w-5" />
-                Transaction History
-              </CardTitle>
-              <CardDescription>
-                Your recent trading and token creation activity
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="text-center py-12">
-                <History className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-medium mb-2">
-                  Transaction History Coming Soon
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  We are working on bringing you comprehensive transaction
-                  history. For now, you can view individual transactions on the
-                  block explorer.
-                </p>
-                <Button variant="outline" asChild>
-                  <Link href="/marketplace">Browse Marketplace</Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );

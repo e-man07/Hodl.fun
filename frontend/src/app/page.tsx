@@ -1,17 +1,17 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Zap, 
-  TrendingUp, 
-  Shield, 
-  Coins, 
-  Users, 
-  BarChart3, 
+import {
+  Zap,
+  TrendingUp,
+  Shield,
+  Coins,
+  Users,
+  BarChart3,
   Rocket,
   ArrowRight,
   Star,
@@ -21,8 +21,74 @@ import {
 import Image from 'next/image';
 import Navbar from '@/components/layout/Navbar';
 
+// Animation hook for intersection observer
+const useInView = (options = {}) => {
+  const ref = useRef<HTMLElement>(null);
+  const [isInView, setIsInView] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setIsInView(true);
+      }
+    }, { threshold: 0.1, ...options });
+
+    const currentRef = ref.current;
+    if (currentRef) {
+      observer.observe(currentRef);
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [options]);
+
+  return { ref, isInView };
+};
+
+// Counter animation hook
+const useCountUp = (end: number, duration = 2000, isInView: boolean) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!isInView) return;
+
+    let startTime: number;
+    let animationFrame: number;
+
+    const animate = (currentTime: number) => {
+      if (!startTime) startTime = currentTime;
+      const progress = Math.min((currentTime - startTime) / duration, 1);
+
+      setCount(Math.floor(progress * end));
+
+      if (progress < 1) {
+        animationFrame = requestAnimationFrame(animate);
+      }
+    };
+
+    animationFrame = requestAnimationFrame(animate);
+
+    return () => cancelAnimationFrame(animationFrame);
+  }, [end, duration, isInView]);
+
+  return count;
+};
+
 const HomePage = () => {
-  const features = [
+  const [mounted, setMounted] = useState(false);
+  const stats = useInView();
+  const features = useInView();
+  const steps = useInView();
+  const cta = useInView();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const featuresData = [
     {
       icon: <Zap className="h-6 w-6" />,
       title: 'Instant Token Creation',
@@ -55,14 +121,14 @@ const HomePage = () => {
     },
   ];
 
-  const stats = [
-    { label: 'Tokens Launched', value: '1,234+' },
-    { label: 'Total Volume', value: '$2.5M+' },
-    { label: 'Active Users', value: '5,678+' },
-    { label: 'Success Rate', value: '98%' },
+  const statsData = [
+    { label: 'Tokens Launched', value: '1,234+', numericValue: 1234, suffix: '+' },
+    { label: 'Total Volume', value: '$2.5M+', numericValue: 2.5, suffix: 'M+', prefix: '$' },
+    { label: 'Active Users', value: '5,678+', numericValue: 5678, suffix: '+' },
+    { label: 'Success Rate', value: '98%', numericValue: 98, suffix: '%' },
   ];
 
-  const steps = [
+  const stepsData = [
     {
       step: '01',
       title: 'Create Token',
@@ -86,122 +152,210 @@ const HomePage = () => {
       
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-background">
-        <div className="container relative mx-auto px-4 py-16 sm:py-24">
+        {/* Animated background gradient */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5 animate-gradient-shift" />
+
+        <div className="container relative mx-auto px-4 py-12 sm:py-20 lg:py-32">
           <div className="mx-auto max-w-5xl">
-            <div className="text-center mb-12">
-              <Badge variant="secondary" className="mb-6 px-4 py-2 text-sm font-medium">
-                <Star className="mr-2 h-4 w-4" />
+            <div className="text-center mb-12 sm:mb-16">
+              <Badge
+                variant="secondary"
+                className={`mb-6 sm:mb-8 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold tracking-wide transition-all duration-700 ${
+                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
+                }`}
+                style={{ transitionDelay: '100ms' }}
+              >
+                <Star className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-pulse" />
                 Powered by Push Chain & Bonding Curves
               </Badge>
-              
-              <h1 className="mb-6 text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+
+              <h1
+                className={`mb-6 sm:mb-8 text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-tight px-2 transition-all duration-700 ${
+                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                }`}
+                style={{ transitionDelay: '200ms' }}
+              >
                 Professional Token
-                <span className="block text-primary mt-1">Platform - hodl.fun</span>
+                <span className="block text-primary mt-2 sm:mt-3 bg-gradient-to-r from-primary via-primary/80 to-primary bg-clip-text">
+                  Platform - hodl.fun
+                </span>
               </h1>
-              
-              <p className="mx-auto mb-8 max-w-3xl text-lg text-muted-foreground sm:text-xl leading-relaxed">
-                Create, deploy, and trade ERC20 tokens with automated liquidity through bonding curves. 
+
+              <p
+                className={`mx-auto mb-8 sm:mb-10 max-w-3xl text-base sm:text-xl md:text-2xl text-muted-foreground leading-relaxed font-normal px-4 transition-all duration-700 ${
+                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                }`}
+                style={{ transitionDelay: '300ms' }}
+              >
+                Create, deploy, and trade ERC20 tokens with automated liquidity through bonding curves.
                 Built for professionals with enterprise-grade security and seamless user experience.
               </p>
-              
-              <div className="flex flex-col gap-4 sm:flex-row sm:justify-center mb-12">
-                <Button size="lg" className="text-lg px-8 py-6 h-auto shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105" asChild>
+
+              <div
+                className={`flex flex-col gap-4 sm:gap-5 sm:flex-row sm:justify-center mb-12 sm:mb-16 px-4 transition-all duration-700 ${
+                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                }`}
+                style={{ transitionDelay: '400ms' }}
+              >
+                <Button
+                  size="lg"
+                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 group relative overflow-hidden"
+                  asChild
+                >
                   <Link href="/launch">
-                    <Rocket className="mr-2 h-5 w-5" />
+                    <span className="absolute inset-0 bg-gradient-to-r from-primary/0 via-white/20 to-primary/0 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
+                    <Rocket className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:rotate-12 transition-transform duration-300" />
                     Launch Your Token
                   </Link>
                 </Button>
-                <Button variant="outline" size="lg" className="text-lg px-8 py-6 h-auto hover:bg-primary/10 border-2 transition-all duration-300 hover:border-primary/50" asChild>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto hover:bg-primary/10 border-2 transition-all duration-300 hover:border-primary/50 group"
+                  asChild
+                >
                   <Link href="/marketplace">
-                    <BarChart3 className="mr-2 h-5 w-5" />
+                    <BarChart3 className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:scale-110 transition-transform duration-300" />
                     Explore Marketplace
-                    <ArrowRight className="ml-2 h-5 w-5" />
+                    <ArrowRight className="ml-2 sm:ml-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:translate-x-1 transition-transform duration-300" />
                   </Link>
                 </Button>
               </div>
             </div>
 
             {/* Key Benefits */}
-            <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-              <Card className="group text-center border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 bg-card">
-                <CardContent className="pt-6 pb-6 px-4">
-                  <div className="w-12 h-12 bg-primary/10 border-2 border-primary/20 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-primary/20 transition-colors">
-                    <Clock className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-3 text-foreground group-hover:text-primary transition-colors">Launch in Minutes</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">Deploy your token in under 5 minutes with our streamlined interface</p>
-                </CardContent>
-              </Card>
-              
-              <Card className="group text-center border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 bg-card">
-                <CardContent className="pt-6 pb-6 px-4">
-                  <div className="w-12 h-12 bg-secondary/10 border-2 border-secondary/20 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-secondary/20 transition-colors">
-                    <Shield className="h-6 w-6 text-secondary" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-3 text-foreground group-hover:text-primary transition-colors">Enterprise Security</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">Battle-tested smart contracts with comprehensive security audits</p>
-                </CardContent>
-              </Card>
-              
-              <Card className="group text-center border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 bg-card">
-                <CardContent className="pt-6 pb-6 px-4">
-                  <div className="w-12 h-12 bg-accent/20 border-2 border-accent/30 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-accent/30 transition-colors">
-                    <Globe className="h-6 w-6 text-accent-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-3 text-foreground group-hover:text-primary transition-colors">Global Marketplace</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">Instant listing with automated liquidity and global accessibility</p>
-                </CardContent>
-              </Card>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8 max-w-5xl mx-auto">
+              {[
+                {
+                  icon: <Clock className="h-6 w-6 sm:h-7 sm:w-7 text-primary" />,
+                  title: 'Launch in Minutes',
+                  description: 'Deploy your token in under 5 minutes with our streamlined interface',
+                  bgColor: 'bg-primary/10',
+                  borderColor: 'border-primary/20',
+                  hoverBg: 'group-hover:bg-primary/20',
+                },
+                {
+                  icon: <Shield className="h-6 w-6 sm:h-7 sm:w-7 text-secondary" />,
+                  title: 'Enterprise Security',
+                  description: 'Battle-tested smart contracts with comprehensive security audits',
+                  bgColor: 'bg-secondary/10',
+                  borderColor: 'border-secondary/20',
+                  hoverBg: 'group-hover:bg-secondary/20',
+                },
+                {
+                  icon: <Globe className="h-6 w-6 sm:h-7 sm:w-7 text-accent-foreground" />,
+                  title: 'Global Marketplace',
+                  description: 'Instant listing with automated liquidity and global accessibility',
+                  bgColor: 'bg-accent/20',
+                  borderColor: 'border-accent/30',
+                  hoverBg: 'group-hover:bg-accent/30',
+                },
+              ].map((benefit, index) => (
+                <Card
+                  key={index}
+                  className={`group text-center border-2 hover:border-primary/50 transition-all duration-500 hover:shadow-lg hover:-translate-y-2 bg-card ${
+                    mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+                  }`}
+                  style={{ transitionDelay: `${500 + index * 100}ms` }}
+                >
+                  <CardContent className="pt-6 pb-6 px-5 sm:pt-8 sm:pb-8 sm:px-6">
+                    <div className={`w-12 h-12 sm:w-14 sm:h-14 ${benefit.bgColor} border-2 ${benefit.borderColor} rounded-xl flex items-center justify-center mx-auto mb-4 sm:mb-5 ${benefit.hoverBg} transition-all duration-300 group-hover:scale-110 group-hover:rotate-3`}>
+                      {benefit.icon}
+                    </div>
+                    <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-foreground group-hover:text-primary transition-colors duration-300">
+                      {benefit.title}
+                    </h3>
+                    <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                      {benefit.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </div>
         </div>
       </section>
 
       {/* Stats Section */}
-      <section className="bg-muted/30 py-16">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-2 gap-8 md:grid-cols-4 max-w-4xl mx-auto">
-            {stats.map((stat, index) => (
-              <div key={index} className="text-center group">
-                <div className="text-3xl font-bold text-primary sm:text-4xl mb-2 group-hover:scale-105 transition-transform duration-300">
-                  {stat.value}
+      <section ref={stats.ref} className="bg-muted/30 py-12 sm:py-16 lg:py-20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5" />
+        <div className="container mx-auto px-4 relative">
+          <div className="grid grid-cols-2 gap-6 sm:gap-8 md:gap-10 md:grid-cols-4 max-w-5xl mx-auto">
+            {statsData.map((stat, index) => {
+              const StatCounter = () => {
+                const count = useCountUp(stat.numericValue, 2000, stats.isInView);
+                const displayValue = stat.label === 'Total Volume'
+                  ? (count / 1).toFixed(1)
+                  : count.toLocaleString();
+
+                return (
+                  <div
+                    className={`text-2xl sm:text-4xl md:text-5xl font-bold text-primary mb-2 sm:mb-3 group-hover:scale-110 transition-all duration-300 ${
+                      stats.isInView ? 'opacity-100' : 'opacity-0'
+                    }`}
+                    style={{ transitionDelay: `${index * 100}ms` }}
+                  >
+                    {stat.prefix}{displayValue}{stat.suffix}
+                  </div>
+                );
+              };
+
+              return (
+                <div
+                  key={index}
+                  className={`text-center group transition-all duration-500 ${
+                    stats.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+                  }`}
+                  style={{ transitionDelay: `${index * 100}ms` }}
+                >
+                  <StatCounter />
+                  <div className="text-sm sm:text-base md:text-lg text-muted-foreground font-semibold group-hover:text-foreground transition-colors duration-300">
+                    {stat.label}
+                  </div>
                 </div>
-                <div className="text-sm text-muted-foreground sm:text-base font-medium">
-                  {stat.label}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="py-24 bg-background">
+      <section ref={features.ref} className="py-16 sm:py-20 lg:py-28 bg-background">
         <div className="container mx-auto px-4">
-          <div className="mx-auto max-w-3xl text-center mb-16">
-            <Badge variant="outline" className="mb-4 px-4 py-2">
-              <Zap className="mr-2 h-4 w-4" />
+          <div
+            className={`mx-auto max-w-3xl text-center mb-12 sm:mb-16 lg:mb-20 transition-all duration-700 ${
+              features.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
+            <Badge variant="outline" className="mb-4 sm:mb-6 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold">
+              <Zap className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Advanced Features
             </Badge>
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">
+            <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4 sm:mb-6 leading-tight px-2">
               Enterprise-Grade Token Infrastructure
             </h2>
-            <p className="text-lg text-muted-foreground leading-relaxed">
+            <p className="text-base sm:text-xl text-muted-foreground leading-relaxed px-4">
               Professional-grade tools and infrastructure designed for serious token creators and traders.
             </p>
           </div>
-          
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
-            {features.map((feature, index) => (
-              <Card key={index} className="group hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/50 hover:-translate-y-1 bg-card">
-                <CardHeader className="pb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary mb-4 group-hover:bg-primary/20 transition-colors duration-300">
+
+          <div className="grid gap-6 sm:gap-8 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
+            {featuresData.map((feature, index) => (
+              <Card
+                key={index}
+                className={`group hover:shadow-xl transition-all duration-500 border-2 hover:border-primary/50 hover:-translate-y-2 bg-card ${
+                  features.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
+                }`}
+                style={{ transitionDelay: `${index * 100}ms` }}
+              >
+                <CardHeader className="pb-4 sm:pb-5 pt-6 sm:pt-7 px-6 sm:px-7">
+                  <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl bg-primary/10 text-primary mb-4 sm:mb-5 group-hover:bg-primary/20 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6">
                     {feature.icon}
                   </div>
-                  <CardTitle className="text-xl group-hover:text-primary transition-colors duration-300">{feature.title}</CardTitle>
+                  <CardTitle className="text-lg sm:text-xl font-bold group-hover:text-primary transition-colors duration-300">{feature.title}</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-base text-muted-foreground leading-relaxed">
+                <CardContent className="px-6 sm:px-7 pb-6 sm:pb-7">
+                  <CardDescription className="text-sm sm:text-base text-muted-foreground leading-relaxed">
                     {feature.description}
                   </CardDescription>
                 </CardContent>
@@ -212,35 +366,46 @@ const HomePage = () => {
       </section>
 
       {/* How It Works Section */}
-      <section className="py-24 bg-muted/20">
-        <div className="container mx-auto px-4">
-          <div className="mx-auto max-w-3xl text-center mb-16">
-            <Badge variant="secondary" className="mb-4 px-4 py-2">
-              <Rocket className="mr-2 h-4 w-4" />
+      <section ref={steps.ref} className="py-16 sm:py-20 lg:py-28 bg-muted/20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent" />
+        <div className="container mx-auto px-4 relative">
+          <div
+            className={`mx-auto max-w-3xl text-center mb-12 sm:mb-16 lg:mb-20 transition-all duration-700 ${
+              steps.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
+            <Badge variant="secondary" className="mb-4 sm:mb-6 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold">
+              <Rocket className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Getting Started
             </Badge>
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">
+            <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4 sm:mb-6 leading-tight px-2">
               Simple Three-Step Process
             </h2>
-            <p className="text-lg text-muted-foreground leading-relaxed">
+            <p className="text-base sm:text-xl text-muted-foreground leading-relaxed px-4">
               Launch your token in minutes with our streamlined, automated platform.
             </p>
           </div>
-          
-          <div className="grid gap-12 md:grid-cols-3 max-w-5xl mx-auto">
-            {steps.map((step, index) => (
-              <div key={index} className="relative">
-                <Card className="text-center border-2 hover:border-primary/50 transition-all duration-300 p-6 hover:shadow-lg group bg-card hover:-translate-y-1">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl font-bold mb-6 mx-auto group-hover:scale-105 transition-transform duration-300 shadow-lg">
+
+          <div className="grid gap-8 sm:gap-10 md:gap-12 md:grid-cols-3 max-w-6xl mx-auto">
+            {stepsData.map((step, index) => (
+              <div
+                key={index}
+                className={`relative transition-all duration-700 ${
+                  steps.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
+                }`}
+                style={{ transitionDelay: `${index * 150}ms` }}
+              >
+                <Card className="text-center border-2 hover:border-primary/50 transition-all duration-500 p-6 sm:p-8 hover:shadow-xl group bg-card hover:-translate-y-2">
+                  <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl sm:text-2xl font-bold mb-5 sm:mb-7 mx-auto group-hover:scale-110 transition-all duration-300 shadow-lg group-hover:shadow-xl group-hover:rotate-12">
                     {step.step}
                   </div>
-                  <h3 className="text-xl font-semibold mb-4 group-hover:text-primary transition-colors duration-300">{step.title}</h3>
-                  <p className="text-base text-muted-foreground leading-relaxed">{step.description}</p>
+                  <h3 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-5 group-hover:text-primary transition-colors duration-300">{step.title}</h3>
+                  <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">{step.description}</p>
                 </Card>
-                {index < steps.length - 1 && (
+                {index < stepsData.length - 1 && (
                   <div className="hidden md:flex absolute top-1/2 -right-6 transform -translate-y-1/2 z-10">
-                    <div className="bg-background p-3 rounded-full border-2 border-primary/20 shadow-sm">
-                      <ArrowRight className="h-5 w-5 text-primary" />
+                    <div className="bg-background p-3 rounded-full border-2 border-primary/20 shadow-sm group-hover:border-primary/50 transition-colors duration-300">
+                      <ArrowRight className="h-5 w-5 text-primary animate-pulse" />
                     </div>
                   </div>
                 )}
@@ -251,33 +416,69 @@ const HomePage = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-24 bg-background">
-        <div className="container mx-auto px-4">
-          <Card className="border-2 shadow-xl max-w-4xl mx-auto bg-gradient-to-br from-card to-muted/30 overflow-hidden relative">
+      <section ref={cta.ref} className="py-16 sm:py-20 lg:py-28 bg-background relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-secondary/10 animate-gradient-shift" />
+        <div className="container mx-auto px-4 relative">
+          <Card
+            className={`border-2 shadow-xl max-w-5xl mx-auto bg-gradient-to-br from-card to-muted/30 overflow-hidden relative transition-all duration-700 ${
+              cta.isInView ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-12 scale-95'
+            }`}
+          >
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5" />
-            <CardContent className="p-12 text-center relative">
-              <Badge variant="outline" className="mb-6 px-4 py-2">
-                <Star className="mr-2 h-4 w-4" />
+            <CardContent className="p-8 sm:p-12 lg:p-14 text-center relative">
+              <Badge
+                variant="outline"
+                className={`mb-6 sm:mb-8 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all duration-700 ${
+                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
+                }`}
+                style={{ transitionDelay: '200ms' }}
+              >
+                <Star className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-pulse" />
                 Ready to Get Started?
               </Badge>
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-6">
+              <h2
+                className={`text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-5 sm:mb-7 leading-tight px-2 transition-all duration-700 ${
+                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                }`}
+                style={{ transitionDelay: '300ms' }}
+              >
                 Ready to Launch Your Token?
               </h2>
-              <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
-                Join the growing ecosystem of professional token creators. Launch your token with 
+              <p
+                className={`text-base sm:text-xl text-muted-foreground mb-8 sm:mb-10 max-w-3xl mx-auto leading-relaxed px-4 transition-all duration-700 ${
+                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                }`}
+                style={{ transitionDelay: '400ms' }}
+              >
+                Join the growing ecosystem of professional token creators. Launch your token with
                 automated marketplace listing and enterprise-grade infrastructure.
               </p>
-              <div className="flex flex-col gap-4 sm:flex-row sm:justify-center">
-                <Button size="lg" className="text-lg px-8 py-6 h-auto shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105" asChild>
+              <div
+                className={`flex flex-col gap-4 sm:gap-5 sm:flex-row sm:justify-center transition-all duration-700 ${
+                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                }`}
+                style={{ transitionDelay: '500ms' }}
+              >
+                <Button
+                  size="lg"
+                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 group relative overflow-hidden"
+                  asChild
+                >
                   <Link href="/launch">
-                    <Rocket className="mr-2 h-5 w-5" />
+                    <span className="absolute inset-0 bg-gradient-to-r from-primary/0 via-white/20 to-primary/0 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
+                    <Rocket className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:rotate-12 transition-transform duration-300" />
                     Start Building Now
-                    <ArrowRight className="ml-2 h-5 w-5" />
+                    <ArrowRight className="ml-2 sm:ml-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:translate-x-1 transition-transform duration-300" />
                   </Link>
                 </Button>
-                <Button variant="outline" size="lg" className="text-lg px-8 py-6 h-auto hover:bg-primary/10 border-2 transition-all duration-300 hover:border-primary/50" asChild>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto hover:bg-primary/10 border-2 transition-all duration-300 hover:border-primary/50 group"
+                  asChild
+                >
                   <Link href="/marketplace">
-                    <BarChart3 className="mr-2 h-5 w-5" />
+                    <BarChart3 className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:scale-110 transition-transform duration-300" />
                     Browse Tokens
                   </Link>
                 </Button>
@@ -288,34 +489,37 @@ const HomePage = () => {
       </section>
 
       {/* Footer */}
-      <footer className="border-t bg-muted/20 py-12">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
-            <div className="flex items-center space-x-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg overflow-hidden shadow-md">
-                <Image 
-                  src="/hodl-logo.png" 
-                  alt="hodl.fun logo" 
-                  width={40} 
-                  height={40} 
+      <footer className="border-t bg-muted/20 py-12 sm:py-16 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent opacity-50" />
+        <div className="container mx-auto px-4 relative">
+          <div className="flex flex-col items-center justify-between gap-6 sm:gap-8 md:flex-row">
+            <div className="flex items-center space-x-3 sm:space-x-4 group">
+              <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg overflow-hidden shadow-md transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
+                <Image
+                  src="/hodl-logo.png"
+                  alt="hodl.fun logo"
+                  width={48}
+                  height={48}
                   className="object-contain"
                 />
               </div>
-              <span className="text-2xl font-bold text-primary">hodl.fun</span>
+              <span className="text-2xl sm:text-3xl font-bold text-primary transition-all duration-300 group-hover:scale-105">
+                hodl.fun
+              </span>
             </div>
-            <div className="flex flex-col items-center gap-4 md:flex-row md:gap-8">
-              <nav className="flex gap-6">
-                <Link href="/launch" className="text-sm text-muted-foreground hover:text-primary transition-colors font-medium">
+            <div className="flex flex-col items-center gap-5 sm:gap-6 md:flex-row md:gap-10">
+              <nav className="flex gap-6 sm:gap-8">
+                <Link href="/launch" className="text-sm sm:text-base text-muted-foreground hover:text-primary transition-all duration-300 font-semibold hover:scale-110 inline-block">
                   Launch
                 </Link>
-                <Link href="/marketplace" className="text-sm text-muted-foreground hover:text-primary transition-colors font-medium">
+                <Link href="/marketplace" className="text-sm sm:text-base text-muted-foreground hover:text-primary transition-all duration-300 font-semibold hover:scale-110 inline-block">
                   Marketplace
                 </Link>
-                <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-primary transition-colors font-medium">
+                <Link href="/dashboard" className="text-sm sm:text-base text-muted-foreground hover:text-primary transition-all duration-300 font-semibold hover:scale-110 inline-block">
                   Dashboard
                 </Link>
               </nav>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm sm:text-base text-muted-foreground font-medium text-center">
                 © 2024 hodl.fun. Professional token infrastructure.
               </p>
             </div>
