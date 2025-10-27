@@ -1,4 +1,4 @@
-# Hodl.fun 🚀
+# Hodl.fun - Universal Token Launchpad
 
 A truly universal token launchpad platform built on Push Chain, featuring token creation, marketplace listing, and bonding curve mechanics for liquidity provision. Launch, trade, and manage ERC20 tokens with enterprise-grade security and automated price discovery from any supported chain.
 
@@ -7,17 +7,128 @@ A truly universal token launchpad platform built on Push Chain, featuring token 
 ![Solidity](https://img.shields.io/badge/solidity-0.8.22-orange.svg)
 ![Next.js](https://img.shields.io/badge/next.js-15.5.4-black.svg)
 
-## 🌟 Overview
 
-Hodl.fun makes token launches truly universal. Solving fragmented liquidity and cross-chain friction by letting users launch and trade tokens using any asset (ETH, SOL, etc.) without bridging or network switching.
+## 🚨 Problem Statement
 
-### Key Features
+### Current Challenges in Token Launches
 
-- **Come on the platform**  
-- **Launch a token**  
-- **It will automatically get listed** on our marketplace and instantly become tradable  
-- **Initial liquidity and price determination** happen through a bonding curve algorithm  
-- **Boom!** You can buy those tokens using any chain's native currency  
+#### 🧩 Fragmented Liquidity
+- Token launches are isolated to single blockchains  
+- Liquidity is split across multiple networks  
+- Users can't participate if they don't have assets on the specific chain  
+
+#### 🔗 Cross-Chain Friction
+- Users must bridge assets between chains (expensive & time-consuming)  
+- Network switching creates poor UX  
+- High barriers to entry for new users  
+- Gas fees on multiple chains  
+
+#### 🚪 Limited Accessibility
+- Users locked out if they only hold assets on different chains  
+- Complex setup required (wallets, bridges, gas tokens)  
+- Fragmented user base across ecosystems  
+
+#### 💸 Inefficient Capital
+- Liquidity trapped on single chains  
+- Arbitrage opportunities but high friction  
+- Suboptimal price discovery  
+
+---
+
+## 💡 Solution: Hodl.fun
+
+**Hodl.fun** is a universal token launchpad that enables users to **launch and trade tokens using any asset from any chain** — without bridging or network switching.
+
+---
+
+## ⚙️ How It Works
+
+### 🌐 Universal Asset Support
+- Launch tokens and accept payments in **ETH, SOL**, or any supported asset  
+- Users trade with whatever assets they already hold  
+- No need to bridge or acquire specific chain tokens  
+
+### 📈 Automated Bonding Curve
+- Fair launch mechanism with automated market making  
+- Price discovery through bonding curve mathematics  
+- Liquidity bootstrapping without upfront capital  
+
+### 🔀 Cross-Chain Abstraction
+- Built on **Push Chain's universal account system**  
+- Single wallet works across all chains  
+- Seamless multi-chain experience  
+
+### ⚡ Instant Settlement
+- No waiting for bridge confirmations  
+- Real-time trading execution  
+- Native cross-chain liquidity  
+
+---
+
+## 🔑 Key Features
+
+### 🧑‍💻 For Token Creators
+
+#### 🎯 One-Click Token Launch
+- Deploy **ERC20 tokens** with metadata (name, symbol, logo, description)  
+- Automatic marketplace listing  
+- Built-in bonding curve liquidity  
+
+#### ⚖️ Fair Launch Mechanism
+- No pre-mine or insider allocation  
+- Bonding curve ensures fair price discovery  
+- Configurable reserve ratio (10–90%)  
+
+#### 💧 Automated Liquidity
+- Bonding curve provides instant liquidity  
+- No need for initial liquidity provision  
+- Automatic graduation to full trading at **100 ETH market cap**  
+
+#### 🧾 Rich Token Metadata
+- **IPFS-stored metadata** (logo, description, social links)  
+- Professional token pages  
+- Social integration (Twitter, Telegram, Website)  
+
+---
+
+### 💹 For Traders
+
+#### 🌍 Universal Trading
+- Trade with any asset (**ETH, SOL**)  
+- No bridging required  
+- Single wallet for all chains  
+
+#### 📊 Real-Time Price Discovery
+- Bonding curve pricing  
+- Live market data  
+- Price charts and analytics *(coming soon)*  
+
+#### 💼 Portfolio Management
+- Track all your token holdings  
+- View profit/loss  
+- Transaction history *(coming soon)*  
+
+---
+
+## 🏪 Platform Features
+
+### 🧭 Token Marketplace
+- Browse all launched tokens  
+- Filter by market cap, holders, age  
+- Search by name/symbol  
+- Real-time updates  
+
+### ⚡ Instant Trading
+- Buy/sell tokens directly  
+- Slippage protection  
+- Gas-optimized transactions  
+
+### 📈 Analytics Dashboard
+- Price charts with OHLC candles *(In Development)*  
+- Trading volume metrics  
+- Total portfolio value  
+- Asset details  
+
 
 
 ## 📁 Project Structure
@@ -164,18 +275,6 @@ Liquidity Threshold (100 ETH)
 Full Trading Enabled
 ```
 
-### Key Parameters
-
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| Creation Fee | 0.01 ETH | Fee to create a new token |
-| Platform Fee | 1% | Platform fee on trades |
-| Creator Fee | 0.5% | Creator fee on trades |
-| Min Supply | 1M tokens | Minimum token supply |
-| Max Supply | 100M tokens | Maximum token supply |
-| Reserve Ratio | 10%-90% | Bonding curve parameter |
-| Liquidity Threshold | 100 ETH | Market cap for full trading |
-
 ## 🎨 Frontend Stack
 
 ### Technologies
@@ -189,34 +288,6 @@ Full Trading Enabled
 - **Icons**: Lucide React
 - **Retro UI**: pixel-retroui
 
-### Key Features
-
-- **Server-Side Rendering** - Fast initial page loads
-- **Real-Time Updates** - Live token data and trading
-- **Responsive Design** - Mobile-first approach
-- **Wallet Integration** - Push Chain wallet support
-- **IPFS Integration** - Decentralized metadata storage
-- **Token Caching** - Optimized data fetching
-
-## 🧪 Testing
-
-### Smart Contract Tests
-
-```bash
-cd smart-contract
-
-# Run all tests
-forge test
-
-# Run with gas reporting
-forge test --gas-report
-
-# Run specific test
-forge test --match-test testTokenCreation
-
-# Generate coverage report
-forge coverage
-```
 
 **Test Coverage**: 11/11 tests passing (100%)
 
@@ -229,117 +300,6 @@ forge coverage
 - ✅ Fee collection and distribution
 - ✅ Edge cases and error handling
 
-## 🚢 Deployment
-
-### Smart Contract Deployment
-
-#### Push Chain Testnet
-
-```bash
-cd smart-contract
-
-# Deploy to Push Chain Testnet
-forge script script/Deploy.s.sol \
-  --rpc-url push_testnet \
-  --broadcast \
-  --verify
-
-# Verify contracts on BlockScout
-forge verify-contract <CONTRACT_ADDRESS> \
-  --chain push_testnet \
-  --constructor-args $(cast abi-encode "constructor(address,address)" <ARG1> <ARG2>)
-```
-
-### Frontend Deployment
-
-#### Vercel (Recommended)
-
-1. Push your code to GitHub
-2. Import project in Vercel
-3. Configure environment variables
-4. Deploy
-
-```bash
-# Or deploy via CLI
-cd frontend
-npm install -g vercel
-vercel
-```
-
-#### Manual Deployment
-
-```bash
-cd frontend
-
-# Build production bundle
-npm run build
-
-# Start production server
-npm start
-```
-
-## 💰 Economics & Tokenomics
-
-### Revenue Model
-
-1. **Token Creation Fees**: 0.01 ETH per token
-2. **Trading Fees**: 1.5% total (1% platform + 0.5% creator)
-3. **Scalable Growth**: Revenue increases with platform usage
-
-### Bonding Curve Mechanics
-
-- **Automated Pricing**: Price increases as more tokens are purchased
-- **Fair Distribution**: Early buyers get better prices
-- **Liquidity Provision**: ETH reserves back token value
-- **Threshold System**: Graduates to full trading at 100 ETH market cap
-
-### Value Proposition
-
-- **For Creators**: Easy token launch, revenue sharing, no technical knowledge required
-- **For Traders**: Fair pricing, automated liquidity, slippage protection
-- **For Platform**: Sustainable fee model, growing ecosystem
-
-## 🔒 Security
-
-### Smart Contract Security
-
-- ✅ **OpenZeppelin Contracts** - Industry-standard security
-- ✅ **Reentrancy Guards** - Protection against reentrancy attacks
-- ✅ **Access Control** - Role-based permissions
-- ✅ **Pausable** - Emergency circuit breaker
-- ✅ **Input Validation** - Comprehensive parameter checks
-- ✅ **Custom Errors** - Gas-efficient error handling
-- ✅ **Slippage Protection** - Minimum output guarantees
-
-### Best Practices
-
-- Solidity 0.8+ with built-in overflow protection
-- Comprehensive test coverage (100%)
-- Custom errors for gas efficiency
-- Emergency pause functionality
-- Upgradeable architecture considerations
-
-
-
-
-### API Reference
-
-#### TokenFactory
-
-```solidity
-function createToken(TokenParams calldata params) external payable returns (address)
-function getTokensByCreator(address creator) external view returns (address[] memory)
-function isValidToken(address tokenAddress) external view returns (bool)
-```
-
-#### TokenMarketplace
-
-```solidity
-function buyTokens(address token, uint256 minTokens) external payable
-function sellTokens(address token, uint256 amount, uint256 minETH) external
-function calculatePurchaseReturn(address token, uint256 ethAmount) external view returns (uint256)
-function calculateSaleReturn(address token, uint256 tokenAmount) external view returns (uint256)
-```
 
 
 ## 📄 License
