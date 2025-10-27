@@ -9,18 +9,16 @@ A truly universal token launchpad platform built on Push Chain, featuring token 
 
 ## 🌟 Overview
 
-Hodl.fun iMaking token launches truly universal. Solving fragmented liquidity and cross-chain friction by letting users launch and trade tokens using any asset (ETH, SOL, etc.) without bridging or network switching.
+Hodl.fun makes token launches truly universal. Solving fragmented liquidity and cross-chain friction by letting users launch and trade tokens using any asset (ETH, SOL, etc.) without bridging or network switching.
 
 ### Key Features
 
-- **🎯 One-Click Token Creation** - Deploy ERC20 tokens with customizable parameters in seconds
-- **📈 Bonding Curve Mechanics** - Automated market making with fair price discovery
-- **🔒 Enterprise Security** - Built with OpenZeppelin's battle-tested contracts
-- **🏪 Automatic Marketplace** - Tokens are instantly listed and tradeable
-- **💰 Revenue Sharing** - Sustainable economics with platform and creator fees
-- **🌐 Push Chain Native** - Optimized for Push Chain testnet deployment
-- **📊 Real-Time Analytics** - Track performance, market cap, and trading activity
-- **🎨 Modern UI** - Retro-styled interface with pixel-perfect design
+- **Come on the platform**  
+- **Launch a token**  
+- **It will automatically get listed** on our marketplace and instantly become tradable  
+- **Initial liquidity and price determination** happen through a bonding curve algorithm  
+- **Boom!** You can buy those tokens using any chain's native currency  
+
 
 ## 📁 Project Structure
 
