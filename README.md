@@ -1,6 +1,6 @@
 # Hodl.fun 🚀
 
-A truly universal token launchpad platform built on Push Chain, featuring automated token creation, marketplace listing, and bonding curve mechanics for liquidity provision. Launch, trade, and manage ERC20 tokens with enterprise-grade security and automated price discovery.
+A truly universal token launchpad platform built on Push Chain, featuring token creation, marketplace listing, and bonding curve mechanics for liquidity provision. Launch, trade, and manage ERC20 tokens with enterprise-grade security and automated price discovery from any supported chain.
 
 ![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -9,7 +9,7 @@ A truly universal token launchpad platform built on Push Chain, featuring automa
 
 ## 🌟 Overview
 
-Hodl.fun is a full-stack decentralized application that enables users to create and trade tokens with automated liquidity through bonding curves. The platform combines smart contract security with a modern, retro-styled user interface for an exceptional token launch experience.
+Hodl.fun iMaking token launches truly universal. Solving fragmented liquidity and cross-chain friction by letting users launch and trade tokens using any asset (ETH, SOL, etc.) without bridging or network switching.
 
 ### Key Features
 
