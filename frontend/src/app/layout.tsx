@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Poppins, Fira_Code, Lora } from "next/font/google";
 import "./globals.css";
 import { PushWalletProvider } from "@/contexts/PushWalletProvider";
+import { Analytics } from '@vercel/analytics/next';
 
 const poppins = Poppins({
   variable: "--font-sans",
@@ -73,6 +74,7 @@ export default function RootLayout({
         <PushWalletProvider>
           {children}
         </PushWalletProvider>
+        <Analytics />
       </body>
     </html>
   );
