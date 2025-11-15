@@ -45,21 +45,25 @@ const DashboardPage = () => {
 
   const isConnected = connectionStatus === PushUI.CONSTANTS.CONNECTION.STATUS.CONNECTED;
   const address = pushChainClient?.universal?.account;
+  
+  // Normalize address to lowercase for consistency
+  const normalizedAddress = address?.toLowerCase() || null;
+  
   const {
     tokens,
     stats: portfolioStats,
     isLoading,
     error,
     refreshPortfolio,
-  } = useUserPortfolio(isConnected && address ? address : null);
+  } = useUserPortfolio(isConnected && normalizedAddress ? normalizedAddress : null);
 
   // Get created tokens (user is creator)
   const createdTokens = tokens.filter((token) => token.isCreator);
 
   // Handle copy address
   const handleCopyAddress = async () => {
-    if (address) {
-      await navigator.clipboard.writeText(address);
+    if (normalizedAddress) {
+      await navigator.clipboard.writeText(normalizedAddress);
       setCopiedAddress(true);
       setTimeout(() => setCopiedAddress(false), 2000);
     }
@@ -118,9 +122,9 @@ const DashboardPage = () => {
             <div className="flex items-center space-x-2 text-muted-foreground">
               <Wallet className="h-4 w-4" />
               <span className="text-sm font-mono">
-                {address ? truncateAddress(address) : "Not connected"}
+                {normalizedAddress ? truncateAddress(normalizedAddress) : "Not connected"}
               </span>
-              {address && (
+              {normalizedAddress && (
                 <Button
                   variant="ghost"
                   size="sm"

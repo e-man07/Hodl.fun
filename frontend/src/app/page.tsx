@@ -166,29 +166,29 @@ const HomePage = () => {
                 style={{ transitionDelay: '100ms' }}
               >
                 <Star className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-pulse" />
-                Powered by Push Chain & Bonding Curves
+                Live On Push Chain Testnet
               </Badge>
 
               <h1
-                className={`mb-6 sm:mb-8 text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-tight px-2 transition-all duration-700 ${
+                className={`mb-6 sm:mb-8 text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight text-center transition-all duration-700 ${
                   mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                 }`}
                 style={{ transitionDelay: '200ms' }}
               >
-                Professional Token
-                <span className="block text-primary mt-2 sm:mt-3 bg-gradient-to-r from-primary via-primary/80 to-primary bg-clip-text">
-                  Platform - hodl.fun
+                <span className="bg-gradient-to-r from-primary via-primary/80 to-primary bg-clip-text text-transparent block">
+                  Universal Token Launchpad
                 </span>
               </h1>
 
               <p
-                className={`mx-auto mb-8 sm:mb-10 max-w-3xl text-base sm:text-xl md:text-2xl text-muted-foreground leading-relaxed font-normal px-4 transition-all duration-700 ${
+                className={`mx-auto mb-8 sm:mb-10 max-w-3xl text-base sm:text-xl md:text-2xl text-muted-foreground leading-relaxed font-normal text-center transition-all duration-700 ${
                   mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                 }`}
                 style={{ transitionDelay: '300ms' }}
               >
-                Create, deploy, and trade ERC20 tokens with automated liquidity through bonding curves.
-                Built for professionals with enterprise-grade security and seamless user experience.
+                The first universal token launchpad. Launch tokens using any chain&apos;s native currency—Ethereum, Solana, and more. 
+                Trade seamlessly across chains with automated liquidity and bonding curves.{' '}
+                <span className="text-primary font-semibold">Launch Once, Trade Anywhere.</span>
               </p>
 
               <div

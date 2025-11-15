@@ -18,7 +18,9 @@ import {
   RefreshCw,
   Loader2,
   Filter,
-  SortAsc
+  SortAsc,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { formatCurrency, formatNumber } from '@/lib/utils';
@@ -57,7 +59,18 @@ const MarketplacePage = () => {
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   
   // Fetch real tokens from blockchain
-  const { tokens, isLoading, error, refreshTokens } = useMarketplace();
+  const { 
+    tokens, 
+    isLoading, 
+    isInitializing,
+    error, 
+    refreshTokens, 
+    totalTokens, 
+    currentPage, 
+    totalPages, 
+    loadPage,
+    aggregateStats
+  } = useMarketplace();
   
   const filteredTokens = tokens
     .filter(token => {
@@ -90,10 +103,10 @@ const MarketplacePage = () => {
     });
 
   const marketStats = {
-    totalTokens: tokens.length,
-    totalMarketCap: tokens.reduce((sum, token) => sum + token.marketCap, 0),
-    totalHolders: tokens.reduce((sum, token) => sum + token.holders, 0),
-    tradingTokens: tokens.filter(token => token.isTrading).length
+    totalTokens: totalTokens || tokens.length,
+    totalMarketCap: aggregateStats.totalMarketCap || tokens.reduce((sum, token) => sum + token.marketCap, 0),
+    totalHolders: tokens.reduce((sum, token) => sum + token.holders, 0), // Page-level only (expensive to calculate for all)
+    tradingTokens: aggregateStats.tradingTokens || tokens.filter(token => token.isTrading).length
   };
 
   const handleOpenTradeModal = (token: Token) => {
@@ -281,10 +294,22 @@ const MarketplacePage = () => {
           </div>
           
           {/* Loading/Error States */}
-          {isLoading && (
+          {isInitializing && (
+            <div className="flex flex-col items-center justify-center gap-3 mt-4">
+              <div className="flex items-center gap-2 text-primary">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-lg font-medium">Initializing marketplace...</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Fetching {totalTokens > 0 ? totalTokens : 'all'} tokens and calculating market statistics
+              </p>
+            </div>
+          )}
+          
+          {!isInitializing && isLoading && (
             <div className="flex items-center justify-center gap-2 mt-4 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Loading tokens from blockchain...</span>
+              <span>Loading page tokens...</span>
             </div>
           )}
 
@@ -310,7 +335,7 @@ const MarketplacePage = () => {
             </div>
           )}
           
-          {!isLoading && !error && tokens.length === 0 && (
+          {!isInitializing && !isLoading && !error && tokens.length === 0 && (
             <div className="mt-4 p-4 bg-muted/30 border border-border rounded-lg text-muted-foreground">
               <p>No tokens found on the marketplace yet. Be the first to launch a token!</p>
             </div>
@@ -319,123 +344,247 @@ const MarketplacePage = () => {
 
         {/* Market Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card className="border-2 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
-                <Coins className="h-6 w-6 text-primary" />
-              </div>
-              <p className="text-2xl font-bold text-foreground">{marketStats.totalTokens}</p>
-              <p className="text-sm text-muted-foreground">Total Tokens</p>
-            </CardContent>
-          </Card>
+          {isInitializing ? (
+            // Skeleton loaders for stats cards
+            <>
+              {[1, 2, 3, 4].map((i) => (
+                <Card key={i} className="border-2">
+                  <CardContent className="p-6 text-center">
+                    <div className="w-12 h-12 bg-muted/30 rounded-lg mx-auto mb-3 animate-pulse" />
+                    <div className="h-8 w-16 bg-muted/30 rounded mx-auto mb-2 animate-pulse" />
+                    <div className="h-4 w-24 bg-muted/30 rounded mx-auto animate-pulse" />
+                  </CardContent>
+                </Card>
+              ))}
+            </>
+          ) : (
+            <>
+              <Card className="border-2 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group">
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                    <Coins className="h-6 w-6 text-primary" />
+                  </div>
+                  <p className="text-2xl font-bold text-foreground">{marketStats.totalTokens}</p>
+                  <p className="text-sm text-muted-foreground">Total Tokens</p>
+                </CardContent>
+              </Card>
 
-          <Card className="border-2 hover:border-secondary/30 transition-all duration-300 hover:shadow-lg group">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
-                <TrendingUp className="h-6 w-6 text-secondary" />
-              </div>
-              <p className="text-2xl font-bold text-foreground">{formatCurrency(marketStats.totalMarketCap)}</p>
-              <p className="text-sm text-muted-foreground">Total Market Cap</p>
-            </CardContent>
-          </Card>
+              <Card className="border-2 hover:border-secondary/30 transition-all duration-300 hover:shadow-lg group">
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                    <TrendingUp className="h-6 w-6 text-secondary" />
+                  </div>
+                  <p className="text-2xl font-bold text-foreground">{formatCurrency(marketStats.totalMarketCap)}</p>
+                  <p className="text-sm text-muted-foreground">Total Market Cap</p>
+                </CardContent>
+              </Card>
 
-          <Card className="border-2 hover:border-accent/30 transition-all duration-300 hover:shadow-lg group">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
-                <BarChart3 className="h-6 w-6 text-accent-foreground" />
-              </div>
-              <p className="text-2xl font-bold text-foreground">{marketStats.tradingTokens}</p>
-              <p className="text-sm text-muted-foreground">Trading Active</p>
-            </CardContent>
-          </Card>
+              <Card className="border-2 hover:border-accent/30 transition-all duration-300 hover:shadow-lg group">
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                    <BarChart3 className="h-6 w-6 text-accent-foreground" />
+                  </div>
+                  <p className="text-2xl font-bold text-foreground">{marketStats.tradingTokens}</p>
+                  <p className="text-sm text-muted-foreground">Trading Active</p>
+                </CardContent>
+              </Card>
 
-          <Card className="border-2 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
-                <Users className="h-6 w-6 text-primary" />
-              </div>
-              <p className="text-2xl font-bold text-foreground">{formatNumber(marketStats.totalHolders)}</p>
-              <p className="text-sm text-muted-foreground">Total Holders</p>
-            </CardContent>
-          </Card>
+              <Card className="border-2 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group">
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                    <Users className="h-6 w-6 text-primary" />
+                  </div>
+                  <p className="text-2xl font-bold text-foreground">{formatNumber(marketStats.totalHolders)}</p>
+                  <p className="text-sm text-muted-foreground">Total Holders</p>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
 
         {/* Enhanced Filters and Search */}
-        <div className="mb-8">
-          <div className="flex flex-col lg:flex-row gap-4 mb-4">
-            {/* Search Bar */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="Search tokens by name, symbol, or description..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-10"
-              />
-            </div>
-            
-            {/* Filter Controls */}
-            <div className="flex flex-wrap gap-2">
-              <Select value={filterBy} onValueChange={(value) => setFilterBy(value as 'all' | 'new' | 'trading')}>
-                <SelectTrigger className="w-[140px] h-10">
-                  <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Filter" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Tokens</SelectItem>
-                  <SelectItem value="new">✨ New</SelectItem>
-                  <SelectItem value="trading">📈 Trading</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'marketCap' | 'holders' | 'createdAt')}>
-                <SelectTrigger className="w-[140px] h-10">
-                  <SortAsc className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="marketCap">Market Cap</SelectItem>
-                  <SelectItem value="holders">Holders</SelectItem>
-                  <SelectItem value="createdAt">Newest</SelectItem>
-                </SelectContent>
-              </Select>
+        {!isInitializing && (
+          <div className="mb-8">
+            <div className="flex flex-col lg:flex-row gap-4 mb-4">
+              {/* Search Bar */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Search tokens by name, symbol, or description..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-10"
+                />
+              </div>
               
-              <Button variant="outline" size="sm" onClick={refreshTokens} disabled={isLoading} className="h-10">
-                <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
+              {/* Filter Controls */}
+              <div className="flex flex-wrap gap-2">
+                <Select value={filterBy} onValueChange={(value) => setFilterBy(value as 'all' | 'new' | 'trading')}>
+                  <SelectTrigger className="w-[140px] h-10">
+                    <Filter className="mr-2 h-4 w-4" />
+                    <SelectValue placeholder="Filter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Tokens</SelectItem>
+                    <SelectItem value="new">✨ New</SelectItem>
+                    <SelectItem value="trading">📈 Trading</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'marketCap' | 'holders' | 'createdAt')}>
+                  <SelectTrigger className="w-[140px] h-10">
+                    <SortAsc className="mr-2 h-4 w-4" />
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="marketCap">Market Cap</SelectItem>
+                    <SelectItem value="holders">Holders</SelectItem>
+                    <SelectItem value="createdAt">Newest</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Button variant="outline" size="sm" onClick={refreshTokens} disabled={isLoading || isInitializing} className="h-10">
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isLoading || isInitializing ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+
+            {/* Filter Summary */}
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span>
+                Showing {filteredTokens.length} of {tokens.length} token{filteredTokens.length !== 1 ? 's' : ''} on this page
+                {totalTokens > tokens.length && ` (${totalTokens} total)`}
+              </span>
+              {debouncedSearchQuery && (
+                <Badge variant="secondary" className="text-xs">
+                  Search: &ldquo;{debouncedSearchQuery}&rdquo;
+                </Badge>
+              )}
+              {filterBy !== 'all' && (
+                <Badge variant="secondary" className="text-xs">
+                  Filter: {filterBy === 'new' ? '✨ New' :
+                          filterBy === 'trading' ? '📈 Trading' : filterBy}
+                </Badge>
+              )}
+              <Badge variant="secondary" className="text-xs">
+                Sort: {sortBy === 'marketCap' ? 'Market Cap' :
+                      sortBy === 'holders' ? 'Holders' : 'Newest'}
+              </Badge>
             </div>
           </div>
-
-          {/* Filter Summary */}
-          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <span>Showing {filteredTokens.length} token{filteredTokens.length !== 1 ? 's' : ''}</span>
-            {debouncedSearchQuery && (
-              <Badge variant="secondary" className="text-xs">
-                Search: &ldquo;{debouncedSearchQuery}&rdquo;
-              </Badge>
-            )}
-            {filterBy !== 'all' && (
-              <Badge variant="secondary" className="text-xs">
-                Filter: {filterBy === 'new' ? '✨ New' :
-                        filterBy === 'trading' ? '📈 Trading' : filterBy}
-              </Badge>
-            )}
-            <Badge variant="secondary" className="text-xs">
-              Sort: {sortBy === 'marketCap' ? 'Market Cap' :
-                    sortBy === 'holders' ? 'Holders' : 'Newest'}
-            </Badge>
-          </div>
-        </div>
+        )}
 
         {/* Token Grid */}
-        {!isLoading && filteredTokens.length > 0 ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTokens.map((token, index) => (
-              <TokenCard key={token.address} token={token} index={index} />
+        {(isInitializing || isLoading) && tokens.length === 0 ? (
+          // Skeleton loaders for token cards
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} className="border-2 animate-pulse">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3 min-w-0 flex-1">
+                      <div className="w-12 h-12 rounded-full bg-muted/30" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-5 w-32 bg-muted/30 rounded" />
+                        <div className="h-4 w-24 bg-muted/30 rounded" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-4 w-16 bg-muted/30 rounded" />
+                      <div className="h-6 w-20 bg-muted/30 rounded" />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-2 mb-4">
+                    <div className="h-4 w-full bg-muted/30 rounded" />
+                    <div className="h-4 w-3/4 bg-muted/30 rounded" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-muted/10 rounded-lg">
+                    {[1, 2, 3, 4].map((j) => (
+                      <div key={j} className="space-y-2">
+                        <div className="h-3 w-16 bg-muted/30 rounded" />
+                        <div className="h-5 w-20 bg-muted/30 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="h-9 w-full bg-muted/30 rounded" />
+                </CardContent>
+              </Card>
             ))}
           </div>
-        ) : !isLoading ? (
+        ) : !isLoading && filteredTokens.length > 0 ? (
+          <>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              {filteredTokens.map((token, index) => (
+                <TokenCard key={token.address} token={token} index={index} />
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-8 border-t border-border">
+                <div className="text-sm text-muted-foreground">
+                  Showing page {currentPage} of {totalPages} ({totalTokens} total tokens)
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadPage(currentPage - 1)}
+                    disabled={currentPage === 1 || isLoading}
+                    className="h-9"
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" />
+                    Previous
+                  </Button>
+                  
+                  {/* Page Numbers */}
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => loadPage(pageNum)}
+                          disabled={isLoading}
+                          className="h-9 w-9 p-0"
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadPage(currentPage + 1)}
+                    disabled={currentPage === totalPages || isLoading}
+                    className="h-9"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : !isInitializing && !isLoading ? (
           <Card className="text-center py-16 border-2 border-dashed border-border">
             <CardContent>
               <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mx-auto mb-6">
