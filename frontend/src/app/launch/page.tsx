@@ -26,6 +26,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
+import { VoteBanner } from '@/components/VoteBanner';
 
 interface TokenFormData {
   name: string;
@@ -218,6 +219,7 @@ const LaunchPage = () => {
   if (txHash) {
     return (
       <div className="min-h-screen bg-background">
+        <VoteBanner />
         <Navbar />
         <div className="container mx-auto px-4 py-12">
           <div className="text-center max-w-2xl mx-auto">
@@ -296,6 +298,7 @@ const LaunchPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <VoteBanner />
       <Navbar />
 
       <div className="container mx-auto px-4 py-8 md:py-12">

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import Navbar from '@/components/layout/Navbar';
+import { VoteBanner } from '@/components/VoteBanner';
 
 // Animation hook for intersection observer
 const useInView = (options = {}) => {
@@ -148,6 +149,7 @@ const HomePage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <VoteBanner />
       <Navbar />
       
       {/* Hero Section */}
