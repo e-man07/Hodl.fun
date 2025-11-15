@@ -6,7 +6,7 @@ import { ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export const VoteBanner = () => {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible] = useState(true);
 
   if (!isVisible) return null;
 

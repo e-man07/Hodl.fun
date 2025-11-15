@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI, LAUNCHPAD_TOKEN_ABI } from '@/config/abis';
-import { getCachedToken, setCachedToken } from '@/lib/tokenCache';
+import { getCachedToken, setCachedToken, getCachedSortedTokens, setCachedSortedTokens, getCachedAggregateStats, setCachedAggregateStats, getCachedTotalTokens, setCachedTotalTokens } from '@/lib/tokenCache';
+import { fetchIPFSMetadata } from '@/lib/ipfsCache';
+import { deduplicatedFetch } from '@/lib/requestDeduplication';
 
 interface TokenMetadata {
   name: string;
@@ -55,151 +57,93 @@ export const useMarketplace = () => {
     tradingTokens: 0
   });
 
+  // Use the new optimized IPFS fetching with caching and racing
   const fetchTokenMetadata = async (metadataURI: string): Promise<TokenMetadata | null> => {
-    try {
-      // Handle data URIs (inline JSON)
-      if (metadataURI && metadataURI.startsWith('data:application/json,')) {
-        try {
-          const jsonData = decodeURIComponent(metadataURI.replace('data:application/json,', ''));
-          const metadata = JSON.parse(jsonData);
-          console.log('Successfully parsed inline metadata:', metadata);
-          return metadata;
-        } catch (parseError) {
-          console.warn('Failed to parse inline metadata:', parseError);
-          return null;
-        }
-      }
-      
-      if (!metadataURI || !metadataURI.startsWith('ipfs://')) {
-        console.warn('Invalid metadata URI:', metadataURI);
-        return null;
-      }
-      
-      // Convert IPFS URI to HTTP gateway URL
-      const ipfsHash = metadataURI.replace('ipfs://', '');
-      
-      // Check if it's a placeholder hash (these are invalid)
-      if (ipfsHash.includes('QmHash') || ipfsHash.length < 40) {
-        console.warn('Placeholder or invalid IPFS hash detected:', ipfsHash);
-        return null;
-      }
-      
-      // Try multiple IPFS gateways for better reliability
-      const gateways = [
-        `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
-        `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`,
-        `https://ipfs.io/ipfs/${ipfsHash}`,
-        `https://dweb.link/ipfs/${ipfsHash}`
-      ];
-      
-      for (const gatewayUrl of gateways) {
-        try {
-          console.log('Fetching metadata from:', gatewayUrl);
-          
-          const response = await fetch(gatewayUrl, {
-            headers: {
-              'Accept': 'application/json'
-            },
-            signal: AbortSignal.timeout(10000) // 10 second timeout
-          });
-          
-          if (response.ok) {
-            const metadata = await response.json();
-            console.log('Successfully fetched metadata from:', gatewayUrl, metadata);
-            return metadata;
-          } else {
-            console.warn(`Failed to fetch from ${gatewayUrl} (Status: ${response.status})`);
-          }
-        } catch (gatewayError) {
-          console.warn(`Gateway ${gatewayUrl} failed:`, gatewayError);
-          continue; // Try next gateway
-        }
-      }
-      
-      console.warn('All IPFS gateways failed for hash:', ipfsHash);
-      return null;
-      
-    } catch (error) {
-      console.warn('Error fetching metadata:', error);
-      return null;
-    }
+    return fetchIPFSMetadata(metadataURI);
   };
 
   const fetchTokenDetails = async (tokenAddress: string, provider: ethers.Provider): Promise<{ name: string; symbol: string } | null> => {
-    try {
-      const tokenContract = new ethers.Contract(tokenAddress, LAUNCHPAD_TOKEN_ABI, provider);
-      const [name, symbol] = await Promise.all([
-        tokenContract.name(),
-        tokenContract.symbol()
-      ]);
-      return { name, symbol };
-    } catch (error) {
-      console.warn('Error fetching token details for:', tokenAddress, error);
-      return null;
-    }
+    return deduplicatedFetch(`token-details-${tokenAddress}`, async () => {
+      try {
+        const tokenContract = new ethers.Contract(tokenAddress, LAUNCHPAD_TOKEN_ABI, provider);
+        const [name, symbol] = await Promise.all([
+          tokenContract.name(),
+          tokenContract.symbol()
+        ]);
+        return { name, symbol };
+      } catch (error) {
+        console.warn('Error fetching token details for:', tokenAddress, error);
+        return null;
+      }
+    });
   };
 
   const fetchTokenHolderCount = async (tokenAddress: string, provider: ethers.Provider): Promise<number> => {
-    try {
-      console.log(`🔍 Fetching holder count for token: ${tokenAddress}`);
-      const tokenContract = new ethers.Contract(tokenAddress, LAUNCHPAD_TOKEN_ABI, provider);
-      
-      // Get all Transfer events from the token contract
-      const transferFilter = tokenContract.filters.Transfer();
-      const events = await tokenContract.queryFilter(transferFilter, 0, 'latest');
-      
-      if (events.length === 0) {
-        console.log(`No transfer events found for ${tokenAddress}`);
-        return 0;
-      }
-      
-      console.log(`Found ${events.length} transfer events for ${tokenAddress}`);
-      
-      // Track unique addresses that have received tokens
-      const potentialHolders = new Set<string>();
-      
-      for (const event of events) {
-        // Cast to EventLog to access args property
-        if ('args' in event) {
-          const { to } = event.args!;
-          
-          // Add recipient to potential holders (if not zero address)
-          if (to !== ethers.ZeroAddress) {
-            potentialHolders.add(to.toLowerCase());
+    return deduplicatedFetch(`token-holders-${tokenAddress}`, async () => {
+      try {
+        console.log(`🔍 Fetching holder count for token: ${tokenAddress}`);
+        const tokenContract = new ethers.Contract(tokenAddress, LAUNCHPAD_TOKEN_ABI, provider);
+
+        // Get all Transfer events from the token contract
+        const transferFilter = tokenContract.filters.Transfer();
+        const events = await tokenContract.queryFilter(transferFilter, 0, 'latest');
+
+        if (events.length === 0) {
+          console.log(`No transfer events found for ${tokenAddress}`);
+          return 0;
+        }
+
+        console.log(`Found ${events.length} transfer events for ${tokenAddress}`);
+
+        // Track unique addresses that have received tokens
+        const potentialHolders = new Set<string>();
+
+        for (const event of events) {
+          // Cast to EventLog to access args property
+          if ('args' in event) {
+            const { to } = event.args!;
+
+            // Add recipient to potential holders (if not zero address)
+            if (to !== ethers.ZeroAddress) {
+              potentialHolders.add(to.toLowerCase());
+            }
           }
         }
+
+        console.log(`Found ${potentialHolders.size} potential holders for ${tokenAddress}`);
+
+        // Check current balances for all potential holders
+        const holderPromises = Array.from(potentialHolders).map(async (holderAddress) => {
+          try {
+            const balance = await tokenContract.balanceOf(holderAddress);
+            return balance > BigInt(0) ? holderAddress : null;
+          } catch (error) {
+            console.warn(`Error checking balance for ${holderAddress}:`, error);
+            return null;
+          }
+        });
+
+        const results = await Promise.all(holderPromises);
+        const actualHolders = results.filter(holder => holder !== null);
+
+        console.log(`✅ Token ${tokenAddress} has ${actualHolders.length} holders`);
+        return actualHolders.length;
+
+      } catch (error) {
+        console.warn('Error fetching holder count for:', tokenAddress, error);
+        return 0;
       }
-      
-      console.log(`Found ${potentialHolders.size} potential holders for ${tokenAddress}`);
-      
-      // Check current balances for all potential holders
-      const holderPromises = Array.from(potentialHolders).map(async (holderAddress) => {
-        try {
-          const balance = await tokenContract.balanceOf(holderAddress);
-          return balance > BigInt(0) ? holderAddress : null;
-        } catch (error) {
-          console.warn(`Error checking balance for ${holderAddress}:`, error);
-          return null;
-        }
-      });
-      
-      const results = await Promise.all(holderPromises);
-      const actualHolders = results.filter(holder => holder !== null);
-      
-      console.log(`✅ Token ${tokenAddress} has ${actualHolders.length} holders`);
-      return actualHolders.length;
-      
-    } catch (error) {
-      console.warn('Error fetching holder count for:', tokenAddress, error);
-      return 0;
-    }
+    });
   };
 
   // Fetch and sort token addresses by market cap
-  const fetchAndSortTokenAddresses = useCallback(async () => {
-    setIsInitializing(true);
+  const fetchAndSortTokenAddresses = useCallback(async (silent = false) => {
+    // Only set initializing state if not in silent mode
+    if (!silent) {
+      setIsInitializing(true);
+    }
     try {
-      const provider = new ethers.JsonRpcProvider('https://evm.rpc-testnet-donut-node1.push.org/');
+      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
       const marketplaceContract = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenMarketplace,
         TOKEN_MARKETPLACE_ABI,
@@ -213,10 +157,17 @@ export const useMarketplace = () => {
       if (tokenAddresses.length === 0) {
         setSortedTokenAddresses([]);
         setTotalTokens(0);
+        setCachedTotalTokens(0);
         return;
       }
 
-      setTotalTokens(tokenAddresses.length);
+      // Cache total tokens count
+      setCachedTotalTokens(tokenAddresses.length);
+
+      // Only update state if value changed or not in silent mode
+      if (!silent) {
+        setTotalTokens(tokenAddresses.length);
+      }
 
       // Fetch market caps in batches to sort tokens and calculate aggregate stats
       console.log('📊 Fetching market caps for sorting and aggregate stats...');
@@ -271,10 +222,18 @@ export const useMarketplace = () => {
       
       console.log(`📊 Aggregate stats: Total Market Cap: ${totalMarketCapEth} ETH, Trading Tokens: ${tradingTokensCount}`);
       
-      setAggregateStats({
+      const aggregateStatsData = {
         totalMarketCap: totalMarketCapEth,
         tradingTokens: tradingTokensCount
-      });
+      };
+
+      // Cache aggregate stats
+      setCachedAggregateStats(aggregateStatsData);
+
+      // Only update state if not in silent mode
+      if (!silent) {
+        setAggregateStats(aggregateStatsData);
+      }
 
       // Sort by market cap (descending)
       const sorted = tokenInfos
@@ -286,8 +245,16 @@ export const useMarketplace = () => {
         .map(info => info.address);
 
       console.log('✅ Sorted tokens by market cap');
-      setSortedTokenAddresses(sorted);
-      setIsInitializing(false);
+
+      // Cache sorted token addresses for fast subsequent loads
+      setCachedSortedTokens(sorted);
+
+      // Only update state if not in silent mode or if data changed
+      if (!silent) {
+        setSortedTokenAddresses(sorted);
+        setIsInitializing(false);
+      }
+
       return sorted;
     } catch (error) {
       console.error('❌ Error fetching and sorting token addresses:', error);
@@ -321,7 +288,7 @@ export const useMarketplace = () => {
       console.log(`📄 Loading page ${page}: tokens ${startIndex + 1}-${Math.min(endIndex, sortedAddresses.length)} of ${sortedAddresses.length}`);
 
       // Create provider for reading data
-      const provider = new ethers.JsonRpcProvider('https://evm.rpc-testnet-donut-node1.push.org/');
+      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
       
       // Create marketplace contract instance
       const marketplaceContract = new ethers.Contract(
@@ -465,10 +432,40 @@ export const useMarketplace = () => {
     };
   }, [refreshTokens]);
 
-  // Fetch and sort token addresses on mount
+  // Load cached data on mount and fetch fresh data in background
   useEffect(() => {
     if (sortedTokenAddresses.length === 0) {
-      fetchAndSortTokenAddresses();
+      // Try to load from cache first for instant display
+      const cachedAddresses = getCachedSortedTokens();
+      const cachedStats = getCachedAggregateStats();
+      const cachedTotal = getCachedTotalTokens();
+
+      if (cachedAddresses && cachedAddresses.length > 0) {
+        console.log('✅ Loaded sorted token addresses from cache:', cachedAddresses.length);
+        setSortedTokenAddresses(cachedAddresses);
+        setIsInitializing(false);
+
+        // Load cached total tokens count
+        if (cachedTotal !== null) {
+          setTotalTokens(cachedTotal);
+        } else {
+          setTotalTokens(cachedAddresses.length);
+        }
+
+        // Load cached stats
+        if (cachedStats) {
+          console.log('✅ Loaded aggregate stats from cache');
+          setAggregateStats(cachedStats);
+        }
+
+        // Fetch fresh data in the background to update cache (silent mode - no state updates)
+        console.log('🔄 Refreshing data in background...');
+        fetchAndSortTokenAddresses(true);
+      } else {
+        // No cache, fetch from network (shows "Initializing")
+        console.log('🔄 No cached data found, fetching from network...');
+        fetchAndSortTokenAddresses(false);
+      }
     }
   }, [sortedTokenAddresses.length, fetchAndSortTokenAddresses]);
 

@@ -91,7 +91,7 @@ export const useUserPortfolio = (userAddress: string | null) => {
 
     try {
       // Use Push Chain RPC provider for reading data
-      const provider = new ethers.JsonRpcProvider('https://evm.rpc-testnet-donut-node1.push.org/');
+      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
       const marketplace = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenMarketplace,
         TOKEN_MARKETPLACE_ABI,
