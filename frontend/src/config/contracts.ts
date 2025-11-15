@@ -3,7 +3,7 @@ export const CONTRACTS = {
   PUSH_TESTNET: {
     chainId: 42101,
     name: 'Push Chain Testnet',
-    rpcUrl: 'https://evm.rpc-testnet-donut-node1.push.org/',
+    rpcUrl: 'https://evm.donut.rpc.push.org/',
     blockExplorer: 'https://donut.push.network',
     nativeCurrency: {
       name: 'PUSH',

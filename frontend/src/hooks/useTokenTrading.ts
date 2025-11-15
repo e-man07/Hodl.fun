@@ -23,7 +23,7 @@ export const useTokenTrading = () => {
 
   // Create provider using Push Chain RPC
   const getProvider = () => {
-    return new ethers.JsonRpcProvider('https://evm.rpc-testnet-donut-node1.push.org/');
+    return new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
   };
 
   // Clear any previous errors
