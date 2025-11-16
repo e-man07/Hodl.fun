@@ -150,15 +150,48 @@ export const useMarketplace = () => {
         provider
       );
 
-      console.log('🔍 Fetching all token addresses from marketplace...');
-      const tokenAddresses: string[] = await marketplaceContract.getAllTokens();
-      console.log('📋 Found token addresses:', tokenAddresses.length);
+      let tokenAddresses: string[] = [];
+      
+      // First, try to load from indexed JSON file (fast, offline-first)
+      try {
+        console.log('🔍 Trying to load tokens from indexed file...');
+        const response = await fetch('/token-addresses.json');
+        if (response.ok) {
+          const indexedData = await response.json();
+          if (indexedData.tokens && Array.isArray(indexedData.tokens) && indexedData.tokens.length > 0) {
+            tokenAddresses = indexedData.tokens;
+            console.log(`✅ Loaded ${tokenAddresses.length} tokens from indexed file (last updated: ${indexedData.indexedAt || 'unknown'})`);
+          }
+        }
+      } catch (fileError) {
+        console.log('⚠️ Could not load indexed file, falling back to on-chain query...');
+      }
+      
+      // Fallback: Try getAllTokens() if indexed file doesn't exist or is empty
+      if (tokenAddresses.length === 0) {
+        try {
+          console.log('🔍 Fetching all token addresses from marketplace...');
+          tokenAddresses = await marketplaceContract.getAllTokens();
+          console.log('📋 Found token addresses:', tokenAddresses.length);
+        } catch (onChainError) {
+          const errorMsg = onChainError instanceof Error ? onChainError.message : String(onChainError);
+          console.error('❌ Failed to fetch tokens from chain:', errorMsg);
+          
+          // If both methods fail, show helpful error
+          setError('Unable to load tokens. Please run "npm run index-tokens" to create the token index, or wait for the backend to be ready.');
+          setIsInitializing(false);
+          return [];
+        }
+      }
 
       if (tokenAddresses.length === 0) {
         setSortedTokenAddresses([]);
         setTotalTokens(0);
         setCachedTotalTokens(0);
-        return;
+        if (!silent) {
+          setIsInitializing(false);
+        }
+        return [];
       }
 
       // Cache total tokens count

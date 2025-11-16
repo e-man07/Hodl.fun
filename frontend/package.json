@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "index-tokens": "node scripts/index-tokens.js"
   },
   "dependencies": {
     "@pushchain/core": "^2.0.16",
