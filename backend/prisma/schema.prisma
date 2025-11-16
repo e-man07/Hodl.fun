@@ -1,0 +1,191 @@
+// Prisma schema for Hodl.fun Token Launchpad Backend
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// TOKENS TABLE
+// Stores static token information
+// ============================================
+model Token {
+  address         String   @id @db.VarChar(42)
+  name            String   @db.VarChar(100)
+  symbol          String   @db.VarChar(20)
+  creator         String   @db.VarChar(42)
+  totalSupply     String   @db.VarChar(78) // BigInt as string
+  reserveRatio    Int      // Percentage (0-100)
+  metadataURI     String?  @db.Text
+  metadataCache   Json?    // Cached IPFS metadata
+  logoURL         String?  @db.Text
+  description     String?  @db.Text
+  socialLinks     Json?    // Twitter, Telegram, Website
+  createdAt       DateTime @default(now())
+  blockNumber     BigInt
+  transactionHash String   @db.VarChar(66)
+  tradingEnabled  Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+
+  // Real-time metrics (updated by workers)
+  currentPrice    Float    @default(0) // Current token price in ETH
+  marketCap       Float    @default(0) // Current market cap in ETH
+  volume24h       Float    @default(0) // 24h trading volume in ETH
+  priceChange24h  Float    @default(0) // 24h price change percentage
+  currentSupply   String   @default("0") @db.VarChar(78) // Current circulating supply
+  reserveBalance  String   @default("0") @db.VarChar(78) // Current reserve balance in ETH
+  holderCount     Int      @default(0) // Cached holder count
+  metricsUpdatedAt DateTime? // Last time metrics were updated
+
+  // Relations
+  holders      Holder[]
+  transactions Transaction[]
+  portfolios   UserPortfolio[]
+
+  // Indexes
+  @@index([creator])
+  @@index([createdAt(sort: Desc)])
+  @@index([tradingEnabled])
+  @@index([tradingEnabled, createdAt(sort: Desc)]) // For marketplace filtering
+  @@index([creator, createdAt(sort: Desc)]) // For user created tokens
+  @@index([marketCap(sort: Desc)]) // For sorting by market cap
+  @@index([volume24h(sort: Desc)]) // For trending/volume sorting
+  @@index([metricsUpdatedAt]) // For worker prioritization
+  @@map("tokens")
+}
+
+// ============================================
+// HOLDERS TABLE
+// Tracks token holder balances
+// ============================================
+model Holder {
+  id             String   @id @default(cuid())
+  tokenAddress   String   @db.VarChar(42)
+  holderAddress  String   @db.VarChar(42)
+  balance        String   @db.VarChar(78) // BigInt as string
+  firstAcquired  DateTime @default(now())
+  lastUpdated    DateTime @updatedAt
+
+  // Relations
+  token Token @relation(fields: [tokenAddress], references: [address], onDelete: Cascade)
+
+  // Unique constraint
+  @@unique([tokenAddress, holderAddress])
+  @@index([holderAddress])
+  @@index([tokenAddress])
+  @@index([tokenAddress, balance(sort: Desc)], map: "holders_token_balance_desc_idx") // For top holders query
+  @@index([tokenAddress, balance], map: "holders_token_balance_idx") // Added for count queries with balance filter
+  @@map("holders")
+}
+
+// ============================================
+// TRANSACTIONS TABLE
+// Stores all buy/sell/create transactions
+// ============================================
+model Transaction {
+  hash           String   @id @db.VarChar(66)
+  userAddress    String   @db.VarChar(42)
+  tokenAddress   String   @db.VarChar(42)
+  type           TransactionType
+  amountIn       String   @db.VarChar(78) // BigInt as string
+  amountOut      String   @db.VarChar(78) // BigInt as string
+  price          Float    // Price at transaction time
+  timestamp      DateTime @default(now())
+  blockNumber    BigInt
+  status         TransactionStatus @default(SUCCESS)
+  gasUsed        String?  @db.VarChar(78)
+  gasPrice       String?  @db.VarChar(78)
+
+  // Relations
+  token Token @relation(fields: [tokenAddress], references: [address], onDelete: Cascade)
+
+  // Indexes
+  @@index([userAddress, timestamp(sort: Desc)])
+  @@index([tokenAddress, timestamp(sort: Desc)])
+  @@index([timestamp(sort: Desc)])
+  @@index([type])
+  @@map("transactions")
+}
+
+// ============================================
+// USER PORTFOLIOS TABLE
+// Aggregated user holdings with PnL tracking
+// ============================================
+model UserPortfolio {
+  id              String   @id @default(cuid())
+  userAddress     String   @db.VarChar(42)
+  tokenAddress    String   @db.VarChar(42)
+  balance         String   @db.VarChar(78) // Current balance
+  averagePrice    Float    @default(0) // Average buy price
+  totalInvested   Float    @default(0) // Total ETH invested
+  realizedPnL     Float    @default(0) // Realized profit/loss
+  unrealizedPnL   Float    @default(0) // Unrealized profit/loss
+  firstPurchase   DateTime @default(now())
+  lastUpdated     DateTime @updatedAt
+
+  // Relations
+  token Token @relation(fields: [tokenAddress], references: [address], onDelete: Cascade)
+
+  // Unique constraint
+  @@unique([userAddress, tokenAddress])
+  @@index([userAddress])
+  @@index([tokenAddress])
+  @@map("user_portfolios")
+}
+
+// ============================================
+// IPFS CACHE TABLE
+// Caches IPFS metadata to reduce gateway calls
+// ============================================
+model IPFSCache {
+  ipfsHash      String   @id @db.VarChar(100)
+  contentType   String   @db.VarChar(50) // json, image, etc.
+  data          Json?    // JSON metadata
+  blobURL       String?  @db.Text // For images, CDN URL
+  pinned        Boolean  @default(false)
+  uploadedAt    DateTime @default(now())
+  lastAccessed  DateTime @updatedAt
+  expiresAt     DateTime? // Optional TTL
+
+  @@index([lastAccessed])
+  @@map("ipfs_cache")
+}
+
+// ============================================
+// MARKET STATS TABLE
+// Daily aggregated market statistics
+// ============================================
+model MarketStat {
+  date            DateTime @id @db.Date
+  totalTokens     Int      @default(0)
+  totalMarketCap  Float    @default(0)
+  totalVolume24h  Float    @default(0)
+  totalHolders    Int      @default(0)
+  newTokens24h    Int      @default(0)
+  trades24h       Int      @default(0)
+  activeUsers24h  Int      @default(0)
+  avgTokenPrice   Float    @default(0)
+
+  @@index([date(sort: Desc)])
+  @@map("market_stats")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum TransactionType {
+  BUY
+  SELL
+  CREATE
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
