@@ -163,7 +163,7 @@ export const useMarketplace = () => {
             console.log(`✅ Loaded ${tokenAddresses.length} tokens from indexed file (last updated: ${indexedData.indexedAt || 'unknown'})`);
           }
         }
-      } catch (fileError) {
+      } catch {
         console.log('⚠️ Could not load indexed file, falling back to on-chain query...');
       }
       

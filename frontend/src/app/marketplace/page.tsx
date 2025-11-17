@@ -25,7 +25,7 @@ import {
 import Navbar from '@/components/layout/Navbar';
 import { VoteBanner } from '@/components/VoteBanner';
 import { formatCurrency, formatNumber } from '@/lib/utils';
-import { useMarketplace } from '@/hooks/useMarketplace';
+import { useMarketplaceBackend as useMarketplace } from '@/hooks/useMarketplaceBackend';
 import { useDebounce } from '@/hooks/useDebounce';
 import { TokenTradeModal } from '@/components/TokenTradeModal';
 import { getIPFSImageUrl } from '@/utils/ipfsImage';
@@ -106,8 +106,9 @@ const MarketplacePage = () => {
   const marketStats = {
     totalTokens: totalTokens || tokens.length,
     totalMarketCap: aggregateStats.totalMarketCap || tokens.reduce((sum, token) => sum + token.marketCap, 0),
-    totalHolders: tokens.reduce((sum, token) => sum + token.holders, 0), // Page-level only (expensive to calculate for all)
-    tradingTokens: aggregateStats.tradingTokens || tokens.filter(token => token.isTrading).length
+    totalHolders: aggregateStats.totalHolders || tokens.reduce((sum, token) => sum + token.holders, 0),
+    tradingTokens: aggregateStats.tradingTokens || tokens.filter(token => token.isTrading).length,
+    totalVolume24h: aggregateStats.totalVolume24h || 0
   };
 
   const handleOpenTradeModal = (token: Token) => {

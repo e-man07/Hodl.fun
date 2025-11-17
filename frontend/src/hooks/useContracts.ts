@@ -7,7 +7,7 @@ import { PushChain } from '@pushchain/core';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_FACTORY_ABI, TOKEN_MARKETPLACE_ABI, LAUNCHPAD_TOKEN_ABI } from '@/config/abis';
-import { uploadMetadataToIPFS, createTokenMetadata } from '@/lib/ipfs';
+import { uploadImage, uploadMetadata } from '@/lib/api/ipfs';
 
 // Types for contract interactions
 export interface TokenParams {
@@ -86,16 +86,36 @@ export const useContracts = () => {
       
       if (!metadataURI) {
         try {
-          const metadata = await createTokenMetadata(
-            params.name,
-            params.description || 'Token created on hodl.fun',
-            params.socialLinks,
-            params.logoFile
-          );
+          console.log('📤 Uploading logo to IPFS via backend...');
+          let logoUrl = '';
 
-          console.log('📤 Uploading metadata to IPFS...');
-          metadataURI = await uploadMetadataToIPFS(metadata);
-          console.log('✅ Metadata uploaded to IPFS:', metadataURI);
+          if (params.logoFile) {
+            const logoResponse = await uploadImage(params.logoFile, `${params.symbol}-logo`);
+            if (logoResponse.success) {
+              logoUrl = logoResponse.data.url;
+              console.log('✅ Logo uploaded:', logoUrl);
+            }
+          }
+
+          // Create metadata object
+          const metadata = {
+            name: params.name,
+            symbol: params.symbol,
+            description: params.description || 'Token created on hodl.fun',
+            image: logoUrl,
+            external_url: params.socialLinks?.website || '',
+            social_links: params.socialLinks || {},
+          };
+
+          console.log('📤 Uploading metadata to IPFS via backend...');
+          const metadataResponse = await uploadMetadata(metadata);
+
+          if (metadataResponse.success) {
+            metadataURI = metadataResponse.data.url;
+            console.log('✅ Metadata uploaded to IPFS:', metadataURI);
+          } else {
+            throw new Error('Metadata upload failed');
+          }
         } catch (ipfsError) {
           console.warn('⚠️ IPFS upload failed, using fallback metadata:', ipfsError);
           // Fallback to data URI if IPFS fails

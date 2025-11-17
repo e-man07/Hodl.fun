@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_FACTORY_ABI } from '@/config/abis';
-import { uploadMetadataToIPFS, createTokenMetadata } from '@/lib/ipfs';
+import { uploadImage, uploadMetadata } from '@/lib/api/ipfs';
 import { debugTokenParams, suggestFix } from '@/utils/debugContract';
 
 interface TokenParams {
@@ -53,17 +53,36 @@ export const useRealContracts = () => {
         signer
       );
 
-      // Create and upload metadata to IPFS
-      console.log('📤 Creating metadata for IPFS upload...');
-      const metadata = await createTokenMetadata(
-        params.name,
-        params.description,
-        params.socialLinks,
-        params.logoFile
-      );
+      // Create and upload metadata to IPFS via backend
+      console.log('📤 Uploading logo to IPFS via backend...');
+      let logoUrl = '';
 
-      console.log('📤 Uploading metadata to IPFS...');
-      const metadataURI = await uploadMetadataToIPFS(metadata);
+      if (params.logoFile) {
+        const logoResponse = await uploadImage(params.logoFile, `${params.symbol}-logo`);
+        if (logoResponse.success) {
+          logoUrl = logoResponse.data.url;
+          console.log('✅ Logo uploaded:', logoUrl);
+        }
+      }
+
+      // Create metadata object
+      const metadata = {
+        name: params.name,
+        symbol: params.symbol,
+        description: params.description,
+        image: logoUrl,
+        external_url: params.socialLinks?.website || '',
+        social_links: params.socialLinks || {},
+      };
+
+      console.log('📤 Uploading metadata to IPFS via backend...');
+      const metadataResponse = await uploadMetadata(metadata);
+
+      if (!metadataResponse.success) {
+        throw new Error('Failed to upload metadata to IPFS');
+      }
+
+      const metadataURI = metadataResponse.data.url;
       console.log('✅ Metadata uploaded to IPFS:', metadataURI);
 
       // Get creation fee from contract

@@ -30,12 +30,15 @@ export const useTokenTrading = () => {
   const clearError = () => setError(null);
 
   // Get token balance for the connected wallet
+  // Uses RPC for real-time balance (critical before trades)
   const getTokenBalance = async (tokenAddress: string): Promise<string> => {
     try {
       if (!isConnected || !address) {
         return '0';
       }
 
+      // Use RPC directly for current balance before selling
+      // Backend balance may be stale, need accurate amount for trades
       const provider = getProvider();
       if (!provider) {
         return '0';
@@ -56,6 +59,7 @@ export const useTokenTrading = () => {
   };
 
   // Calculate how many tokens you'll get for a given ETH amount
+  // Uses RPC for real-time accuracy (critical for trades)
   const calculateTokensForEth = async (
     tokenAddress: string,
     ethAmount: string
@@ -65,6 +69,8 @@ export const useTokenTrading = () => {
         return '0';
       }
 
+      // Use RPC directly for real-time bonding curve calculation
+      // Backend may be slightly stale, trades need current price
       const provider = getProvider();
       if (!provider) {
         return '0';
@@ -90,6 +96,7 @@ export const useTokenTrading = () => {
   };
 
   // Calculate how much ETH you'll get for a given token amount
+  // Uses RPC for real-time accuracy (critical for trades)
   const calculateEthForTokens = async (
     tokenAddress: string,
     tokenAmount: string
@@ -98,6 +105,9 @@ export const useTokenTrading = () => {
       if (!tokenAmount || parseFloat(tokenAmount) <= 0) {
         return '0';
       }
+
+      // Use RPC directly for real-time bonding curve calculation
+      // Backend may be slightly stale, trades need current price
 
       const provider = getProvider();
       if (!provider) {
