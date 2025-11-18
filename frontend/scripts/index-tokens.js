@@ -217,8 +217,14 @@ async function indexTokens() {
   // Also query TokenListed events from marketplace as backup - ONLY AFTER COMPLETING ALL FACTORY QUERIES
   console.log(`\n📋 STEP 3: Querying TokenListed events from marketplace as backup...`);
   console.log(`   This ensures we catch any tokens that might have been missed.\n`);
+  
+  // Track tokens before marketplace query to see how many NEW tokens are added
+  const tokensBeforeMarketplace = allTokenAddresses.size;
+  console.log(`   Current token count from factory: ${tokensBeforeMarketplace}`);
+  
   currentBlock = 0;
-  let marketplaceEvents = 0;
+  let marketplaceEventsProcessed = 0;
+  let newTokensFromMarketplace = 0;
   
   while (currentBlock <= latestBlock) {
     const toBlock = Math.min(currentBlock + BLOCK_CHUNK_SIZE - 1, latestBlock);
@@ -233,11 +239,19 @@ async function indexTokens() {
       
       if (events.length > 0) {
         console.log(`  📋 Found ${events.length} TokenListed events in blocks ${currentBlock}-${toBlock}`);
+        marketplaceEventsProcessed += events.length;
+        
         for (const event of events) {
           try {
             const decoded = marketplaceInterface.decodeEventLog('TokenListed', event.data, event.topics);
-            allTokenAddresses.add(decoded.tokenAddress.toLowerCase());
-            marketplaceEvents++;
+            const tokenAddress = decoded.tokenAddress.toLowerCase();
+            const sizeBefore = allTokenAddresses.size;
+            allTokenAddresses.add(tokenAddress);
+            
+            // Count only NEW tokens (Set size increased)
+            if (allTokenAddresses.size > sizeBefore) {
+              newTokensFromMarketplace++;
+            }
           } catch (err) {
             // Ignore decode errors
           }
@@ -254,15 +268,23 @@ async function indexTokens() {
     }
   }
   
-  if (marketplaceEvents > 0) {
-    console.log(`✅ Added ${marketplaceEvents} additional tokens from TokenListed events`);
+  console.log(`\n✅ Marketplace query complete:`);
+  console.log(`   Processed ${marketplaceEventsProcessed} TokenListed events`);
+  console.log(`   Added ${newTokensFromMarketplace} NEW unique tokens from marketplace`);
+  console.log(`   Tokens before marketplace: ${tokensBeforeMarketplace}`);
+  console.log(`   Tokens after marketplace: ${allTokenAddresses.size}`);
+  
+  if (newTokensFromMarketplace > 0) {
+    console.log(`   Note: ${marketplaceEventsProcessed - newTokensFromMarketplace} TokenListed events were for tokens already found in factory`);
   }
   
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
   console.log(`\n✅ Indexing complete!`);
-  console.log(`📊 Processed ${totalEvents} TokenCreated events`);
-  console.log(`📊 Processed ${marketplaceEvents} TokenListed events`);
-  console.log(`🎯 Found ${allTokenAddresses.size} unique tokens`);
+  console.log(`📊 Processed ${totalEvents} TokenCreated events → ${tokensBeforeMarketplace} unique tokens`);
+  console.log(`📊 Processed ${marketplaceEventsProcessed} TokenListed events → ${newTokensFromMarketplace} new unique tokens`);
+  console.log(`🎯 Total unique tokens: ${allTokenAddresses.size}`);
+  console.log(`   - From factory (TokenCreated): ${tokensBeforeMarketplace}`);
+  console.log(`   - From marketplace (TokenListed): ${newTokensFromMarketplace} (${allTokenAddresses.size - tokensBeforeMarketplace} total)`);
   console.log(`⏱️  Time taken: ${elapsed}s`);
   if (failedChunks.length > 0) {
     console.log(`⚠️  Note: ${failedChunks.length} chunks had errors but were retried`);
@@ -274,7 +296,14 @@ async function indexTokens() {
     totalTokens: allTokenAddresses.size,
     lastIndexedBlock: latestBlock,
     indexedAt: new Date().toISOString(),
-    indexedInSeconds: elapsed
+    indexedInSeconds: elapsed,
+    stats: {
+      tokenCreatedEvents: totalEvents,
+      uniqueTokensFromFactory: tokensBeforeMarketplace,
+      tokenListedEventsProcessed: marketplaceEventsProcessed,
+      newTokensFromMarketplace: newTokensFromMarketplace,
+      totalUniqueTokens: allTokenAddresses.size
+    }
   };
   
   // Ensure public directory exists
