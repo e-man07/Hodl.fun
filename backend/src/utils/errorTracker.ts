@@ -77,8 +77,10 @@ class ErrorTracker {
 
     // Trim cache if needed
     if (this.errorCache.size > this.maxCacheSize) {
-      const firstKey = this.errorCache.keys().next().value;
-      this.errorCache.delete(firstKey);
+      const firstKey = this.errorCache.keys().next().value as string;
+      if (firstKey) {
+        this.errorCache.delete(firstKey);
+      }
     }
 
     // Write to log file

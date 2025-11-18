@@ -21,7 +21,7 @@ export function getRedisClient(): Redis | null {
         connectTimeout: 10000,
         lazyConnect: false,
         maxLoadingRetryTime: 10000,
-        retryStrategy(times) {
+        retryStrategy(times: number) {
           if (times > 10) {
             logger.error('Redis max retries exceeded, giving up');
             return null; // Stop retrying after 10 attempts
@@ -29,7 +29,7 @@ export function getRedisClient(): Redis | null {
           const delay = Math.min(times * 50, 2000);
           return delay;
         },
-        reconnectOnError(err) {
+        reconnectOnError(err: Error) {
           const targetError = 'READONLY';
           if (err.message.includes(targetError)) {
             return true;

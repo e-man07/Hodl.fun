@@ -12,9 +12,9 @@ build/
 .env
 .env.local
 .env.*.local
+.env.railway
 # But keep example files
 !.env.example
-!.env.railway.example
 
 # Logs
 logs/
