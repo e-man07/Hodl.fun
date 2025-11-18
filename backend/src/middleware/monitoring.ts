@@ -13,7 +13,12 @@ declare global {
     interface Request {
       id?: string;
       startTime?: number;
-      user?: { address: string };
+      user?: {
+        address: string;
+        role?: string;
+        iat?: number;
+        exp?: number;
+      };
     }
   }
 }

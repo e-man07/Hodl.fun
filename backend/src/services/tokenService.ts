@@ -20,10 +20,10 @@ export class TokenService {
       order = 'desc',
       search,
       creator,
-      minMarketCap,
-      maxMarketCap,
-      minPrice,
-      maxPrice,
+      minMarketCap: _minMarketCap,
+      maxMarketCap: _maxMarketCap,
+      minPrice: _minPrice,
+      maxPrice: _maxPrice,
     } = params;
 
     const skip = (page - 1) * limit;
@@ -133,8 +133,8 @@ export class TokenService {
    * DEPRECATED: TokenMetric table removed - frontend calculates these values
    */
   async getTokenMetrics(
-    address: string,
-    period: '1h' | '24h' | '7d' | '30d' | 'all' = '24h'
+    _address: string,
+    _period: '1h' | '24h' | '7d' | '30d' | 'all' = '24h'
   ) {
     // Return empty array - frontend doesn't use this anymore
     return [];

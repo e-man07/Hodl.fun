@@ -15,6 +15,10 @@ export const formatNumber = (num: number, decimals: number = 2): string => {
   if (num >= 1e3) {
     return (num / 1e3).toFixed(decimals) + 'K';
   }
+  // For small numbers, use more decimals to avoid showing 0.00
+  if (num < 0.01 && num > 0) {
+    return num.toFixed(6);
+  }
   return num.toFixed(decimals);
 };
 

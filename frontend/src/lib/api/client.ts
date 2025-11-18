@@ -3,7 +3,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 
 // API configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ac1fc6411fc4.ngrok-free.app/api/v1';
 const API_TIMEOUT = 30000; // 30 seconds
 
 // Create axios instance
@@ -12,6 +12,7 @@ const apiClient: AxiosInstance = axios.create({
   timeout: API_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true', // Skip ngrok browser warning page
   },
 });
 

@@ -33,7 +33,7 @@ export async function uploadMetadata(metadata: {
   image?: string;
   external_url?: string;
   attributes?: Array<{ trait_type: string; value: string | number }>;
-  social?: {
+  social_links?: {
     twitter?: string;
     telegram?: string;
     website?: string;
