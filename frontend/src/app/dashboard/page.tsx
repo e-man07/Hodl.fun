@@ -27,7 +27,6 @@ import {
   Check,
 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
-import { VoteBanner } from '@/components/VoteBanner';
 import {
   formatCurrency,
   truncateAddress,
@@ -107,7 +106,6 @@ const DashboardPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <VoteBanner />
       <Navbar />
 
       <div className="container mx-auto px-4 py-12">

@@ -1,40 +1,167 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Zap,
+  Search,
   TrendingUp,
-  Shield,
   Coins,
   Users,
+  Clock,
+  ExternalLink,
   BarChart3,
-  Rocket,
-  ArrowRight,
-  Star,
-  Globe,
-  Clock
+  RefreshCw,
+  Loader2,
+  Filter,
+  SortAsc,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
-import Image from 'next/image';
 import Navbar from '@/components/layout/Navbar';
-import { VoteBanner } from '@/components/VoteBanner';
+import { DegenOnboardingModal } from '@/components/DegenOnboardingModal';
+import { formatCurrency, formatNumber } from '@/lib/utils';
+import { useMarketplace } from '@/hooks/useMarketplace';
+import { useDebounce } from '@/hooks/useDebounce';
+import { TokenTradeModal } from '@/components/TokenTradeModal';
+import { getIPFSImageUrl } from '@/utils/ipfsImage';
 
-// Animation hook for intersection observer
-const useInView = (options = {}) => {
-  const ref = useRef<HTMLElement>(null);
-  const [isInView, setIsInView] = useState(false);
+interface Token {
+  address: string;
+  name: string;
+  symbol: string;
+  description: string;
+  price: number;
+  marketCap: number;
+  holders: number;
+  createdAt: string;
+  creator: string;
+  reserveRatio: number;
+  isTrading: boolean;
+  logo?: string;
+  currentSupply: number;
+  totalSupply: number;
+  reserveBalance: number;
+}
 
+const HomePage = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'marketCap' | 'holders' | 'createdAt'>('marketCap');
+  const [filterBy, setFilterBy] = useState<'all' | 'new' | 'trading'>('all');
+  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
+  const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
+  const [showRefreshNotification, setShowRefreshNotification] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
+  
+  // Debounce search query for better performance
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  
+  // Fetch real tokens from blockchain
+  const { 
+    tokens, 
+    isLoading, 
+    isInitializing,
+    error, 
+    refreshTokens, 
+    totalTokens, 
+    currentPage, 
+    totalPages, 
+    loadPage
+  } = useMarketplace();
+
+  // Auto-refresh every 30 seconds for live feel
   useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setIsInView(true);
-      }
-    }, { threshold: 0.1, ...options });
+    const interval = setInterval(() => {
+      refreshTokens();
+      setLastUpdateTime(new Date());
+    }, 30000); // 30 seconds
 
-    const currentRef = ref.current;
+    return () => clearInterval(interval);
+  }, [refreshTokens]);
+  
+  const filteredTokens = tokens
+    .filter(token => {
+      // Use debounced search query for better performance
+      const matchesSearch = debouncedSearchQuery === '' ||
+                          token.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+                          token.symbol.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+                          token.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+
+      switch (filterBy) {
+        case 'new':
+          return matchesSearch && new Date(token.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Last 7 days
+        case 'trading':
+          return matchesSearch && token.isTrading;
+        default:
+          return matchesSearch;
+      }
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'marketCap':
+          return b.marketCap - a.marketCap;
+        case 'holders':
+          return b.holders - a.holders;
+        case 'createdAt':
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        default:
+          return 0;
+      }
+    });
+
+  // Calculate stats only from current page tokens (fast, no expensive calculations)
+  const marketStats = {
+    totalTokens: totalTokens || tokens.length,
+    totalMarketCap: tokens.reduce((sum, token) => sum + token.marketCap, 0), // Page-level only
+    totalHolders: tokens.reduce((sum, token) => sum + token.holders, 0), // Page-level only
+    tradingTokens: tokens.filter(token => token.isTrading).length // Page-level only
+  };
+
+  const handleOpenTradeModal = (token: Token) => {
+    setSelectedToken(token);
+    setIsTradeModalOpen(true);
+  };
+
+  const handleCloseTradeModal = () => {
+    setIsTradeModalOpen(false);
+  };
+
+  // Listen for token data changes and show notification
+  useEffect(() => {
+    const handleTokenDataChanged = () => {
+      setShowRefreshNotification(true);
+      setTimeout(() => {
+        setShowRefreshNotification(false);
+      }, 3000); // Hide notification after 3 seconds
+    };
+
+    window.addEventListener('tokenDataChanged', handleTokenDataChanged);
+    
+    return () => {
+      window.removeEventListener('tokenDataChanged', handleTokenDataChanged);
+    };
+  }, []);
+
+  const TokenCard = ({ token, index }: { token: Token; index: number }) => {
+    const [isVisible, setIsVisible] = useState(false);
+    const cardRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            setTimeout(() => setIsVisible(true), index * 50); // Stagger animation
+          }
+        },
+        { threshold: 0.1 }
+      );
+
+      const currentRef = cardRef.current;
     if (currentRef) {
       observer.observe(currentRef);
     }
@@ -44,492 +171,559 @@ const useInView = (options = {}) => {
         observer.unobserve(currentRef);
       }
     };
-  }, [options]);
+    }, [index]);
 
-  return { ref, isInView };
-};
+    return (
+      <Card
+        ref={cardRef}
+        className={`hover:shadow-xl hover:border-primary/50 transition-all duration-500 cursor-pointer group border-2 overflow-hidden hover:-translate-y-1 ${
+          isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+        }`}
+      >
+        <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center space-x-3 min-w-0 flex-1">
+            {token.logo ? (
+              <div className="relative w-12 h-12 flex-shrink-0 overflow-hidden rounded-full group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+                <Image
+                  src={getIPFSImageUrl(token.logo)}
+                  alt={`${token.name} logo`}
+                  width={48}
+                  height={48}
+                  className="w-full h-full object-cover border-2 border-border rounded-full"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    const parent = target.parentElement;
+                    if (parent) {
+                      parent.innerHTML = `<div class="w-12 h-12 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary font-bold text-sm">${token.symbol.slice(0, 2)}</div>`;
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="w-12 h-12 flex-shrink-0 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary font-bold text-sm group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                {token.symbol.slice(0, 2)}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <CardTitle className="text-lg group-hover:text-primary transition-colors truncate">
+                {token.name}
+              </CardTitle>
+              <CardDescription className="flex items-center space-x-2">
+                <span className="font-mono text-xs">{token.symbol}</span>
+                {token.isTrading ? (
+                  <Badge variant="default" className="text-xs bg-primary/10 text-primary border-primary/20">
+                    <TrendingUp className="w-3 h-3 mr-1" />
+                    Trading
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-xs">
+                    <Clock className="w-3 h-3 mr-1" />
+                    Bonding
+                  </Badge>
+                )}
+              </CardDescription>
+            </div>
+          </div>
+          
+          {/* Price Section */}
+          <div className="text-right flex-shrink-0 ml-3">
+            <p className="text-sm text-muted-foreground">Current Price</p>
+            <p className="text-lg font-bold text-primary">{formatCurrency(token.price)}</p>
+          </div>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="pt-0">
+        <p className="text-sm text-muted-foreground mb-4 line-clamp-2 leading-relaxed">
+          {token.description}
+        </p>
+        
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-2 gap-4 text-sm mb-4 p-3 bg-muted/30 rounded-lg border border-border/50">
+          <div className="space-y-1">
+            <p className="text-muted-foreground text-xs flex items-center gap-1">
+              <TrendingUp className="w-3 h-3" />
+              Market Cap
+            </p>
+            <p className="font-semibold text-foreground">{formatCurrency(token.marketCap)}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-muted-foreground text-xs flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              Holders
+            </p>
+            <p className="font-semibold text-foreground">{formatNumber(token.holders)}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-muted-foreground text-xs flex items-center gap-1">
+              <Coins className="w-3 h-3" />
+              Supply
+            </p>
+            <p className="font-semibold text-foreground">{formatNumber(token.currentSupply)}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-muted-foreground text-xs flex items-center gap-1">
+              <BarChart3 className="w-3 h-3" />
+              Reserve
+            </p>
+            <p className="font-semibold text-foreground">{token.reserveRatio}%</p>
+          </div>
+        </div>
 
-// Counter animation hook
-const useCountUp = (end: number, duration = 2000, isInView: boolean) => {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    if (!isInView) return;
-
-    let startTime: number;
-    let animationFrame: number;
-
-    const animate = (currentTime: number) => {
-      if (!startTime) startTime = currentTime;
-      const progress = Math.min((currentTime - startTime) / duration, 1);
-
-      setCount(Math.floor(progress * end));
-
-      if (progress < 1) {
-        animationFrame = requestAnimationFrame(animate);
-      }
-    };
-
-    animationFrame = requestAnimationFrame(animate);
-
-    return () => cancelAnimationFrame(animationFrame);
-  }, [end, duration, isInView]);
-
-  return count;
-};
-
-const HomePage = () => {
-  const [mounted, setMounted] = useState(false);
-  const stats = useInView();
-  const features = useInView();
-  const steps = useInView();
-  const cta = useInView();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const featuresData = [
-    {
-      icon: <Zap className="h-6 w-6" />,
-      title: 'Instant Token Creation',
-      description: 'Launch your ERC20 token in minutes with our intuitive interface and automated smart contracts.',
-    },
-    {
-      icon: <TrendingUp className="h-6 w-6" />,
-      title: 'Bonding Curve Pricing',
-      description: 'Automated price discovery through bonding curves ensures fair token distribution and liquidity.',
-    },
-    {
-      icon: <Shield className="h-6 w-6" />,
-      title: 'Security First',
-      description: 'Built with battle-tested OpenZeppelin contracts and comprehensive security measures.',
-    },
-    {
-      icon: <Coins className="h-6 w-6" />,
-      title: 'Auto Marketplace Listing',
-      description: 'Tokens are automatically listed on our marketplace with built-in trading functionality.',
-    },
-    {
-      icon: <Users className="h-6 w-6" />,
-      title: 'Community Driven',
-      description: 'Connect with other token creators and traders in our vibrant ecosystem.',
-    },
-    {
-      icon: <BarChart3 className="h-6 w-6" />,
-      title: 'Advanced Analytics',
-      description: 'Track your token performance with detailed analytics and real-time metrics.',
-    },
-  ];
-
-  const statsData = [
-    { label: 'Tokens Launched', value: '1,234+', numericValue: 1234, suffix: '+' },
-    { label: 'Total Volume', value: '$2.5M+', numericValue: 2.5, suffix: 'M+', prefix: '$' },
-    { label: 'Active Users', value: '5,678+', numericValue: 5678, suffix: '+' },
-    { label: 'Success Rate', value: '98%', numericValue: 98, suffix: '%' },
-  ];
-
-  const stepsData = [
-    {
-      step: '01',
-      title: 'Create Token',
-      description: 'Define your token parameters including name, symbol, supply, and metadata.',
-    },
-    {
-      step: '02',
-      title: 'Auto Deploy',
-      description: 'Our smart contracts automatically deploy and list your token on the marketplace.',
-    },
-    {
-      step: '03',
-      title: 'Start Trading',
-      description: 'Begin trading immediately with bonding curve pricing and automated liquidity.',
-    },
-  ];
+        {/* Action Buttons */}
+        <Button
+          size="sm"
+          className="w-full h-9 group"
+          onClick={() => handleOpenTradeModal(token)}
+        >
+          <Coins className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform duration-200" />
+          Trade Token
+        </Button>
+      </CardContent>
+    </Card>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
-      <VoteBanner />
+      <DegenOnboardingModal />
       <Navbar />
       
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-background">
-        {/* Animated background gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5 animate-gradient-shift" />
-
-        <div className="container relative mx-auto px-4 py-12 sm:py-20 lg:py-32">
-          <div className="mx-auto max-w-5xl">
-            <div className="text-center mb-12 sm:mb-16">
-              <Badge
-                variant="secondary"
-                className={`mb-6 sm:mb-8 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold tracking-wide transition-all duration-700 ${
-                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
-                }`}
-                style={{ transitionDelay: '100ms' }}
-              >
-                <Star className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-pulse" />
-                Live On Push Chain Testnet
-              </Badge>
-
-              <h1
-                className={`mb-6 sm:mb-8 text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight text-center transition-all duration-700 ${
-                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '200ms' }}
-              >
-                <span className="bg-gradient-to-r from-primary via-primary/80 to-primary bg-clip-text text-transparent block">
-                  Universal Token Launchpad
-                </span>
-              </h1>
-
-              <p
-                className={`mx-auto mb-8 sm:mb-10 max-w-3xl text-base sm:text-xl md:text-2xl text-muted-foreground leading-relaxed font-normal text-center transition-all duration-700 ${
-                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '300ms' }}
-              >
-                The first universal token launchpad. Launch tokens using any chain&apos;s native currency—Ethereum, Solana, and more. 
-                Trade seamlessly across chains with automated liquidity and bonding curves.{' '}
-                <span className="text-primary font-semibold">Launch Once, Trade Anywhere.</span>
-              </p>
-
-              <div
-                className={`flex flex-col gap-4 sm:gap-5 sm:flex-row sm:justify-center mb-12 sm:mb-16 px-4 transition-all duration-700 ${
-                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '400ms' }}
-              >
-                <Button
-                  size="lg"
-                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 group relative overflow-hidden"
-                  asChild
-                >
+      <div className="container mx-auto px-4 py-12">
+        {/* Header - Degen Style */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+            </div>
+            <Button size="lg" className="bg-gradient-to-r from-primary to-primary/80 hover:scale-105 transition-transform" asChild>
                   <Link href="/launch">
-                    <span className="absolute inset-0 bg-gradient-to-r from-primary/0 via-white/20 to-primary/0 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
-                    <Rocket className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:rotate-12 transition-transform duration-300" />
-                    Launch Your Token
+                <Coins className="mr-2 h-5 w-5" />
+                Create Token
                   </Link>
                 </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto hover:bg-primary/10 border-2 transition-all duration-300 hover:border-primary/50 group"
-                  asChild
-                >
-                  <Link href="/marketplace">
-                    <BarChart3 className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:scale-110 transition-transform duration-300" />
-                    Explore Marketplace
-                    <ArrowRight className="ml-2 sm:ml-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:translate-x-1 transition-transform duration-300" />
-                  </Link>
+          </div>
+          
+          {/* Trending Now Section */}
+          {!isInitializing && filteredTokens.length > 0 && (
+            <div className="mb-8">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="h-5 w-5 text-primary animate-pulse" />
+                <h2 className="text-2xl font-bold">Trending Now 🔥</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {filteredTokens
+                  .sort((a, b) => b.marketCap - a.marketCap)
+                  .slice(0, 4)
+                  .map((token, index) => (
+                    <Card
+                      key={token.address}
+                      className="border-2 hover:border-primary/50 transition-all cursor-pointer group hover:shadow-lg hover:-translate-y-1 bg-gradient-to-br from-card to-card/50"
+                      onClick={() => handleOpenTradeModal(token)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            {token.logo ? (
+                              <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-primary/20">
+                                <Image
+                                  src={getIPFSImageUrl(token.logo)}
+                                  alt={token.name}
+                                  width={40}
+                                  height={40}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary font-bold text-sm">
+                                {token.symbol.slice(0, 2)}
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-bold text-sm">{token.symbol}</p>
+                              <p className="text-xs text-muted-foreground truncate max-w-[100px]">{token.name}</p>
+                            </div>
+                          </div>
+                          {index === 0 && (
+                            <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-0 animate-pulse">
+                              #1
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Market Cap</p>
+                          <p className="text-lg font-bold text-primary">{formatCurrency(token.marketCap)}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Loading/Error States */}
+          {isInitializing && (
+            <div className="flex flex-col items-center justify-center gap-3 mt-4">
+              <div className="flex items-center gap-2 text-primary">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-lg font-medium">Loading tokens...</span>
+              </div>
+            </div>
+          )}
+          
+          {!isInitializing && isLoading && (
+            <div className="flex items-center justify-center gap-2 mt-4 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading page tokens...</span>
+            </div>
+          )}
+
+          {/* Live Update Indicator */}
+          <div className="flex items-center justify-center gap-2 mt-4 text-xs text-muted-foreground">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <span>Live • Updated {lastUpdateTime.toLocaleTimeString()}</span>
+          </div>
+
+          {/* Refresh Notification */}
+          {showRefreshNotification && (
+            <div className="flex items-center justify-center gap-2 mt-4 text-primary bg-primary/10 border border-primary/20 rounded-lg p-3 animate-in slide-in-from-top-2">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span>Updating market data after your transaction...</span>
+            </div>
+          )}
+          
+          {error && (
+            <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
+              <p><strong>Error loading tokens:</strong> {error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshTokens}
+                className="mt-2"
+              >
+                Try Again
+              </Button>
+            </div>
+          )}
+          
+          {!isInitializing && !isLoading && !error && tokens.length === 0 && (
+            <div className="mt-4 p-4 bg-muted/30 border border-border rounded-lg text-muted-foreground">
+              <p>No tokens found on the marketplace yet. Be the first to launch a token!</p>
+            </div>
+          )}
+                    </div>
+
+        {/* Market Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {isInitializing ? (
+            // Skeleton loaders for stats cards
+            <>
+              {[1, 2, 3, 4].map((i) => (
+                <Card key={i} className="border-2">
+                  <CardContent className="p-6 text-center">
+                    <div className="w-12 h-12 bg-muted/30 rounded-lg mx-auto mb-3 animate-pulse" />
+                    <div className="h-8 w-16 bg-muted/30 rounded mx-auto mb-2 animate-pulse" />
+                    <div className="h-4 w-24 bg-muted/30 rounded mx-auto animate-pulse" />
+                  </CardContent>
+                </Card>
+              ))}
+            </>
+          ) : (
+            <>
+              <Card className="border-2 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group">
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                    <Coins className="h-6 w-6 text-primary" />
+            </div>
+                  <p className="text-2xl font-bold text-foreground">{marketStats.totalTokens}</p>
+                  <p className="text-sm text-muted-foreground">Total Tokens</p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-2 hover:border-secondary/30 transition-all duration-300 hover:shadow-lg group">
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                    <TrendingUp className="h-6 w-6 text-secondary" />
+          </div>
+                  <p className="text-2xl font-bold text-foreground">{formatCurrency(marketStats.totalMarketCap)}</p>
+                  <p className="text-sm text-muted-foreground">Total Market Cap</p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-2 hover:border-accent/30 transition-all duration-300 hover:shadow-lg group">
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                    <BarChart3 className="h-6 w-6 text-accent-foreground" />
+                  </div>
+                  <p className="text-2xl font-bold text-foreground">{marketStats.tradingTokens}</p>
+                  <p className="text-sm text-muted-foreground">Trading Active</p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-2 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group">
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                    <Users className="h-6 w-6 text-primary" />
+                  </div>
+                  <p className="text-2xl font-bold text-foreground">{formatNumber(marketStats.totalHolders)}</p>
+                  <p className="text-sm text-muted-foreground">Total Holders</p>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
+
+        {/* Enhanced Filters and Search */}
+        {!isInitializing && (
+          <div className="mb-8">
+            <div className="flex flex-col lg:flex-row gap-4 mb-4">
+              {/* Search Bar */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Search tokens by name, symbol, or description..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-10"
+                />
+              </div>
+              
+              {/* Filter Controls */}
+              <div className="flex flex-wrap gap-2">
+                <Select value={filterBy} onValueChange={(value) => setFilterBy(value as 'all' | 'new' | 'trading')}>
+                  <SelectTrigger className="w-[140px] h-10">
+                    <Filter className="mr-2 h-4 w-4" />
+                    <SelectValue placeholder="Filter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Tokens</SelectItem>
+                    <SelectItem value="new">✨ New</SelectItem>
+                    <SelectItem value="trading">📈 Trading</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'marketCap' | 'holders' | 'createdAt')}>
+                  <SelectTrigger className="w-[140px] h-10">
+                    <SortAsc className="mr-2 h-4 w-4" />
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="marketCap">Market Cap</SelectItem>
+                    <SelectItem value="holders">Holders</SelectItem>
+                    <SelectItem value="createdAt">Newest</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Button variant="outline" size="sm" onClick={refreshTokens} disabled={isLoading || isInitializing} className="h-10">
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isLoading || isInitializing ? 'animate-spin' : ''}`} />
+                  Refresh
                 </Button>
               </div>
             </div>
 
-            {/* Key Benefits */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8 max-w-5xl mx-auto">
-              {[
-                {
-                  icon: <Clock className="h-6 w-6 sm:h-7 sm:w-7 text-primary" />,
-                  title: 'Launch in Minutes',
-                  description: 'Deploy your token in under 5 minutes with our streamlined interface',
-                  bgColor: 'bg-primary/10',
-                  borderColor: 'border-primary/20',
-                  hoverBg: 'group-hover:bg-primary/20',
-                },
-                {
-                  icon: <Shield className="h-6 w-6 sm:h-7 sm:w-7 text-secondary" />,
-                  title: 'Enterprise Security',
-                  description: 'Battle-tested smart contracts with comprehensive security audits',
-                  bgColor: 'bg-secondary/10',
-                  borderColor: 'border-secondary/20',
-                  hoverBg: 'group-hover:bg-secondary/20',
-                },
-                {
-                  icon: <Globe className="h-6 w-6 sm:h-7 sm:w-7 text-accent-foreground" />,
-                  title: 'Global Marketplace',
-                  description: 'Instant listing with automated liquidity and global accessibility',
-                  bgColor: 'bg-accent/20',
-                  borderColor: 'border-accent/30',
-                  hoverBg: 'group-hover:bg-accent/30',
-                },
-              ].map((benefit, index) => (
-                <Card
-                  key={index}
-                  className={`group text-center border-2 hover:border-primary/50 transition-all duration-500 hover:shadow-lg hover:-translate-y-2 bg-card ${
-                    mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                  }`}
-                  style={{ transitionDelay: `${500 + index * 100}ms` }}
-                >
-                  <CardContent className="pt-6 pb-6 px-5 sm:pt-8 sm:pb-8 sm:px-6">
-                    <div className={`w-12 h-12 sm:w-14 sm:h-14 ${benefit.bgColor} border-2 ${benefit.borderColor} rounded-xl flex items-center justify-center mx-auto mb-4 sm:mb-5 ${benefit.hoverBg} transition-all duration-300 group-hover:scale-110 group-hover:rotate-3`}>
-                      {benefit.icon}
-                    </div>
-                    <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-foreground group-hover:text-primary transition-colors duration-300">
-                      {benefit.title}
-                    </h3>
-                    <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-                      {benefit.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
+            {/* Filter Summary */}
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span>
+                Showing {filteredTokens.length} of {tokens.length} token{filteredTokens.length !== 1 ? 's' : ''} on this page
+                {totalTokens > tokens.length && ` (${totalTokens} total)`}
+              </span>
+              {debouncedSearchQuery && (
+                <Badge variant="secondary" className="text-xs">
+                  Search: &ldquo;{debouncedSearchQuery}&rdquo;
+                </Badge>
+              )}
+              {filterBy !== 'all' && (
+                <Badge variant="secondary" className="text-xs">
+                  Filter: {filterBy === 'new' ? '✨ New' :
+                          filterBy === 'trading' ? '📈 Trading' : filterBy}
+                </Badge>
+              )}
+              <Badge variant="secondary" className="text-xs">
+                Sort: {sortBy === 'marketCap' ? 'Market Cap' :
+                      sortBy === 'holders' ? 'Holders' : 'Newest'}
+            </Badge>
             </div>
           </div>
-        </div>
-      </section>
+        )}
 
-      {/* Stats Section */}
-      <section ref={stats.ref} className="bg-muted/30 py-12 sm:py-16 lg:py-20 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5" />
-        <div className="container mx-auto px-4 relative">
-          <div className="grid grid-cols-2 gap-6 sm:gap-8 md:gap-10 md:grid-cols-4 max-w-5xl mx-auto">
-            {statsData.map((stat, index) => {
-              const StatCounter = () => {
-                const count = useCountUp(stat.numericValue, 2000, stats.isInView);
-                const displayValue = stat.label === 'Total Volume'
-                  ? (count / 1).toFixed(1)
-                  : count.toLocaleString();
-
-                return (
-                  <div
-                    className={`text-2xl sm:text-4xl md:text-5xl font-bold text-primary mb-2 sm:mb-3 group-hover:scale-110 transition-all duration-300 ${
-                      stats.isInView ? 'opacity-100' : 'opacity-0'
-                    }`}
-                    style={{ transitionDelay: `${index * 100}ms` }}
-                  >
-                    {stat.prefix}{displayValue}{stat.suffix}
+        {/* Token Grid */}
+        {(isInitializing || isLoading) && tokens.length === 0 ? (
+          // Skeleton loaders for token cards
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} className="border-2 animate-pulse">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3 min-w-0 flex-1">
+                      <div className="w-12 h-12 rounded-full bg-muted/30" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-5 w-32 bg-muted/30 rounded" />
+                        <div className="h-4 w-24 bg-muted/30 rounded" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-4 w-16 bg-muted/30 rounded" />
+                      <div className="h-6 w-20 bg-muted/30 rounded" />
+                    </div>
                   </div>
-                );
-              };
-
-              return (
-                <div
-                  key={index}
-                  className={`text-center group transition-all duration-500 ${
-                    stats.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                  }`}
-                  style={{ transitionDelay: `${index * 100}ms` }}
-                >
-                  <StatCounter />
-                  <div className="text-sm sm:text-base md:text-lg text-muted-foreground font-semibold group-hover:text-foreground transition-colors duration-300">
-                    {stat.label}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section ref={features.ref} className="py-16 sm:py-20 lg:py-28 bg-background">
-        <div className="container mx-auto px-4">
-          <div
-            className={`mx-auto max-w-3xl text-center mb-12 sm:mb-16 lg:mb-20 transition-all duration-700 ${
-              features.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}
-          >
-            <Badge variant="outline" className="mb-4 sm:mb-6 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold">
-              <Zap className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Advanced Features
-            </Badge>
-            <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4 sm:mb-6 leading-tight px-2">
-              Enterprise-Grade Token Infrastructure
-            </h2>
-            <p className="text-base sm:text-xl text-muted-foreground leading-relaxed px-4">
-              Professional-grade tools and infrastructure designed for serious token creators and traders.
-            </p>
-          </div>
-
-          <div className="grid gap-6 sm:gap-8 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
-            {featuresData.map((feature, index) => (
-              <Card
-                key={index}
-                className={`group hover:shadow-xl transition-all duration-500 border-2 hover:border-primary/50 hover:-translate-y-2 bg-card ${
-                  features.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
-                }`}
-                style={{ transitionDelay: `${index * 100}ms` }}
-              >
-                <CardHeader className="pb-4 sm:pb-5 pt-6 sm:pt-7 px-6 sm:px-7">
-                  <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl bg-primary/10 text-primary mb-4 sm:mb-5 group-hover:bg-primary/20 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6">
-                    {feature.icon}
-                  </div>
-                  <CardTitle className="text-lg sm:text-xl font-bold group-hover:text-primary transition-colors duration-300">{feature.title}</CardTitle>
                 </CardHeader>
-                <CardContent className="px-6 sm:px-7 pb-6 sm:pb-7">
-                  <CardDescription className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-                    {feature.description}
-                  </CardDescription>
+                <CardContent className="pt-0">
+                  <div className="space-y-2 mb-4">
+                    <div className="h-4 w-full bg-muted/30 rounded" />
+                    <div className="h-4 w-3/4 bg-muted/30 rounded" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-muted/10 rounded-lg">
+                    {[1, 2, 3, 4].map((j) => (
+                      <div key={j} className="space-y-2">
+                        <div className="h-3 w-16 bg-muted/30 rounded" />
+                        <div className="h-5 w-20 bg-muted/30 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="h-9 w-full bg-muted/30 rounded" />
                 </CardContent>
               </Card>
             ))}
           </div>
+        ) : !isLoading && filteredTokens.length > 0 ? (
+          <>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              {filteredTokens.map((token, index) => (
+                <TokenCard key={token.address} token={token} index={index} />
+              ))}
         </div>
-      </section>
 
-      {/* How It Works Section */}
-      <section ref={steps.ref} className="py-16 sm:py-20 lg:py-28 bg-muted/20 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent" />
-        <div className="container mx-auto px-4 relative">
-          <div
-            className={`mx-auto max-w-3xl text-center mb-12 sm:mb-16 lg:mb-20 transition-all duration-700 ${
-              steps.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}
-          >
-            <Badge variant="secondary" className="mb-4 sm:mb-6 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold">
-              <Rocket className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Getting Started
-            </Badge>
-            <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4 sm:mb-6 leading-tight px-2">
-              Simple Three-Step Process
-            </h2>
-            <p className="text-base sm:text-xl text-muted-foreground leading-relaxed px-4">
-              Launch your token in minutes with our streamlined, automated platform.
-            </p>
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-8 border-t border-border">
+                <div className="text-sm text-muted-foreground">
+                  Showing page {currentPage} of {totalPages} ({totalTokens} total tokens)
           </div>
 
-          <div className="grid gap-8 sm:gap-10 md:gap-12 md:grid-cols-3 max-w-6xl mx-auto">
-            {stepsData.map((step, index) => (
-              <div
-                key={index}
-                className={`relative transition-all duration-700 ${
-                  steps.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
-                }`}
-                style={{ transitionDelay: `${index * 150}ms` }}
-              >
-                <Card className="text-center border-2 hover:border-primary/50 transition-all duration-500 p-6 sm:p-8 hover:shadow-xl group bg-card hover:-translate-y-2">
-                  <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl sm:text-2xl font-bold mb-5 sm:mb-7 mx-auto group-hover:scale-110 transition-all duration-300 shadow-lg group-hover:shadow-xl group-hover:rotate-12">
-                    {step.step}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadPage(currentPage - 1)}
+                    disabled={currentPage === 1 || isLoading}
+                    className="h-9"
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" />
+                    Previous
+                  </Button>
+                  
+                  {/* Page Numbers */}
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => loadPage(pageNum)}
+                          disabled={isLoading}
+                          className="h-9 w-9 p-0"
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
                   </div>
-                  <h3 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-5 group-hover:text-primary transition-colors duration-300">{step.title}</h3>
-                  <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">{step.description}</p>
-                </Card>
-                {index < stepsData.length - 1 && (
-                  <div className="hidden md:flex absolute top-1/2 -right-6 transform -translate-y-1/2 z-10">
-                    <div className="bg-background p-3 rounded-full border-2 border-primary/20 shadow-sm group-hover:border-primary/50 transition-colors duration-300">
-                      <ArrowRight className="h-5 w-5 text-primary animate-pulse" />
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadPage(currentPage + 1)}
+                    disabled={currentPage === totalPages || isLoading}
+                    className="h-9"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
                     </div>
                   </div>
                 )}
+          </>
+        ) : !isInitializing && !isLoading ? (
+          <Card className="text-center py-16 border-2 border-dashed border-border">
+            <CardContent>
+              <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Search className="h-8 w-8 text-muted-foreground" />
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section ref={cta.ref} className="py-16 sm:py-20 lg:py-28 bg-background relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-secondary/10 animate-gradient-shift" />
-        <div className="container mx-auto px-4 relative">
-          <Card
-            className={`border-2 shadow-xl max-w-5xl mx-auto bg-gradient-to-br from-card to-muted/30 overflow-hidden relative transition-all duration-700 ${
-              cta.isInView ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-12 scale-95'
-            }`}
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5" />
-            <CardContent className="p-8 sm:p-12 lg:p-14 text-center relative">
-              <Badge
-                variant="outline"
-                className={`mb-6 sm:mb-8 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all duration-700 ${
-                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
-                }`}
-                style={{ transitionDelay: '200ms' }}
-              >
-                <Star className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-pulse" />
-                Ready to Get Started?
-              </Badge>
-              <h2
-                className={`text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-5 sm:mb-7 leading-tight px-2 transition-all duration-700 ${
-                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '300ms' }}
-              >
-                Ready to Launch Your Token?
-              </h2>
-              <p
-                className={`text-base sm:text-xl text-muted-foreground mb-8 sm:mb-10 max-w-3xl mx-auto leading-relaxed px-4 transition-all duration-700 ${
-                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '400ms' }}
-              >
-                Join the growing ecosystem of professional token creators. Launch your token with
-                automated marketplace listing and enterprise-grade infrastructure.
+              <h3 className="text-xl font-semibold mb-3 text-foreground">
+                {tokens.length === 0 ? 'No tokens launched yet' : 'No tokens found'}
+              </h3>
+              <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                {tokens.length === 0
+                  ? 'Be the first to launch a token on our platform!'
+                  : 'Try adjusting your search or filter criteria'
+                }
               </p>
-              <div
-                className={`flex flex-col gap-4 sm:gap-5 sm:flex-row sm:justify-center transition-all duration-700 ${
-                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '500ms' }}
-              >
-                <Button
-                  size="lg"
-                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 group relative overflow-hidden"
-                  asChild
-                >
-                  <Link href="/launch">
-                    <span className="absolute inset-0 bg-gradient-to-r from-primary/0 via-white/20 to-primary/0 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
-                    <Rocket className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:rotate-12 transition-transform duration-300" />
-                    Start Building Now
-                    <ArrowRight className="ml-2 sm:ml-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:translate-x-1 transition-transform duration-300" />
-                  </Link>
+              <div className="flex gap-2 justify-center">
+                {tokens.length === 0 ? (
+                  <Button asChild>
+                    <a href="/launch">Launch Your Token</a>
                 </Button>
+                ) : (
                 <Button
                   variant="outline"
-                  size="lg"
-                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto hover:bg-primary/10 border-2 transition-all duration-300 hover:border-primary/50 group"
-                  asChild
-                >
-                  <Link href="/marketplace">
-                    <BarChart3 className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:scale-110 transition-transform duration-300" />
-                    Browse Tokens
-                  </Link>
+                    onClick={() => {
+                      setSearchQuery('');
+                      setFilterBy('all');
+                    }}
+                  >
+                    Clear Filters
                 </Button>
+                )}
               </div>
             </CardContent>
           </Card>
-        </div>
-      </section>
+        ) : null}
 
-      {/* Footer */}
-      <footer className="border-t bg-muted/20 py-12 sm:py-16 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent opacity-50" />
-        <div className="container mx-auto px-4 relative">
-          <div className="flex flex-col items-center justify-between gap-6 sm:gap-8 md:flex-row">
-            <div className="flex items-center space-x-3 sm:space-x-4 group">
-              <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg overflow-hidden shadow-md transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
-                <Image
-                  src="/hodl-logo.png"
-                  alt="hodl.fun logo"
-                  width={48}
-                  height={48}
-                  className="object-contain"
-                />
-              </div>
-              <span className="text-2xl sm:text-3xl font-bold text-primary transition-all duration-300 group-hover:scale-105">
-                hodl.fun
-              </span>
-            </div>
-            <div className="flex flex-col items-center gap-5 sm:gap-6 md:flex-row md:gap-10">
-              <nav className="flex gap-6 sm:gap-8">
-                <Link href="/launch" className="text-sm sm:text-base text-muted-foreground hover:text-primary transition-all duration-300 font-semibold hover:scale-110 inline-block">
-                  Launch
-                </Link>
-                <Link href="/marketplace" className="text-sm sm:text-base text-muted-foreground hover:text-primary transition-all duration-300 font-semibold hover:scale-110 inline-block">
-                  Marketplace
-                </Link>
-                <Link href="/dashboard" className="text-sm sm:text-base text-muted-foreground hover:text-primary transition-all duration-300 font-semibold hover:scale-110 inline-block">
-                  Dashboard
-                </Link>
-              </nav>
-              <p className="text-sm sm:text-base text-muted-foreground font-medium text-center">
-                © 2024 hodl.fun. Professional token infrastructure.
+        {/* CTA Section */}
+        <div className="mt-16">
+          <Card className="bg-gradient-to-r from-primary/10 to-secondary/10 border-0">
+            <CardContent className="p-8 text-center">
+              <h2 className="text-2xl font-bold mb-4">
+                Ready to Launch Your Own Token?
+              </h2>
+              <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
+                Join the growing ecosystem of token creators. Launch your token with automated 
+                marketplace listing and bonding curve liquidity in just a few clicks.
               </p>
-            </div>
-          </div>
+              <Button size="lg" asChild>
+                <a href="/launch">
+                  Launch Your Token
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
         </div>
-      </footer>
+      </div>
+
+      {/* Trading Modal */}
+      {selectedToken && (
+        <TokenTradeModal
+          isOpen={isTradeModalOpen}
+          onClose={handleCloseTradeModal}
+          token={selectedToken}
+        />
+      )}
     </div>
   );
 };
 
 export default HomePage;
+

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI, LAUNCHPAD_TOKEN_ABI } from '@/config/abis';
-import { getCachedToken, setCachedToken, getCachedSortedTokens, setCachedSortedTokens, getCachedAggregateStats, setCachedAggregateStats, getCachedTotalTokens, setCachedTotalTokens } from '@/lib/tokenCache';
+import { getCachedToken, setCachedToken, getCachedSortedTokens, setCachedSortedTokens, getCachedTotalTokens, setCachedTotalTokens } from '@/lib/tokenCache';
 import { fetchIPFSMetadata } from '@/lib/ipfsCache';
 import { deduplicatedFetch } from '@/lib/requestDeduplication';
 
@@ -49,13 +49,6 @@ export const useMarketplace = () => {
   const [sortedTokenAddresses, setSortedTokenAddresses] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [tokensPerPage] = useState(24); // 20-25 tokens per page
-  const [aggregateStats, setAggregateStats] = useState<{
-    totalMarketCap: number;
-    tradingTokens: number;
-  }>({
-    totalMarketCap: 0,
-    tradingTokens: 0
-  });
 
   // Use the new optimized IPFS fetching with caching and racing
   const fetchTokenMetadata = async (metadataURI: string): Promise<TokenMetadata | null> => {
@@ -163,7 +156,7 @@ export const useMarketplace = () => {
             console.log(`✅ Loaded ${tokenAddresses.length} tokens from indexed file (last updated: ${indexedData.indexedAt || 'unknown'})`);
           }
         }
-      } catch (fileError) {
+      } catch {
         console.log('⚠️ Could not load indexed file, falling back to on-chain query...');
       }
       
@@ -202,13 +195,13 @@ export const useMarketplace = () => {
         setTotalTokens(tokenAddresses.length);
       }
 
-      // Fetch market caps in batches to sort tokens and calculate aggregate stats
-      console.log('📊 Fetching market caps for sorting and aggregate stats...');
-      const BATCH_SIZE = 50; // Fetch market caps in batches of 50
+      // Fetch market caps ONLY for sorting (not for aggregate stats)
+      // Fetch in batches but don't calculate totals
+      console.log('📊 Fetching market caps for sorting...');
+      const BATCH_SIZE = 50;
       const tokenInfoPromises: Array<Promise<{ 
         address: string; 
         marketCap: bigint;
-        tradingEnabled: boolean;
       }>> = [];
 
       for (let i = 0; i < tokenAddresses.length; i += BATCH_SIZE) {
@@ -218,15 +211,13 @@ export const useMarketplace = () => {
             const tokenInfo = await marketplaceContract.getTokenInfo(address);
             return { 
               address, 
-              marketCap: tokenInfo.marketCap,
-              tradingEnabled: tokenInfo.tradingEnabled
+              marketCap: tokenInfo.marketCap
             };
           } catch (error) {
             console.warn(`Failed to get token info for ${address}:`, error);
             return { 
               address, 
-              marketCap: BigInt(0),
-              tradingEnabled: false
+              marketCap: BigInt(0)
             };
           }
         });
@@ -234,41 +225,13 @@ export const useMarketplace = () => {
 
         // Add small delay between batches to avoid rate limiting
         if (i + BATCH_SIZE < tokenAddresses.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 50)); // Reduced delay
         }
       }
 
       const tokenInfos = await Promise.all(tokenInfoPromises);
 
-      // Calculate aggregate stats from all tokens
-      let totalMarketCap = BigInt(0);
-      let tradingTokensCount = 0;
-      
-      for (const info of tokenInfos) {
-        totalMarketCap += info.marketCap;
-        if (info.tradingEnabled) {
-          tradingTokensCount++;
-        }
-      }
-
-      const totalMarketCapEth = parseFloat(ethers.formatEther(totalMarketCap));
-      
-      console.log(`📊 Aggregate stats: Total Market Cap: ${totalMarketCapEth} ETH, Trading Tokens: ${tradingTokensCount}`);
-      
-      const aggregateStatsData = {
-        totalMarketCap: totalMarketCapEth,
-        tradingTokens: tradingTokensCount
-      };
-
-      // Cache aggregate stats
-      setCachedAggregateStats(aggregateStatsData);
-
-      // Only update state if not in silent mode
-      if (!silent) {
-        setAggregateStats(aggregateStatsData);
-      }
-
-      // Sort by market cap (descending)
+      // Sort by market cap (descending) - highest market cap first
       const sorted = tokenInfos
         .sort((a, b) => {
           if (b.marketCap > a.marketCap) return 1;
@@ -277,12 +240,12 @@ export const useMarketplace = () => {
         })
         .map(info => info.address);
 
-      console.log('✅ Sorted tokens by market cap');
+      console.log(`✅ Sorted ${sorted.length} tokens by market cap`);
 
-      // Cache sorted token addresses for fast subsequent loads
+      // Cache sorted token addresses
       setCachedSortedTokens(sorted);
 
-      // Only update state if not in silent mode or if data changed
+      // Only update state if not in silent mode
       if (!silent) {
         setSortedTokenAddresses(sorted);
         setIsInitializing(false);
@@ -470,7 +433,6 @@ export const useMarketplace = () => {
     if (sortedTokenAddresses.length === 0) {
       // Try to load from cache first for instant display
       const cachedAddresses = getCachedSortedTokens();
-      const cachedStats = getCachedAggregateStats();
       const cachedTotal = getCachedTotalTokens();
 
       if (cachedAddresses && cachedAddresses.length > 0) {
@@ -483,12 +445,6 @@ export const useMarketplace = () => {
           setTotalTokens(cachedTotal);
         } else {
           setTotalTokens(cachedAddresses.length);
-        }
-
-        // Load cached stats
-        if (cachedStats) {
-          console.log('✅ Loaded aggregate stats from cache');
-          setAggregateStats(cachedStats);
         }
 
         // Fetch fresh data in the background to update cache (silent mode - no state updates)
@@ -523,7 +479,6 @@ export const useMarketplace = () => {
     currentPage,
     totalPages,
     tokensPerPage,
-    loadPage,
-    aggregateStats
+    loadPage
   };
 };

@@ -13,7 +13,6 @@ const Navbar = () => {
 
   const navItems = [
     { href: "/launch", label: "Launch Token" },
-    { href: "/marketplace", label: "Marketplace" },
     { href: "/dashboard", label: "Dashboard" },
   ];
 
@@ -25,13 +24,13 @@ const Navbar = () => {
           <div className="flex h-10 w-10 items-center justify-center rounded-lg overflow-hidden">
             <Image
               src="/hodl-logo.png"
-              alt="hodl.fun logo"
+              alt="Hodl.fun logo"
               width={40}
               height={40}
               className="object-contain"
             />
           </div>
-          <span className="text-2xl font-bold text-primary">hodl.fun</span>
+          <span className="text-2xl font-bold text-primary">Hodl.fun</span>
         </Link>
 
         {/* Desktop Navigation */}
@@ -67,13 +66,13 @@ const Navbar = () => {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
                   <Image
                     src="/hodl-logo.png"
-                    alt="hodl.fun logo"
+                    alt="Hodl.fun logo"
                     width={32}
                     height={32}
                     className="object-contain"
                   />
                 </div>
-                <span className="text-xl font-bold text-primary">hodl.fun</span>
+                <span className="text-xl font-bold text-primary">Hodl.fun</span>
               </div>
 
               <nav className="flex flex-col space-y-2">
