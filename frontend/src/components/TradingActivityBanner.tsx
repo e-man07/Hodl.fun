@@ -59,7 +59,7 @@ export const TradingActivityBanner = () => {
 
       // Get current block number
       const currentBlock = await provider.getBlockNumber();
-      const fromBlock = Math.max(0, currentBlock - 5000); // Last ~5k blocks (reduced for performance)
+      const fromBlock = Math.max(0, currentBlock - 10000); // Last ~5k blocks (reduced for performance)
 
       // Fetch both buy and sell events (limit to recent ones)
       const [buyEvents, sellEvents] = await Promise.all([

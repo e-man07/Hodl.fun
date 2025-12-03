@@ -42,6 +42,60 @@ interface TokenTradeModalProps {
   };
 }
 
+// Parse error messages into user-friendly messages
+const parseErrorMessage = (error: string | null): string => {
+  if (!error) return '';
+  
+  const errorLower = error.toLowerCase();
+  
+  // Connection errors
+  if (errorLower.includes('wallet not connected') || errorLower.includes('not connected')) {
+    return 'Please connect your wallet to continue.';
+  }
+  
+  if (errorLower.includes('user rejected') || errorLower.includes('user denied')) {
+    return 'Transaction was cancelled.';
+  }
+  
+  // Transaction revert errors
+  if (errorLower.includes('execution reverted')) {
+    if (errorLower.includes('insufficient balance') || errorLower.includes('insufficient funds')) {
+      return 'Insufficient balance. Please check your wallet.';
+    }
+    if (errorLower.includes('slippage') || errorLower.includes('price moved')) {
+      return 'Price moved too much. Try increasing slippage tolerance or try again.';
+    }
+    if (errorLower.includes('allowance') || errorLower.includes('approval')) {
+      return 'Token approval required. Please try again.';
+    }
+    if (errorLower.includes('insufficient liquidity') || errorLower.includes('liquidity')) {
+      return 'Insufficient liquidity. The trade amount may be too large.';
+    }
+    if (errorLower.includes('amount') && errorLower.includes('zero')) {
+      return 'Trade amount must be greater than zero.';
+    }
+    return 'Transaction failed. Please try again or check your inputs.';
+  }
+  
+  // Gas errors
+  if (errorLower.includes('gas') || errorLower.includes('out of gas')) {
+    return 'Transaction failed due to gas issues. Please try again.';
+  }
+  
+  // Network errors
+  if (errorLower.includes('network') || errorLower.includes('rpc') || errorLower.includes('provider')) {
+    return 'Network error. Please check your connection and try again.';
+  }
+  
+  // Generic fallback - return first sentence or truncate long messages
+  const firstSentence = error.split('.')[0].trim();
+  if (firstSentence.length > 100) {
+    return 'Transaction failed. Please try again.';
+  }
+  
+  return firstSentence || 'Transaction failed. Please try again.';
+};
+
 export const TokenTradeModal = ({ isOpen, onClose, token }: TokenTradeModalProps) => {
   const { connectionStatus } = usePushWalletContext();
   const isConnected = connectionStatus === PushUI.CONSTANTS.CONNECTION.STATUS.CONNECTED;
@@ -53,6 +107,7 @@ export const TokenTradeModal = ({ isOpen, onClose, token }: TokenTradeModalProps
     getTokenBalance,
     isLoading,
     error,
+    clearError,
   } = useTokenTrading();
 
   // State
@@ -94,12 +149,15 @@ export const TokenTradeModal = ({ isOpen, onClose, token }: TokenTradeModalProps
     }
   }, [tokenAmount, token.address, calculateEthForTokens]);
 
-  // Load token balance when modal opens
+  // Clear errors and load token balance when modal opens or token changes
   useEffect(() => {
-    if (isOpen && isConnected && token.address) {
-      loadTokenBalance();
+    if (isOpen) {
+      clearError(); // Clear any previous errors when modal opens or token changes
+      if (isConnected && token.address) {
+        loadTokenBalance();
+      }
     }
-  }, [isOpen, isConnected, token.address, loadTokenBalance]);
+  }, [isOpen, token.address, isConnected, clearError, loadTokenBalance]);
 
   // Calculate estimated tokens/ETH when inputs change
   useEffect(() => {
@@ -170,6 +228,7 @@ export const TokenTradeModal = ({ isOpen, onClose, token }: TokenTradeModalProps
     setEstimatedEth('0');
     setTxHash(null);
     setTxSuccess(false);
+    clearError(); // Clear errors when modal closes
     onClose();
   };
 
@@ -398,8 +457,10 @@ export const TokenTradeModal = ({ isOpen, onClose, token }: TokenTradeModalProps
         {/* Error Message */}
         {error && (
           <Alert className="mt-4 bg-red-50 text-red-800 border-red-200">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <AlertDescription className="text-sm break-words">
+              {parseErrorMessage(error)}
+            </AlertDescription>
           </Alert>
         )}
 
