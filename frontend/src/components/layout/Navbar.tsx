@@ -17,19 +17,17 @@ const Navbar = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b border-border/20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between px-4 max-w-none">
         {/* Logo */}
         <Link href="/" className="flex items-center space-x-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg overflow-hidden">
-            <Image
-              src="/hodl-logo.png"
-              alt="Hodl.fun logo"
-              width={40}
-              height={40}
-              className="object-contain"
-            />
-          </div>
+          <Image
+            src="/hodl-logo.png"
+            alt="Hodl.fun logo"
+            width={40}
+            height={40}
+            className="object-contain"
+          />
           <span className="text-2xl font-bold text-primary">Hodl.fun</span>
         </Link>
 
@@ -63,15 +61,13 @@ const Navbar = () => {
           <SheetContent side="right" className="w-[300px] sm:w-[400px]">
             <div className="flex flex-col space-y-4 mt-6">
               <div className="flex items-center space-x-3 mb-6">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
-                  <Image
-                    src="/hodl-logo.png"
-                    alt="Hodl.fun logo"
-                    width={32}
-                    height={32}
-                    className="object-contain"
-                  />
-                </div>
+                <Image
+                  src="/hodl-logo.png"
+                  alt="Hodl.fun logo"
+                  width={32}
+                  height={32}
+                  className="object-contain"
+                />
                 <span className="text-xl font-bold text-primary">Hodl.fun</span>
               </div>
 
