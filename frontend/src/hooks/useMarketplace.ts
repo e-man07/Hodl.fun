@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI, LAUNCHPAD_TOKEN_ABI } from '@/config/abis';
-import { getCachedToken, setCachedToken, getCachedSortedTokens, setCachedSortedTokens, getCachedTotalTokens, setCachedTotalTokens } from '@/lib/tokenCache';
+import { getCachedToken, setCachedToken, getCachedSortedTokens, setCachedSortedTokens, getCachedTotalTokens, setCachedTotalTokens, removeCachedToken } from '@/lib/tokenCache';
 import { fetchIPFSMetadata } from '@/lib/ipfsCache';
 import { deduplicatedFetch } from '@/lib/requestDeduplication';
 
@@ -195,52 +195,13 @@ export const useMarketplace = () => {
         setTotalTokens(tokenAddresses.length);
       }
 
-      // Fetch market caps ONLY for sorting (not for aggregate stats)
-      // Fetch in batches but don't calculate totals
-      console.log('📊 Fetching market caps for sorting...');
-      const BATCH_SIZE = 50;
-      const tokenInfoPromises: Array<Promise<{ 
-        address: string; 
-        marketCap: bigint;
-      }>> = [];
+      // Sort by newest first (tokens in listedTokens array are in chronological order)
+      // Use array as-is to show newest first (oldest last)
+      // This requires NO RPC calls, preventing rate limiting
+      console.log('📊 Sorting tokens by creation order (newest first)...');
+      const sorted = [...tokenAddresses]; // Use as-is to show newest first
 
-      for (let i = 0; i < tokenAddresses.length; i += BATCH_SIZE) {
-        const batch = tokenAddresses.slice(i, i + BATCH_SIZE);
-        const batchPromises = batch.map(async (address) => {
-          try {
-            const tokenInfo = await marketplaceContract.getTokenInfo(address);
-            return { 
-              address, 
-              marketCap: tokenInfo.marketCap
-            };
-          } catch (error) {
-            console.warn(`Failed to get token info for ${address}:`, error);
-            return { 
-              address, 
-              marketCap: BigInt(0)
-            };
-          }
-        });
-        tokenInfoPromises.push(...batchPromises);
-
-        // Add small delay between batches to avoid rate limiting
-        if (i + BATCH_SIZE < tokenAddresses.length) {
-          await new Promise(resolve => setTimeout(resolve, 50)); // Reduced delay
-        }
-      }
-
-      const tokenInfos = await Promise.all(tokenInfoPromises);
-
-      // Sort by market cap (descending) - highest market cap first
-      const sorted = tokenInfos
-        .sort((a, b) => {
-          if (b.marketCap > a.marketCap) return 1;
-          if (b.marketCap < a.marketCap) return -1;
-          return 0;
-        })
-        .map(info => info.address);
-
-      console.log(`✅ Sorted ${sorted.length} tokens by market cap`);
+      console.log(`✅ Sorted ${sorted.length} tokens by creation order (newest first)`);
 
       // Cache sorted token addresses
       setCachedSortedTokens(sorted);
@@ -386,8 +347,9 @@ export const useMarketplace = () => {
       // Filter out null results and set tokens
       const validTokens = tokenResults.filter((token): token is MarketplaceToken => token !== null);
       
-      // Sort by market cap to maintain order (in case of async updates)
-      validTokens.sort((a, b) => b.marketCap - a.marketCap);
+      // Tokens are already sorted by creation order (oldest first) from sortedTokenAddresses
+      // Promise.all maintains the order of results, so no need to re-sort
+      // This prevents RPC rate limiting that would occur from fetching market caps for all tokens
       
       console.log(`✅ Successfully fetched ${validTokens.length} tokens for page ${page}`);
       setTokens(validTokens);
@@ -409,6 +371,82 @@ export const useMarketplace = () => {
     }
   }, [fetchAndSortTokenAddresses, fetchMarketplaceTokens, currentPage]);
 
+  // Refresh a specific token's data (used after trades)
+  const refreshTokenData = useCallback(async (tokenAddress: string) => {
+    try {
+      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+      const marketplaceContract = new ethers.Contract(
+        CONTRACT_ADDRESSES.TokenMarketplace,
+        TOKEN_MARKETPLACE_ABI,
+        provider
+      );
+
+      // Fetch fresh token info from blockchain
+      const [tokenInfo, tokenDetails, priceWei] = await Promise.all([
+        marketplaceContract.getTokenInfo(tokenAddress),
+        fetchTokenDetails(tokenAddress, provider),
+        marketplaceContract.getCurrentPrice(tokenAddress).catch(() => BigInt(0))
+      ]);
+
+      if (!tokenDetails) return;
+
+      const currentPrice = parseFloat(ethers.formatEther(priceWei));
+      const marketCap = parseFloat(ethers.formatEther(tokenInfo.marketCap));
+      const totalSupply = parseFloat(ethers.formatEther(tokenInfo.totalSupply));
+      const currentSupply = parseFloat(ethers.formatEther(tokenInfo.currentSupply));
+      const reserveBalance = parseFloat(ethers.formatEther(tokenInfo.reserveBalance));
+
+      const updatedToken: MarketplaceToken = {
+        address: tokenAddress,
+        name: tokenDetails.name,
+        symbol: tokenDetails.symbol,
+        description: 'Loading...',
+        price: currentPrice,
+        priceChange24h: 0,
+        marketCap,
+        volume24h: 0,
+        holders: 0,
+        createdAt: new Date(Number(tokenInfo.launchTimestamp) * 1000).toISOString().split('T')[0],
+        creator: tokenInfo.creator,
+        reserveRatio: Number(tokenInfo.reserveRatio) / 100,
+        isTrading: tokenInfo.tradingEnabled,
+        logo: undefined,
+        currentSupply,
+        totalSupply,
+        reserveBalance
+      };
+
+      // Update cache with fresh data
+      setCachedToken(tokenAddress, updatedToken);
+
+      // Update state if token is on current page
+      setTokens(prevTokens =>
+        prevTokens.map(t => t.address === tokenAddress ? updatedToken : t)
+      );
+
+      // Fetch metadata asynchronously (non-blocking)
+      fetchTokenMetadata(tokenInfo.metadataURI).then((metadata) => {
+        if (metadata) {
+          const finalToken = {
+            ...updatedToken,
+            description: metadata.description || 'No description available',
+            logo: metadata.image || undefined
+          };
+          setCachedToken(tokenAddress, finalToken);
+          setTokens(prevTokens =>
+            prevTokens.map(t => t.address === tokenAddress ? finalToken : t)
+          );
+        }
+      }).catch(() => {
+        // Metadata fetch failed, but we still have the updated market cap
+      });
+
+      console.log(`✅ Refreshed token data for ${tokenDetails.symbol}: Market Cap = ${marketCap} ETH`);
+    } catch (error) {
+      console.error(`❌ Error refreshing token data for ${tokenAddress}:`, error);
+    }
+  }, []);
+
   const loadPage = useCallback(async (page: number) => {
     setCurrentPage(page);
     await fetchMarketplaceTokens(page);
@@ -417,8 +455,22 @@ export const useMarketplace = () => {
   // Listen for token data changes (from trading transactions)
   useEffect(() => {
     const handleTokenDataChanged = (event: CustomEvent) => {
-      console.log('🔄 Token data changed, refreshing marketplace...', event.detail);
-      refreshTokens();
+      const tokenAddress = event.detail?.tokenAddress;
+      console.log('🔄 Token data changed, refreshing marketplace...', tokenAddress);
+      
+      if (tokenAddress) {
+        // Invalidate cache for the specific token that was traded
+        removeCachedToken(tokenAddress);
+        console.log(`🗑️ Invalidated cache for token: ${tokenAddress}`);
+        
+        // Refresh the specific token's data immediately
+        refreshTokenData(tokenAddress);
+      }
+      
+      // Also refresh the current page to ensure all data is up to date
+      setTimeout(() => {
+        fetchMarketplaceTokens(currentPage);
+      }, 1000); // Small delay to ensure blockchain state is updated
     };
 
     window.addEventListener('tokenDataChanged', handleTokenDataChanged as EventListener);
@@ -426,7 +478,7 @@ export const useMarketplace = () => {
     return () => {
       window.removeEventListener('tokenDataChanged', handleTokenDataChanged as EventListener);
     };
-  }, [refreshTokens]);
+  }, [currentPage, fetchMarketplaceTokens, refreshTokenData]);
 
   // Load cached data on mount and fetch fresh data in background
   useEffect(() => {

@@ -127,11 +127,12 @@ export const TokenTradeModal = ({ isOpen, onClose, token }: TokenTradeModalProps
       loadTokenBalance(); // Refresh balance
       
       // Trigger marketplace refresh after successful transaction
+      // Wait longer for blockchain confirmation and market cap update
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('tokenDataChanged', { 
           detail: { tokenAddress: token.address } 
         }));
-      }, 2000); // Wait 2 seconds for blockchain confirmation
+      }, 5000); // Wait 5 seconds for blockchain confirmation and market cap update
     }
   };
 
@@ -152,11 +153,12 @@ export const TokenTradeModal = ({ isOpen, onClose, token }: TokenTradeModalProps
       loadTokenBalance(); // Refresh balance
       
       // Trigger marketplace refresh after successful transaction
+      // Wait longer for blockchain confirmation and market cap update
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('tokenDataChanged', { 
           detail: { tokenAddress: token.address } 
         }));
-      }, 2000); // Wait 2 seconds for blockchain confirmation
+      }, 5000); // Wait 5 seconds for blockchain confirmation and market cap update
     }
   };
 

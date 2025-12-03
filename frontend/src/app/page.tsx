@@ -56,7 +56,8 @@ const HomePage = () => {
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
   const [showRefreshNotification, setShowRefreshNotification] = useState(false);
-  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
+  const [mounted, setMounted] = useState(false);
   
   // Debounce search query for better performance
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
@@ -74,15 +75,14 @@ const HomePage = () => {
     loadPage
   } = useMarketplace();
 
-  // Auto-refresh every 30 seconds for live feel
+  // Set mounted state on client only to prevent hydration errors
   useEffect(() => {
-    const interval = setInterval(() => {
-      refreshTokens();
-      setLastUpdateTime(new Date());
-    }, 30000); // 30 seconds
+    setMounted(true);
+    setLastUpdateTime(new Date());
+  }, []);
 
-    return () => clearInterval(interval);
-  }, [refreshTokens]);
+  // Removed auto-refresh to prevent random platform refreshes
+  // Users can manually refresh using the refresh button if needed
   
   const filteredTokens = tokens
     .filter(token => {
@@ -114,13 +114,6 @@ const HomePage = () => {
       }
     });
 
-  // Calculate stats only from current page tokens (fast, no expensive calculations)
-  const marketStats = {
-    totalTokens: totalTokens || tokens.length,
-    totalMarketCap: tokens.reduce((sum, token) => sum + token.marketCap, 0), // Page-level only
-    totalHolders: tokens.reduce((sum, token) => sum + token.holders, 0), // Page-level only
-    tradingTokens: tokens.filter(token => token.isTrading).length // Page-level only
-  };
 
   const handleOpenTradeModal = (token: Token) => {
     setSelectedToken(token);
@@ -316,7 +309,7 @@ const HomePage = () => {
                   .sort((a, b) => b.marketCap - a.marketCap)
                   .slice(0, 4)
                   .map((token, index) => (
-                    <Card
+                <Card
                       key={token.address}
                       className="border-2 hover:border-primary/50 transition-all cursor-pointer group hover:shadow-lg hover:-translate-y-1 bg-gradient-to-br from-card to-card/50"
                       onClick={() => handleOpenTradeModal(token)}
@@ -353,11 +346,11 @@ const HomePage = () => {
                         <div className="space-y-1">
                           <p className="text-xs text-muted-foreground">Market Cap</p>
                           <p className="text-lg font-bold text-primary">{formatCurrency(token.marketCap)}</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-              </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
             </div>
           )}
           
@@ -367,8 +360,8 @@ const HomePage = () => {
               <div className="flex items-center gap-2 text-primary">
                 <Loader2 className="h-5 w-5 animate-spin" />
                 <span className="text-lg font-medium">Loading tokens...</span>
-              </div>
-            </div>
+          </div>
+        </div>
           )}
           
           {!isInitializing && isLoading && (
@@ -377,12 +370,6 @@ const HomePage = () => {
               <span>Loading page tokens...</span>
             </div>
           )}
-
-          {/* Live Update Indicator */}
-          <div className="flex items-center justify-center gap-2 mt-4 text-xs text-muted-foreground">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span>Live • Updated {lastUpdateTime.toLocaleTimeString()}</span>
-          </div>
 
           {/* Refresh Notification */}
           {showRefreshNotification && (
@@ -413,99 +400,39 @@ const HomePage = () => {
           )}
                     </div>
 
-        {/* Market Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          {isInitializing ? (
-            // Skeleton loaders for stats cards
-            <>
-              {[1, 2, 3, 4].map((i) => (
-                <Card key={i} className="border-2">
-                  <CardContent className="p-6 text-center">
-                    <div className="w-12 h-12 bg-muted/30 rounded-lg mx-auto mb-3 animate-pulse" />
-                    <div className="h-8 w-16 bg-muted/30 rounded mx-auto mb-2 animate-pulse" />
-                    <div className="h-4 w-24 bg-muted/30 rounded mx-auto animate-pulse" />
-                  </CardContent>
-                </Card>
-              ))}
-            </>
-          ) : (
-            <>
-              <Card className="border-2 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
-                    <Coins className="h-6 w-6 text-primary" />
-            </div>
-                  <p className="text-2xl font-bold text-foreground">{marketStats.totalTokens}</p>
-                  <p className="text-sm text-muted-foreground">Total Tokens</p>
-                </CardContent>
-              </Card>
-
-              <Card className="border-2 hover:border-secondary/30 transition-all duration-300 hover:shadow-lg group">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
-                    <TrendingUp className="h-6 w-6 text-secondary" />
-          </div>
-                  <p className="text-2xl font-bold text-foreground">{formatCurrency(marketStats.totalMarketCap)}</p>
-                  <p className="text-sm text-muted-foreground">Total Market Cap</p>
-                </CardContent>
-              </Card>
-
-              <Card className="border-2 hover:border-accent/30 transition-all duration-300 hover:shadow-lg group">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
-                    <BarChart3 className="h-6 w-6 text-accent-foreground" />
-                  </div>
-                  <p className="text-2xl font-bold text-foreground">{marketStats.tradingTokens}</p>
-                  <p className="text-sm text-muted-foreground">Trading Active</p>
-                </CardContent>
-              </Card>
-
-              <Card className="border-2 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
-                    <Users className="h-6 w-6 text-primary" />
-                  </div>
-                  <p className="text-2xl font-bold text-foreground">{formatNumber(marketStats.totalHolders)}</p>
-                  <p className="text-sm text-muted-foreground">Total Holders</p>
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </div>
-
-        {/* Enhanced Filters and Search */}
+        {/* Compact Filters and Search */}
         {!isInitializing && (
-          <div className="mb-8">
-            <div className="flex flex-col lg:flex-row gap-4 mb-4">
+          <div className="mb-6">
+            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
               {/* Search Bar */}
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <div className="relative flex-1 w-full sm:max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
-                  placeholder="Search tokens by name, symbol, or description..."
+                  placeholder="Search tokens..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-10"
+                  className="pl-8 h-9 text-sm border-primary/20 focus:border-primary/50"
                 />
-              </div>
+                  </div>
               
-              {/* Filter Controls */}
-              <div className="flex flex-wrap gap-2">
+              {/* Compact Filter Controls */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <Select value={filterBy} onValueChange={(value) => setFilterBy(value as 'all' | 'new' | 'trading')}>
-                  <SelectTrigger className="w-[140px] h-10">
-                    <Filter className="mr-2 h-4 w-4" />
-                    <SelectValue placeholder="Filter" />
+                  <SelectTrigger className="w-[120px] h-9 text-sm border-primary/20">
+                    <Filter className="mr-1.5 h-3.5 w-3.5" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Tokens</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
                     <SelectItem value="new">✨ New</SelectItem>
                     <SelectItem value="trading">📈 Trading</SelectItem>
                   </SelectContent>
                 </Select>
 
                 <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'marketCap' | 'holders' | 'createdAt')}>
-                  <SelectTrigger className="w-[140px] h-10">
-                    <SortAsc className="mr-2 h-4 w-4" />
-                    <SelectValue placeholder="Sort by" />
+                  <SelectTrigger className="w-[130px] h-9 text-sm border-primary/20">
+                    <SortAsc className="mr-1.5 h-3.5 w-3.5" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="marketCap">Market Cap</SelectItem>
@@ -514,35 +441,41 @@ const HomePage = () => {
                   </SelectContent>
                 </Select>
                 
-                <Button variant="outline" size="sm" onClick={refreshTokens} disabled={isLoading || isInitializing} className="h-10">
-                  <RefreshCw className={`mr-2 h-4 w-4 ${isLoading || isInitializing ? 'animate-spin' : ''}`} />
-                  Refresh
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={refreshTokens} 
+                  disabled={isLoading || isInitializing} 
+                  className="h-9 px-3 border-primary/20 hover:border-primary/50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isLoading || isInitializing ? 'animate-spin' : ''}`} />
                 </Button>
-              </div>
-            </div>
+                  </div>
 
-            {/* Filter Summary */}
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>
-                Showing {filteredTokens.length} of {tokens.length} token{filteredTokens.length !== 1 ? 's' : ''} on this page
-                {totalTokens > tokens.length && ` (${totalTokens} total)`}
-              </span>
-              {debouncedSearchQuery && (
-                <Badge variant="secondary" className="text-xs">
-                  Search: &ldquo;{debouncedSearchQuery}&rdquo;
-                </Badge>
-              )}
-              {filterBy !== 'all' && (
-                <Badge variant="secondary" className="text-xs">
-                  Filter: {filterBy === 'new' ? '✨ New' :
-                          filterBy === 'trading' ? '📈 Trading' : filterBy}
-                </Badge>
-              )}
-              <Badge variant="secondary" className="text-xs">
-                Sort: {sortBy === 'marketCap' ? 'Market Cap' :
-                      sortBy === 'holders' ? 'Holders' : 'Newest'}
+              {/* Compact Token Count */}
+              <div className="text-xs text-muted-foreground whitespace-nowrap ml-auto">
+                {filteredTokens.length} / {tokens.length}
+                {totalTokens > tokens.length && (
+                  <span className="text-muted-foreground/70"> ({totalTokens} total)</span>
+                )}
+          </div>
+        </div>
+
+            {/* Active Filters - Compact Badges */}
+            {(debouncedSearchQuery || filterBy !== 'all') && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                {debouncedSearchQuery && (
+                  <Badge variant="secondary" className="text-xs h-6 px-2 bg-primary/10 border-primary/20 text-primary">
+                    🔍 {debouncedSearchQuery}
+                  </Badge>
+                )}
+                {filterBy !== 'all' && (
+                  <Badge variant="secondary" className="text-xs h-6 px-2 bg-primary/10 border-primary/20 text-primary">
+                    {filterBy === 'new' ? '✨ New' : filterBy === 'trading' ? '📈 Trading' : filterBy}
             </Badge>
-            </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

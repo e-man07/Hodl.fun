@@ -2,16 +2,25 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { WalletButton } from "@/components/WalletButton";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu } from "lucide-react";
+import { Menu, Store, LucideIcon } from "lucide-react";
 import Image from "next/image";
+
+interface NavItem {
+  href: string;
+  label: string;
+  icon?: LucideIcon;
+}
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const pathname = usePathname();
 
-  const navItems = [
+  const navItems: NavItem[] = [
+    { href: "/", label: "Marketplace", icon: Store },
     { href: "/launch", label: "Launch Token" },
     { href: "/dashboard", label: "Dashboard" },
   ];
@@ -33,16 +42,31 @@ const Navbar = () => {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center space-x-1">
-          {navItems.map((item) => (
-            <Button
-              key={item.href}
-              variant="ghost"
-              className="text-sm font-medium"
-              asChild
-            >
-              <Link href={item.href}>{item.label}</Link>
-            </Button>
-          ))}
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            const Icon = item.icon;
+            return (
+              <Button
+                key={item.href}
+                variant="ghost"
+                className={`text-sm font-medium ${isActive ? 'opacity-50 cursor-default' : ''}`}
+                asChild={!isActive}
+                disabled={isActive}
+              >
+                {isActive ? (
+                  <span className="flex items-center gap-2">
+                    {Icon && <Icon className="h-4 w-4" />}
+                    {item.label}
+                  </span>
+                ) : (
+                  <Link href={item.href} className="flex items-center gap-2">
+                    {Icon && <Icon className="h-4 w-4" />}
+                    {item.label}
+                  </Link>
+                )}
+              </Button>
+            );
+          })}
         </nav>
 
         {/* Desktop Actions */}
@@ -72,17 +96,32 @@ const Navbar = () => {
               </div>
 
               <nav className="flex flex-col space-y-2">
-                {navItems.map((item) => (
-                  <Button
-                    key={item.href}
-                    variant="ghost"
-                    className="justify-start w-full"
-                    asChild
-                    onClick={() => setIsOpen(false)}
-                  >
-                    <Link href={item.href}>{item.label}</Link>
-                  </Button>
-                ))}
+                {navItems.map((item) => {
+                  const isActive = pathname === item.href;
+                  const Icon = item.icon;
+                  return (
+                    <Button
+                      key={item.href}
+                      variant="ghost"
+                      className={`justify-start w-full ${isActive ? 'opacity-50 cursor-default' : ''}`}
+                      asChild={!isActive}
+                      disabled={isActive}
+                      onClick={() => !isActive && setIsOpen(false)}
+                    >
+                      {isActive ? (
+                        <span className="flex items-center gap-2">
+                          {Icon && <Icon className="h-4 w-4" />}
+                          {item.label}
+                        </span>
+                      ) : (
+                        <Link href={item.href} className="flex items-center gap-2">
+                          {Icon && <Icon className="h-4 w-4" />}
+                          {item.label}
+                        </Link>
+                      )}
+                    </Button>
+                  );
+                })}
               </nav>
 
               <div className="flex flex-col space-y-3 pt-4 border-t">
