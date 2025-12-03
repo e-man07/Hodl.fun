@@ -134,6 +134,27 @@
     animation: pulse-glow 2s ease-in-out infinite;
   }
 
+  @keyframes scroll {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
+  .animate-scroll {
+    animation: scroll 40s linear infinite;
+    display: flex;
+    width: fit-content;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-scroll {
+      animation: none;
+    }
+  }
+
   /* Smooth scroll behavior */
   html {
     scroll-behavior: smooth;

@@ -83,7 +83,7 @@ const DashboardPage = () => {
           <div className="flex items-center space-x-2">
             <p className="font-medium text-foreground">{token.name}</p>
             {token.isCreator && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="outline" className="text-xs bg-primary/15 text-primary/90 border-primary/30">
                 <Star className="w-3 h-3 mr-1" />
                 Creator
               </Badge>
@@ -112,7 +112,7 @@ const DashboardPage = () => {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-12 animate-in fade-in slide-in-from-top-4 duration-700">
           <div>
-            <Badge variant="secondary" className="mb-4 px-4 py-2 hover:scale-105 transition-transform duration-300">
+            <Badge variant="outline" className="mb-4 px-4 py-2 hover:scale-105 transition-transform duration-300 bg-primary/15 text-primary/90 border-primary/30">
               <Activity className="mr-2 h-4 w-4" />
               Portfolio Dashboard
             </Badge>

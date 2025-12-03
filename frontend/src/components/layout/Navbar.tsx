@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { WalletButton } from "@/components/WalletButton";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Menu, Store, LucideIcon } from "lucide-react";
 import Image from "next/image";
 
@@ -35,9 +35,9 @@ const Navbar = () => {
             alt="Hodl.fun logo"
             width={40}
             height={40}
-            className="object-contain"
+            className="object-contain flex-shrink-0"
           />
-          <span className="text-2xl font-bold text-primary">Hodl.fun</span>
+          <span className="text-2xl font-bold text-primary leading-tight">Hodl.fun</span>
         </Link>
 
         {/* Desktop Navigation */}
@@ -77,12 +77,13 @@ const Navbar = () => {
         {/* Mobile Navigation */}
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
           <SheetTrigger asChild className="md:hidden">
-            <Button variant="outline" size="sm">
-              <Menu className="h-4 w-4" />
+            <Button variant="outline" size="sm" className="h-9 w-9 p-0 flex items-center justify-center">
+              <Menu className="h-5 w-5" />
               <span className="sr-only">Toggle Menu</span>
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+            <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
             <div className="flex flex-col space-y-4 mt-6">
               <div className="flex items-center space-x-3 mb-6">
                 <Image

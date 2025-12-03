@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { DegenOnboardingModal } from '@/components/DegenOnboardingModal';
+import { TradingActivityBanner } from '@/components/TradingActivityBanner';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 import { useMarketplace } from '@/hooks/useMarketplace';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -56,8 +57,6 @@ const HomePage = () => {
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
   const [showRefreshNotification, setShowRefreshNotification] = useState(false);
-  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
-  const [mounted, setMounted] = useState(false);
   
   // Debounce search query for better performance
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
@@ -74,12 +73,6 @@ const HomePage = () => {
     totalPages, 
     loadPage
   } = useMarketplace();
-
-  // Set mounted state on client only to prevent hydration errors
-  useEffect(() => {
-    setMounted(true);
-    setLastUpdateTime(new Date());
-  }, []);
 
   // Removed auto-refresh to prevent random platform refreshes
   // Users can manually refresh using the refresh button if needed
@@ -210,7 +203,7 @@ const HomePage = () => {
                     Trading
                   </Badge>
                 ) : (
-                  <Badge variant="secondary" className="text-xs">
+                  <Badge variant="outline" className="text-xs bg-primary/15 text-primary/90 border-primary/30">
                     <Clock className="w-3 h-3 mr-1" />
                     Bonding
                   </Badge>
@@ -282,8 +275,9 @@ const HomePage = () => {
     <div className="min-h-screen bg-background">
       <DegenOnboardingModal />
       <Navbar />
+      <TradingActivityBanner />
       
-      <div className="container mx-auto px-4 py-12">
+      <div className="container mx-auto px-4 pt-4 pb-12">
         {/* Header - Degen Style */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">

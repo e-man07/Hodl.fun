@@ -246,7 +246,7 @@ const LaunchPage = () => {
       <div className="container mx-auto px-4 py-8 md:py-12">
         {/* Header */}
         <div className="text-center mb-8 md:mb-12 animate-in fade-in slide-in-from-top-4 duration-700">
-          <Badge variant="secondary" className="mb-4 px-4 py-2 hover:scale-105 transition-transform duration-300">
+          <Badge variant="outline" className="mb-4 px-4 py-2 hover:scale-105 transition-transform duration-300 bg-primary/15 text-primary/90 border-primary/30">
             <Rocket className="mr-2 h-4 w-4" />
             Launch Token
           </Badge>

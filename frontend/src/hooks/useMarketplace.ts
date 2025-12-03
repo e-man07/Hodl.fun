@@ -55,6 +55,22 @@ export const useMarketplace = () => {
     return fetchIPFSMetadata(metadataURI);
   };
 
+  // Helper function to remove ETH prefix from token symbols
+  const stripETHPrefix = (symbol: string): string => {
+    if (!symbol) return '';
+    let cleaned = symbol.trim();
+    const upperSymbol = cleaned.toUpperCase();
+    // Handle "ETH " with space first
+    if (upperSymbol.startsWith('ETH ') && cleaned.length > 4) {
+      cleaned = cleaned.substring(4).trim();
+    }
+    // Then handle "ETH" without space
+    else if (upperSymbol.startsWith('ETH') && cleaned.length > 3) {
+      cleaned = cleaned.substring(3).trim();
+    }
+    return cleaned || symbol;
+  };
+
   const fetchTokenDetails = async (tokenAddress: string, provider: ethers.Provider): Promise<{ name: string; symbol: string } | null> => {
     return deduplicatedFetch(`token-details-${tokenAddress}`, async () => {
       try {
@@ -63,7 +79,9 @@ export const useMarketplace = () => {
           tokenContract.name(),
           tokenContract.symbol()
         ]);
-        return { name, symbol };
+        // Strip ETH prefix from symbol for consistent display
+        const cleanedSymbol = stripETHPrefix(symbol);
+        return { name, symbol: cleanedSymbol };
       } catch (error) {
         console.warn('Error fetching token details for:', tokenAddress, error);
         return null;
