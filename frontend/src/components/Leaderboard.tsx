@@ -1,12 +1,13 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Trophy, TrendingUp, Users } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import Image from 'next/image';
-import { getIPFSImageUrl } from '@/utils/ipfsImage';
+import { getIPFSImageUrl, createIPFSImageErrorHandler } from '@/utils/ipfsImage';
 
 interface Token {
   address: string;
@@ -23,6 +24,7 @@ interface LeaderboardProps {
 }
 
 export const Leaderboard = ({ tokens, title = 'Top Tokens' }: LeaderboardProps) => {
+  const router = useRouter();
   const topTokens = tokens
     .sort((a, b) => b.marketCap - a.marketCap)
     .slice(0, 10);
@@ -54,6 +56,7 @@ export const Leaderboard = ({ tokens, title = 'Top Tokens' }: LeaderboardProps) 
             <div
               key={token.address}
               className="p-4 hover:bg-muted/30 transition-colors cursor-pointer group"
+              onClick={() => router.push(`/token/${token.address}`)}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -69,6 +72,7 @@ export const Leaderboard = ({ tokens, title = 'Top Tokens' }: LeaderboardProps) 
                         width={40}
                         height={40}
                         className="w-full h-full object-cover"
+                        onError={createIPFSImageErrorHandler(token.logo)}
                       />
                     </div>
                   ) : (
@@ -90,6 +94,21 @@ export const Leaderboard = ({ tokens, title = 'Top Tokens' }: LeaderboardProps) 
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Users className="h-3 w-3" />
                         <span>{token.holders}</span>
+                      </div>
+                    </div>
+                    {/* ATH Progress Bar */}
+                    <div className="mt-2 p-2 bg-zinc-900/80 rounded-lg border border-zinc-800">
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="text-zinc-400">MC <span className="text-white font-semibold">{formatCurrency(token.marketCap)}</span></span>
+                        <span className="text-zinc-400">ATH <span className="text-white font-semibold">{formatCurrency(token.marketCap)}</span></span>
+                      </div>
+                      <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all duration-500 rounded-full"
+                          style={{
+                            width: '100%'
+                          }}
+                        />
                       </div>
                     </div>
                   </div>

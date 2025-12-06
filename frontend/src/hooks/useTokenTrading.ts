@@ -50,7 +50,6 @@ export const useTokenTrading = () => {
       const balance = await tokenContract.balanceOf(address);
       return ethers.formatEther(balance);
     } catch (error) {
-      console.error('Error fetching token balance:', error);
       return '0';
     }
   };
@@ -84,7 +83,6 @@ export const useTokenTrading = () => {
 
       return ethers.formatEther(tokensOut);
     } catch (error) {
-      console.error('Error calculating tokens for ETH:', error);
       return '0';
     }
   };
@@ -118,7 +116,6 @@ export const useTokenTrading = () => {
 
       return ethers.formatEther(ethOut);
     } catch (error) {
-      console.error('Error calculating ETH for tokens:', error);
       return '0';
     }
   };
@@ -168,10 +165,6 @@ export const useTokenTrading = () => {
         minTokensOutWei = calculatedTokensOut * BigInt(100 - slippagePercentage) / BigInt(100);
       }
 
-      console.log(`Buying tokens from ${tokenAddress}:`);
-      console.log(`- ETH amount: ${ethAmount} ETH (${weiAmount.toString()} wei)`);
-      console.log(`- Min tokens out: ${ethers.formatEther(minTokensOutWei)} (with ${slippagePercentage}% slippage)`);
-
       // Encode the transaction data
       const contractInterface = new ethers.Interface(TOKEN_MARKETPLACE_ABI);
       const encodedData = contractInterface.encodeFunctionData('buyTokens', [
@@ -191,7 +184,6 @@ export const useTokenTrading = () => {
         hash: result.hash
       };
     } catch (error: unknown) {
-      console.error('Error buying tokens:', error);
       const errorMessage = (error as Error).message || 'Transaction failed';
       setError(errorMessage);
       return {
@@ -263,8 +255,6 @@ export const useTokenTrading = () => {
       );
       
       if (allowance < tokenWei) {
-        console.log('Approving tokens for marketplace...');
-        
         // Encode approval transaction
         const approveInterface = new ethers.Interface(LAUNCHPAD_TOKEN_ABI);
         const approveData = approveInterface.encodeFunctionData('approve', [
@@ -273,19 +263,13 @@ export const useTokenTrading = () => {
         ]);
 
         // Send approval transaction
-        const approveResult = await pushChainClient.universal.sendTransaction({
+        await pushChainClient.universal.sendTransaction({
           to: tokenAddress as `0x${string}`,
           value: BigInt(0),
           data: approveData as `0x${string}`,
         });
-        
-        console.log('Approval transaction sent:', approveResult.hash);
         // Note: In a real app, you might want to wait for approval confirmation
       }
-
-      console.log(`Selling tokens from ${tokenAddress}:`);
-      console.log(`- Token amount: ${tokenAmount} tokens (${tokenWei.toString()} wei)`);
-      console.log(`- Min ETH out: ${ethers.formatEther(minEthOutWei)} (with ${slippagePercentage}% slippage)`);
 
       // Encode the sell transaction
       const contractInterface = new ethers.Interface(TOKEN_MARKETPLACE_ABI);
@@ -302,14 +286,11 @@ export const useTokenTrading = () => {
         data: encodedData as `0x${string}`,
       });
 
-      console.log('✅ Sell transaction sent:', result.hash);
-
       return {
         success: true,
         hash: result.hash
       };
     } catch (error: unknown) {
-      console.error('Error selling tokens:', error);
       const errorMessage = (error as Error).message || 'Transaction failed';
       setError(errorMessage);
       return {

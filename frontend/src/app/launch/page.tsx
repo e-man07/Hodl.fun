@@ -121,39 +121,33 @@ const LaunchPage = () => {
         logoFile: formData.logoFile
       };
 
-      console.log('🚀 Launching token with params:', tokenParams);
       
       // Call contract function
       const result = await createToken(tokenParams);
       
       if (result) {
-        console.log('✅ Token creation successful! Hash:', result.hash);
-        console.log('🔗 Transaction URL:', getTransactionUrl(result.hash));
         
         setTxHash(result.hash);
         
         // Extract token address from transaction (async)
         if (result.tokenAddress) {
-          console.log('🎯 Token contract address:', result.tokenAddress);
           setTokenAddress(result.tokenAddress);
         } else {
           // Try to extract from transaction receipt
-          console.log('🔍 Extracting token address from transaction...');
           getTokenAddressFromTx(result.hash).then((address) => {
             if (address) {
-              console.log('🎯 Token contract address extracted:', address);
               setTokenAddress(address);
             }
           }).catch((error) => {
-            console.error('Failed to extract token address:', error);
+            // Failed to extract token address
           });
         }
       } else {
-        console.error('❌ Token creation returned null');
+        // Token creation returned null
         // Error should already be set by the createToken function
       }
     } catch (err) {
-      console.error('❌ Token launch failed:', err);
+      // Token launch failed
       // Additional error handling if needed
     }
   };

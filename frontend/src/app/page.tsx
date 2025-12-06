@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,7 +15,6 @@ import {
   Coins,
   Users,
   Clock,
-  ExternalLink,
   BarChart3,
   RefreshCw,
   Loader2,
@@ -29,8 +29,7 @@ import { TradingActivityBanner } from '@/components/TradingActivityBanner';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 import { useMarketplace } from '@/hooks/useMarketplace';
 import { useDebounce } from '@/hooks/useDebounce';
-import { TokenTradeModal } from '@/components/TokenTradeModal';
-import { getIPFSImageUrl } from '@/utils/ipfsImage';
+import { getIPFSImageUrl, createIPFSImageErrorHandler } from '@/utils/ipfsImage';
 
 interface Token {
   address: string;
@@ -50,40 +49,198 @@ interface Token {
   reserveBalance: number;
 }
 
+// Trending Section with card-based design matching the provided design
+const TrendingSection = ({ tokens, router }: { tokens: Token[]; router: ReturnType<typeof useRouter> }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isPaused, setIsPaused] = useState(false);
+
+  const trendingTokens = tokens
+    .sort((a, b) => b.marketCap - a.marketCap)
+    .slice(0, 6);
+
+  // Auto-scroll animation for mobile
+  useEffect(() => {
+    const scrollContainer = scrollRef.current;
+    if (!scrollContainer) return;
+
+    // Only auto-scroll on mobile (check if we're in horizontal scroll mode)
+    const checkMobile = () => window.innerWidth < 768;
+
+    let animationId: number;
+    let scrollPosition = scrollContainer.scrollLeft;
+    const scrollSpeed = 0.5; // pixels per frame
+
+    const animate = () => {
+      if (!checkMobile() || isPaused || !scrollContainer) {
+        animationId = requestAnimationFrame(animate);
+        return;
+      }
+
+      scrollPosition += scrollSpeed;
+      const maxScroll = scrollContainer.scrollWidth - scrollContainer.clientWidth;
+
+      // Reset to start when reaching the end
+      if (scrollPosition >= maxScroll) {
+        scrollPosition = 0;
+      }
+
+      scrollContainer.scrollLeft = scrollPosition;
+      animationId = requestAnimationFrame(animate);
+    };
+
+    animationId = requestAnimationFrame(animate);
+
+    // Sync scroll position when user manually scrolls
+    const handleScroll = () => {
+      scrollPosition = scrollContainer.scrollLeft;
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      scrollContainer.removeEventListener('scroll', handleScroll);
+    };
+  }, [isPaused]);
+
+  // Format market cap for display (e.g., "4 ETH", "781.2 ETH")
+  const formatMarketCap = (marketCap: number): string => {
+    if (marketCap >= 1e9) {
+      return `${(marketCap / 1e9).toFixed(1)} ETH`;
+    }
+    if (marketCap >= 1e6) {
+      return `${(marketCap / 1e6).toFixed(1)} ETH`;
+    }
+    if (marketCap >= 1e3) {
+      return `${(marketCap / 1e3).toFixed(1)} ETH`;
+    }
+    return `${marketCap.toFixed(2)} ETH`;
+  };
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          {/* Blinking purple arrow icon */}
+          <TrendingUp className="h-5 w-5 text-primary animate-pulse" />
+          <span className="text-white font-bold text-xl">Trending Now</span>
+          <span className="text-lg">🔥</span>
+        </div>
+      </div>
+      <div className="relative">
+        <div
+          ref={scrollRef}
+          className="flex gap-4 overflow-x-auto pb-2 pt-3 scrollbar-hide md:grid md:grid-cols-3 lg:grid-cols-6 md:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+          onTouchStart={() => setIsPaused(true)}
+          onTouchEnd={() => setTimeout(() => setIsPaused(false), 3000)}
+        >
+          {trendingTokens.map((token, index) => (
+            <div
+              key={token.address}
+              className="group relative bg-card border border-border rounded-xl p-3 cursor-pointer transition-all duration-300 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1 flex-shrink-0 w-[180px] md:w-auto"
+              onClick={() => router.push(`/token/${token.address}`)}
+            >
+              {/* Card content: Image on left, Text on right */}
+              <div className="flex items-center gap-3">
+                {/* Token Image - Left side */}
+                <div className="flex-shrink-0">
+                  {token.logo ? (
+                    <div className="w-16 h-16 rounded-lg overflow-hidden border border-border group-hover:border-primary/30 transition-colors">
+                      <Image
+                        src={getIPFSImageUrl(token.logo)}
+                        alt={token.name}
+                        width={64}
+                        height={64}
+                        className="w-full h-full object-cover"
+                        onError={createIPFSImageErrorHandler(token.logo)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 border border-border group-hover:border-primary/30 flex items-center justify-center text-primary font-bold text-xl transition-colors">
+                      {token.symbol.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Token Info - Right side */}
+                <div className="flex-1 min-w-0">
+                  {/* Token Ticker Badge - Above token name */}
+                  <Badge 
+                    variant="secondary" 
+                    className="bg-zinc-700/90 text-zinc-300 border-0 text-[10px] px-2 py-0.5 h-5 font-normal rounded-full mb-1.5 inline-block"
+                  >
+                    {token.symbol}
+                  </Badge>
+                  
+                  {/* Token Name - Larger white font */}
+                  <h3 className="font-bold text-base text-white group-hover:text-primary transition-colors truncate mb-1">
+                    {token.name}
+                  </h3>
+                  
+                  {/* Market Cap - Smaller purple font at bottom */}
+                  <p className="text-xs font-medium whitespace-nowrap">
+                    <span className="text-gray-400">MCap: </span>
+                    <span className="text-primary">{formatMarketCap(token.marketCap)}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Optional: Arrow button for last card (like in the image) */}
+              {index === trendingTokens.length - 1 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Could navigate to a "View All" page or scroll to see more
+                  }}
+                  className="absolute bottom-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary transition-colors opacity-0 group-hover:opacity-100"
+                  aria-label="View more"
+                >
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const HomePage = () => {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'marketCap' | 'holders' | 'createdAt'>('marketCap');
   const [filterBy, setFilterBy] = useState<'all' | 'new' | 'trading'>('all');
-  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
-  const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
   const [showRefreshNotification, setShowRefreshNotification] = useState(false);
-  
+
   // Debounce search query for better performance
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  
+
   // Fetch real tokens from blockchain
-  const { 
-    tokens, 
-    isLoading, 
+  const {
+    tokens,
+    isLoading,
     isInitializing,
-    error, 
-    refreshTokens, 
-    totalTokens, 
-    currentPage, 
-    totalPages, 
+    error,
+    refreshTokens,
+    totalTokens,
+    currentPage,
+    totalPages,
     loadPage
   } = useMarketplace();
 
   // Removed auto-refresh to prevent random platform refreshes
   // Users can manually refresh using the refresh button if needed
-  
+
   const filteredTokens = tokens
     .filter(token => {
       // Use debounced search query for better performance
       const matchesSearch = debouncedSearchQuery === '' ||
-                          token.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-                          token.symbol.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-                          token.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+        token.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        token.symbol.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        token.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
 
       switch (filterBy) {
         case 'new':
@@ -108,15 +265,6 @@ const HomePage = () => {
     });
 
 
-  const handleOpenTradeModal = (token: Token) => {
-    setSelectedToken(token);
-    setIsTradeModalOpen(true);
-  };
-
-  const handleCloseTradeModal = () => {
-    setIsTradeModalOpen(false);
-  };
-
   // Listen for token data changes and show notification
   useEffect(() => {
     const handleTokenDataChanged = () => {
@@ -127,7 +275,7 @@ const HomePage = () => {
     };
 
     window.addEventListener('tokenDataChanged', handleTokenDataChanged);
-    
+
     return () => {
       window.removeEventListener('tokenDataChanged', handleTokenDataChanged);
     };
@@ -141,133 +289,94 @@ const HomePage = () => {
       const observer = new IntersectionObserver(
         ([entry]) => {
           if (entry.isIntersecting) {
-            setTimeout(() => setIsVisible(true), index * 50); // Stagger animation
+            setTimeout(() => setIsVisible(true), index * 100);
           }
         },
         { threshold: 0.1 }
       );
 
       const currentRef = cardRef.current;
-    if (currentRef) {
-      observer.observe(currentRef);
-    }
-
-    return () => {
       if (currentRef) {
-        observer.unobserve(currentRef);
+        observer.observe(currentRef);
       }
-    };
+
+      return () => {
+        if (currentRef) {
+          observer.unobserve(currentRef);
+        }
+      };
     }, [index]);
 
     return (
-      <Card
+      <div
         ref={cardRef}
-        className={`hover:shadow-xl hover:border-primary/50 transition-all duration-500 cursor-pointer group border-2 overflow-hidden hover:-translate-y-1 ${
-          isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-        }`}
+        className={`group cursor-pointer transition-all duration-500 hover:-translate-y-1 hover:shadow-xl bg-black border-2 border-zinc-800 rounded-xl p-3 hover:border-primary/50 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+          }`}
+        onClick={() => router.push(`/token/${token.address}`)}
       >
-        <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center space-x-3 min-w-0 flex-1">
-            {token.logo ? (
-              <div className="relative w-12 h-12 flex-shrink-0 overflow-hidden rounded-full group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
-                <Image
-                  src={getIPFSImageUrl(token.logo)}
-                  alt={`${token.name} logo`}
-                  width={48}
-                  height={48}
-                  className="w-full h-full object-cover border-2 border-border rounded-full"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    const parent = target.parentElement;
-                    if (parent) {
-                      parent.innerHTML = `<div class="w-12 h-12 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary font-bold text-sm">${token.symbol.slice(0, 2)}</div>`;
-                    }
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="w-12 h-12 flex-shrink-0 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary font-bold text-sm group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
-                {token.symbol.slice(0, 2)}
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <CardTitle className="text-lg group-hover:text-primary transition-colors truncate">
-                {token.name}
-              </CardTitle>
-              <CardDescription className="flex items-center space-x-2">
-                <span className="font-mono text-xs">{token.symbol}</span>
-                {token.isTrading ? (
-                  <Badge variant="default" className="text-xs bg-primary/10 text-primary border-primary/20">
-                    <TrendingUp className="w-3 h-3 mr-1" />
-                    Trading
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-xs bg-primary/15 text-primary/90 border-primary/30">
-                    <Clock className="w-3 h-3 mr-1" />
-                    Bonding
-                  </Badge>
-                )}
-              </CardDescription>
+        {/* Large Token Image - IPFS or ticker initials */}
+        <div className="relative aspect-square w-full overflow-hidden rounded-xl border-2 border-zinc-800 group-hover:border-primary/50 transition-colors">
+          {token.logo && isVisible ? (
+            <Image
+              src={getIPFSImageUrl(token.logo)}
+              alt={`${token.name} logo`}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
+              unoptimized
+              loading={index < 8 ? "eager" : "lazy"}
+              priority={index < 4}
+              className="object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={createIPFSImageErrorHandler(token.logo)}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-bold text-4xl">
+              {token.symbol.slice(0, 2)}
             </div>
-          </div>
-          
-          {/* Price Section */}
-          <div className="text-right flex-shrink-0 ml-3">
-            <p className="text-sm text-muted-foreground">Current Price</p>
-            <p className="text-lg font-bold text-primary">{formatCurrency(token.price)}</p>
-          </div>
-        </div>
-      </CardHeader>
-      
-      <CardContent className="pt-0">
-        <p className="text-sm text-muted-foreground mb-4 line-clamp-2 leading-relaxed">
-          {token.description}
-        </p>
-        
-        {/* Metrics Grid */}
-        <div className="grid grid-cols-2 gap-4 text-sm mb-4 p-3 bg-muted/30 rounded-lg border border-border/50">
-          <div className="space-y-1">
-            <p className="text-muted-foreground text-xs flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" />
-              Market Cap
-            </p>
-            <p className="font-semibold text-foreground">{formatCurrency(token.marketCap)}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-muted-foreground text-xs flex items-center gap-1">
-              <Users className="w-3 h-3" />
-              Holders
-            </p>
-            <p className="font-semibold text-foreground">{formatNumber(token.holders)}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-muted-foreground text-xs flex items-center gap-1">
-              <Coins className="w-3 h-3" />
-              Supply
-            </p>
-            <p className="font-semibold text-foreground">{formatNumber(token.currentSupply)}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-muted-foreground text-xs flex items-center gap-1">
-              <BarChart3 className="w-3 h-3" />
-              Reserve
-            </p>
-            <p className="font-semibold text-foreground">{token.reserveRatio}%</p>
-          </div>
+          )}
         </div>
 
-        {/* Action Buttons */}
-        <Button
-          size="sm"
-          className="w-full h-9 group"
-          onClick={() => handleOpenTradeModal(token)}
-        >
-          <Coins className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform duration-200" />
-          Trade Token
-        </Button>
-      </CardContent>
-    </Card>
+        {/* Token Info */}
+        <div className="mt-3 space-y-2">
+          {/* Symbol Badge */}
+          <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30">
+            {token.symbol}
+          </Badge>
+
+          {/* Token Name */}
+          <h3 className="font-bold text-white group-hover:text-primary transition-colors truncate">
+            {token.name}
+          </h3>
+
+          {/* Description */}
+          <p className="text-xs text-zinc-400 line-clamp-2">
+            {token.description || 'No description available'}
+          </p>
+
+          {/* Stats Row */}
+          <div className="flex items-center gap-4 text-xs text-zinc-400 pt-1">
+            <span className="text-green-500 font-medium">+0%</span>
+            <span>Vol {formatCurrency(token.marketCap * 0.1)}</span>
+            <span className="flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              {token.holders}
+            </span>
+          </div>
+
+          {/* ATH Progress Bar */}
+          <div className="pt-2">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="text-zinc-400">MC <span className="text-white font-semibold"> {formatCurrency(token.marketCap)}</span></span>
+              <span className="text-zinc-400">ATH <span className="text-white font-semibold"> {formatCurrency(token.marketCap)}</span></span>
+            </div>
+            <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-500 rounded-full"
+                style={{ width: '100%' }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
     );
   };
 
@@ -276,88 +385,25 @@ const HomePage = () => {
       <DegenOnboardingModal />
       <Navbar />
       <TradingActivityBanner />
-      
+
       <div className="container mx-auto px-4 pt-4 pb-12">
         {/* Header - Degen Style */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-            </div>
-            <Button size="lg" className="bg-gradient-to-r from-primary to-primary/80 hover:scale-105 transition-transform" asChild>
-                  <Link href="/launch">
-                <Coins className="mr-2 h-5 w-5" />
-                Create Token
-                  </Link>
-                </Button>
-          </div>
-          
           {/* Trending Now Section */}
           {!isInitializing && filteredTokens.length > 0 && (
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="h-5 w-5 text-primary animate-pulse" />
-                <h2 className="text-2xl font-bold">Trending Now 🔥</h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {filteredTokens
-                  .sort((a, b) => b.marketCap - a.marketCap)
-                  .slice(0, 4)
-                  .map((token, index) => (
-                <Card
-                      key={token.address}
-                      className="border-2 hover:border-primary/50 transition-all cursor-pointer group hover:shadow-lg hover:-translate-y-1 bg-gradient-to-br from-card to-card/50"
-                      onClick={() => handleOpenTradeModal(token)}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            {token.logo ? (
-                              <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-primary/20">
-                                <Image
-                                  src={getIPFSImageUrl(token.logo)}
-                                  alt={token.name}
-                                  width={40}
-                                  height={40}
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                            ) : (
-                              <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary font-bold text-sm">
-                                {token.symbol.slice(0, 2)}
-                              </div>
-                            )}
-                            <div>
-                              <p className="font-bold text-sm">{token.symbol}</p>
-                              <p className="text-xs text-muted-foreground truncate max-w-[100px]">{token.name}</p>
-                            </div>
-                          </div>
-                          {index === 0 && (
-                            <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-0 animate-pulse">
-                              #1
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">Market Cap</p>
-                          <p className="text-lg font-bold text-primary">{formatCurrency(token.marketCap)}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            </div>
+            <TrendingSection tokens={filteredTokens} router={router} />
           )}
-          
+
           {/* Loading/Error States */}
           {isInitializing && (
             <div className="flex flex-col items-center justify-center gap-3 mt-4">
               <div className="flex items-center gap-2 text-primary">
                 <Loader2 className="h-5 w-5 animate-spin" />
                 <span className="text-lg font-medium">Loading tokens...</span>
-          </div>
-        </div>
+              </div>
+            </div>
           )}
-          
+
           {!isInitializing && isLoading && (
             <div className="flex items-center justify-center gap-2 mt-4 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -372,7 +418,7 @@ const HomePage = () => {
               <span>Updating market data after your transaction...</span>
             </div>
           )}
-          
+
           {error && (
             <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
               <p><strong>Error loading tokens:</strong> {error}</p>
@@ -386,13 +432,13 @@ const HomePage = () => {
               </Button>
             </div>
           )}
-          
+
           {!isInitializing && !isLoading && !error && tokens.length === 0 && (
             <div className="mt-4 p-4 bg-muted/30 border border-border rounded-lg text-muted-foreground">
               <p>No tokens found on the marketplace yet. Be the first to launch a token!</p>
             </div>
           )}
-                    </div>
+        </div>
 
         {/* Compact Filters and Search */}
         {!isInitializing && (
@@ -407,8 +453,8 @@ const HomePage = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-8 h-9 text-sm border-primary/20 focus:border-primary/50"
                 />
-                  </div>
-              
+              </div>
+
               {/* Compact Filter Controls */}
               <div className="flex items-center gap-2 flex-wrap">
                 <Select value={filterBy} onValueChange={(value) => setFilterBy(value as 'all' | 'new' | 'trading')}>
@@ -434,17 +480,17 @@ const HomePage = () => {
                     <SelectItem value="createdAt">Newest</SelectItem>
                   </SelectContent>
                 </Select>
-                
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={refreshTokens} 
-                  disabled={isLoading || isInitializing} 
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshTokens}
+                  disabled={isLoading || isInitializing}
                   className="h-9 px-3 border-primary/20 hover:border-primary/50"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${isLoading || isInitializing ? 'animate-spin' : ''}`} />
                 </Button>
-                  </div>
+              </div>
 
               {/* Compact Token Count */}
               <div className="text-xs text-muted-foreground whitespace-nowrap ml-auto">
@@ -452,8 +498,8 @@ const HomePage = () => {
                 {totalTokens > tokens.length && (
                   <span className="text-muted-foreground/70"> ({totalTokens} total)</span>
                 )}
-          </div>
-        </div>
+              </div>
+            </div>
 
             {/* Active Filters - Compact Badges */}
             {(debouncedSearchQuery || filterBy !== 'all') && (
@@ -466,7 +512,7 @@ const HomePage = () => {
                 {filterBy !== 'all' && (
                   <Badge variant="secondary" className="text-xs h-6 px-2 bg-primary/10 border-primary/20 text-primary">
                     {filterBy === 'new' ? '✨ New' : filterBy === 'trading' ? '📈 Trading' : filterBy}
-            </Badge>
+                  </Badge>
                 )}
               </div>
             )}
@@ -514,73 +560,33 @@ const HomePage = () => {
           </div>
         ) : !isLoading && filteredTokens.length > 0 ? (
           <>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
               {filteredTokens.map((token, index) => (
                 <TokenCard key={token.address} token={token} index={index} />
               ))}
-        </div>
+            </div>
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-8 border-t border-border">
-                <div className="text-sm text-muted-foreground">
-                  Showing page {currentPage} of {totalPages} ({totalTokens} total tokens)
-          </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
+              <div className="flex justify-end mt-8">
+                <div className="flex items-center gap-1">
+                  <button
                     onClick={() => loadPage(currentPage - 1)}
                     disabled={currentPage === 1 || isLoading}
-                    className="h-9"
+                    className="w-8 h-8 flex items-center justify-center rounded-md bg-zinc-900 border border-zinc-700 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ChevronLeft className="w-4 h-4 mr-1" />
-                    Previous
-                  </Button>
-                  
-                  {/* Page Numbers */}
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum: number;
-                      if (totalPages <= 5) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i;
-                      } else {
-                        pageNum = currentPage - 2 + i;
-                      }
-                      
-                      return (
-                        <Button
-                          key={pageNum}
-                          variant={currentPage === pageNum ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => loadPage(pageNum)}
-                          disabled={isLoading}
-                          className="h-9 w-9 p-0"
-                        >
-                          {pageNum}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => loadPage(currentPage + 1)}
                     disabled={currentPage === totalPages || isLoading}
-                    className="h-9"
+                    className="w-8 h-8 flex items-center justify-center rounded-md bg-zinc-900 border border-zinc-700 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    Next
-                    <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                    </div>
-                  </div>
-                )}
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         ) : !isInitializing && !isLoading ? (
           <Card className="text-center py-16 border-2 border-dashed border-border">
@@ -601,53 +607,43 @@ const HomePage = () => {
                 {tokens.length === 0 ? (
                   <Button asChild>
                     <a href="/launch">Launch Your Token</a>
-                </Button>
+                  </Button>
                 ) : (
-                <Button
-                  variant="outline"
+                  <Button
+                    variant="outline"
                     onClick={() => {
                       setSearchQuery('');
                       setFilterBy('all');
                     }}
                   >
                     Clear Filters
-                </Button>
+                  </Button>
                 )}
               </div>
             </CardContent>
           </Card>
         ) : null}
 
-        {/* CTA Section */}
-        <div className="mt-16">
-          <Card className="bg-gradient-to-r from-primary/10 to-secondary/10 border-0">
-            <CardContent className="p-8 text-center">
-              <h2 className="text-2xl font-bold mb-4">
-                Ready to Launch Your Own Token?
-              </h2>
-              <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
-                Join the growing ecosystem of token creators. Launch your token with automated 
-                marketplace listing and bonding curve liquidity in just a few clicks.
-              </p>
-              <Button size="lg" asChild>
-                <a href="/launch">
-                  Launch Your Token
-                  <ExternalLink className="ml-2 h-4 w-4" />
-                </a>
-              </Button>
-            </CardContent>
-          </Card>
+        {/* Social Link */}
+        <div className="mt-12 flex justify-center">
+          <a
+            href="https://x.com/thehodldotfun"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="h-6 w-6 fill-current"
+              aria-hidden="true"
+            >
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+            <span className="text-sm font-medium">Follow us on X</span>
+          </a>
         </div>
       </div>
 
-      {/* Trading Modal */}
-      {selectedToken && (
-        <TokenTradeModal
-          isOpen={isTradeModalOpen}
-          onClose={handleCloseTradeModal}
-          token={selectedToken}
-        />
-      )}
     </div>
   );
 };

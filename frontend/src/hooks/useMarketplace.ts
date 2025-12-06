@@ -83,7 +83,6 @@ export const useMarketplace = () => {
         const cleanedSymbol = stripETHPrefix(symbol);
         return { name, symbol: cleanedSymbol };
       } catch (error) {
-        console.warn('Error fetching token details for:', tokenAddress, error);
         return null;
       }
     });
@@ -92,56 +91,24 @@ export const useMarketplace = () => {
   const fetchTokenHolderCount = async (tokenAddress: string, provider: ethers.Provider): Promise<number> => {
     return deduplicatedFetch(`token-holders-${tokenAddress}`, async () => {
       try {
-        console.log(`🔍 Fetching holder count for token: ${tokenAddress}`);
-        const tokenContract = new ethers.Contract(tokenAddress, LAUNCHPAD_TOKEN_ABI, provider);
+        // Use Push Donut API to get holder count
+        const response = await fetch(
+          `https://donut.push.network/api/v2/tokens/${tokenAddress}/counters`,
+          {
+            headers: {
+              'accept': 'application/json',
+            },
+          }
+        );
 
-        // Get all Transfer events from the token contract
-        const transferFilter = tokenContract.filters.Transfer();
-        const events = await tokenContract.queryFilter(transferFilter, 0, 'latest');
-
-        if (events.length === 0) {
-          console.log(`No transfer events found for ${tokenAddress}`);
+        if (response.ok) {
+          const data = await response.json();
+          const holders = parseInt(data.token_holders_count || '0', 10);
+          return holders;
+        } else {
           return 0;
         }
-
-        console.log(`Found ${events.length} transfer events for ${tokenAddress}`);
-
-        // Track unique addresses that have received tokens
-        const potentialHolders = new Set<string>();
-
-        for (const event of events) {
-          // Cast to EventLog to access args property
-          if ('args' in event) {
-            const { to } = event.args!;
-
-            // Add recipient to potential holders (if not zero address)
-            if (to !== ethers.ZeroAddress) {
-              potentialHolders.add(to.toLowerCase());
-            }
-          }
-        }
-
-        console.log(`Found ${potentialHolders.size} potential holders for ${tokenAddress}`);
-
-        // Check current balances for all potential holders
-        const holderPromises = Array.from(potentialHolders).map(async (holderAddress) => {
-          try {
-            const balance = await tokenContract.balanceOf(holderAddress);
-            return balance > BigInt(0) ? holderAddress : null;
-          } catch (error) {
-            console.warn(`Error checking balance for ${holderAddress}:`, error);
-            return null;
-          }
-        });
-
-        const results = await Promise.all(holderPromises);
-        const actualHolders = results.filter(holder => holder !== null);
-
-        console.log(`✅ Token ${tokenAddress} has ${actualHolders.length} holders`);
-        return actualHolders.length;
-
       } catch (error) {
-        console.warn('Error fetching holder count for:', tokenAddress, error);
         return 0;
       }
     });
@@ -162,32 +129,27 @@ export const useMarketplace = () => {
       );
 
       let tokenAddresses: string[] = [];
-      
+
       // First, try to load from indexed JSON file (fast, offline-first)
       try {
-        console.log('🔍 Trying to load tokens from indexed file...');
         const response = await fetch('/token-addresses.json');
         if (response.ok) {
           const indexedData = await response.json();
           if (indexedData.tokens && Array.isArray(indexedData.tokens) && indexedData.tokens.length > 0) {
             tokenAddresses = indexedData.tokens;
-            console.log(`✅ Loaded ${tokenAddresses.length} tokens from indexed file (last updated: ${indexedData.indexedAt || 'unknown'})`);
           }
         }
       } catch {
-        console.log('⚠️ Could not load indexed file, falling back to on-chain query...');
+        // Fallback to on-chain query
       }
-      
+
       // Fallback: Try getAllTokens() if indexed file doesn't exist or is empty
       if (tokenAddresses.length === 0) {
         try {
-          console.log('🔍 Fetching all token addresses from marketplace...');
           tokenAddresses = await marketplaceContract.getAllTokens();
-          console.log('📋 Found token addresses:', tokenAddresses.length);
         } catch (onChainError) {
           const errorMsg = onChainError instanceof Error ? onChainError.message : String(onChainError);
-          console.error('❌ Failed to fetch tokens from chain:', errorMsg);
-          
+
           // If both methods fail, show helpful error
           setError('Unable to load tokens. Please run "npm run index-tokens" to create the token index, or wait for the backend to be ready.');
           setIsInitializing(false);
@@ -216,10 +178,7 @@ export const useMarketplace = () => {
       // Sort by newest first (tokens in listedTokens array are in chronological order)
       // Use array as-is to show newest first (oldest last)
       // This requires NO RPC calls, preventing rate limiting
-      console.log('📊 Sorting tokens by creation order (newest first)...');
       const sorted = [...tokenAddresses]; // Use as-is to show newest first
-
-      console.log(`✅ Sorted ${sorted.length} tokens by creation order (newest first)`);
 
       // Cache sorted token addresses
       setCachedSortedTokens(sorted);
@@ -232,7 +191,6 @@ export const useMarketplace = () => {
 
       return sorted;
     } catch (error) {
-      console.error('❌ Error fetching and sorting token addresses:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch token addresses');
       setIsInitializing(false);
       return [];
@@ -260,11 +218,9 @@ export const useMarketplace = () => {
       const endIndex = startIndex + tokensPerPage;
       const pageTokenAddresses = sortedAddresses.slice(startIndex, endIndex);
 
-      console.log(`📄 Loading page ${page}: tokens ${startIndex + 1}-${Math.min(endIndex, sortedAddresses.length)} of ${sortedAddresses.length}`);
-
       // Create provider for reading data
       const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
-      
+
       // Create marketplace contract instance
       const marketplaceContract = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenMarketplace,
@@ -278,21 +234,17 @@ export const useMarketplace = () => {
           // Check cache first
           const cached = getCachedToken<MarketplaceToken>(address);
           if (cached) {
-            console.log(`✅ Using cached data for ${address}`);
             return cached;
           }
-          
-          console.log(`🔍 Fetching info for token: ${address}`);
-          
-          // Fetch essential data in parallel for speed
+
+          // Fetch essential data in parallel for speed (don't wait for metadata)
           const [tokenInfo, tokenDetails, priceWei] = await Promise.all([
             marketplaceContract.getTokenInfo(address),
             fetchTokenDetails(address, provider),
             marketplaceContract.getCurrentPrice(address).catch(() => BigInt(0))
           ]);
-          
+
           if (!tokenDetails) {
-            console.warn(`⚠️ Could not fetch token details for ${address}`);
             return null;
           }
 
@@ -302,7 +254,7 @@ export const useMarketplace = () => {
           const currentSupply = parseFloat(ethers.formatEther(tokenInfo.currentSupply));
           const reserveBalance = parseFloat(ethers.formatEther(tokenInfo.reserveBalance));
 
-          // Create token with essential data immediately
+          // Create token with essential data immediately (show tokens fast)
           const marketplaceToken: MarketplaceToken = {
             address,
             name: tokenDetails.name,
@@ -326,54 +278,50 @@ export const useMarketplace = () => {
           // Cache the basic token data
           setCachedToken(address, marketplaceToken);
 
-          // Fetch metadata and holder count asynchronously (non-blocking)
+          // Fetch metadata and holder count asynchronously (non-blocking, but start immediately)
+          // Start fetching right away so images appear as soon as possible
           Promise.all([
             fetchTokenMetadata(tokenInfo.metadataURI).catch(() => null),
             fetchTokenHolderCount(address, provider).catch(() => 0)
           ]).then(([metadata, holderCount]) => {
             // Update token with additional data
+            // Use metadata image directly without validation (same as token details page)
             const updatedToken = {
               ...marketplaceToken,
               description: metadata?.description || 'No description available',
-              logo: metadata?.image || undefined,
+              logo: metadata?.image,
               holders: holderCount
             };
-            
+
             // Update cache
             setCachedToken(address, updatedToken);
-            
+
             // Update state
             setTokens(prevTokens =>
               prevTokens.map(t => t.address === address ? updatedToken : t)
             );
-            
-            console.log(`📊 Updated ${tokenDetails.symbol} with metadata and holders: ${holderCount}`);
           });
 
-          console.log(`✅ Loaded basic data for ${tokenDetails.symbol}`);
           return marketplaceToken;
 
         } catch (error) {
-          console.error(`❌ Error fetching token info for ${address}:`, error);
           return null;
         }
       });
 
       // Wait for all token data to be fetched
       const tokenResults = await Promise.all(tokenPromises);
-      
+
       // Filter out null results and set tokens
       const validTokens = tokenResults.filter((token): token is MarketplaceToken => token !== null);
-      
+
       // Tokens are already sorted by creation order (oldest first) from sortedTokenAddresses
       // Promise.all maintains the order of results, so no need to re-sort
       // This prevents RPC rate limiting that would occur from fetching market caps for all tokens
-      
-      console.log(`✅ Successfully fetched ${validTokens.length} tokens for page ${page}`);
+
       setTokens(validTokens);
 
     } catch (error) {
-      console.error('❌ Error fetching marketplace tokens:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch marketplace tokens');
     } finally {
       setIsLoading(false);
@@ -445,10 +393,19 @@ export const useMarketplace = () => {
       // Fetch metadata asynchronously (non-blocking)
       fetchTokenMetadata(tokenInfo.metadataURI).then((metadata) => {
         if (metadata) {
+          // Only use IPFS images - filter out random image services like picsum
+          const isValidIPFSImage = metadata.image && (
+            metadata.image.startsWith('ipfs://') ||
+            metadata.image.includes('/ipfs/') ||
+            metadata.image.includes('pinata.cloud') ||
+            metadata.image.includes('cloudflare-ipfs.com') ||
+            metadata.image.includes('dweb.link')
+          );
+
           const finalToken = {
             ...updatedToken,
             description: metadata.description || 'No description available',
-            logo: metadata.image || undefined
+            logo: isValidIPFSImage ? metadata.image : undefined
           };
           setCachedToken(tokenAddress, finalToken);
           setTokens(prevTokens =>
@@ -458,10 +415,8 @@ export const useMarketplace = () => {
       }).catch(() => {
         // Metadata fetch failed, but we still have the updated market cap
       });
-
-      console.log(`✅ Refreshed token data for ${tokenDetails.symbol}: Market Cap = ${marketCap} ETH`);
     } catch (error) {
-      console.error(`❌ Error refreshing token data for ${tokenAddress}:`, error);
+      // Error refreshing token data
     }
   }, []);
 
@@ -474,17 +429,15 @@ export const useMarketplace = () => {
   useEffect(() => {
     const handleTokenDataChanged = (event: CustomEvent) => {
       const tokenAddress = event.detail?.tokenAddress;
-      console.log('🔄 Token data changed, refreshing marketplace...', tokenAddress);
-      
+
       if (tokenAddress) {
         // Invalidate cache for the specific token that was traded
         removeCachedToken(tokenAddress);
-        console.log(`🗑️ Invalidated cache for token: ${tokenAddress}`);
-        
+
         // Refresh the specific token's data immediately
         refreshTokenData(tokenAddress);
       }
-      
+
       // Also refresh the current page to ensure all data is up to date
       setTimeout(() => {
         fetchMarketplaceTokens(currentPage);
@@ -492,7 +445,7 @@ export const useMarketplace = () => {
     };
 
     window.addEventListener('tokenDataChanged', handleTokenDataChanged as EventListener);
-    
+
     return () => {
       window.removeEventListener('tokenDataChanged', handleTokenDataChanged as EventListener);
     };
@@ -506,7 +459,6 @@ export const useMarketplace = () => {
       const cachedTotal = getCachedTotalTokens();
 
       if (cachedAddresses && cachedAddresses.length > 0) {
-        console.log('✅ Loaded sorted token addresses from cache:', cachedAddresses.length);
         setSortedTokenAddresses(cachedAddresses);
         setIsInitializing(false);
 
@@ -518,11 +470,9 @@ export const useMarketplace = () => {
         }
 
         // Fetch fresh data in the background to update cache (silent mode - no state updates)
-        console.log('🔄 Refreshing data in background...');
         fetchAndSortTokenAddresses(true);
       } else {
         // No cache, fetch from network (shows "Initializing")
-        console.log('🔄 No cached data found, fetching from network...');
         fetchAndSortTokenAddresses(false);
       }
     }
@@ -533,7 +483,7 @@ export const useMarketplace = () => {
     if (sortedTokenAddresses.length > 0) {
       fetchMarketplaceTokens(currentPage);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, sortedTokenAddresses.length]);
 
   const totalPages = Math.ceil(totalTokens / tokensPerPage);
