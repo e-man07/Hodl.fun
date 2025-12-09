@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI, LAUNCHPAD_TOKEN_ABI } from '@/config/abis';
-import { getCachedToken, setCachedToken, getCachedSortedTokens, setCachedSortedTokens, getCachedAggregateStats, setCachedAggregateStats, getCachedTotalTokens, setCachedTotalTokens } from '@/lib/tokenCache';
+import { getCachedToken, setCachedToken, getCachedSortedTokens, setCachedSortedTokens, getCachedTotalTokens, setCachedTotalTokens, removeCachedToken } from '@/lib/tokenCache';
 import { fetchIPFSMetadata } from '@/lib/ipfsCache';
 import { deduplicatedFetch } from '@/lib/requestDeduplication';
 
@@ -49,17 +49,26 @@ export const useMarketplace = () => {
   const [sortedTokenAddresses, setSortedTokenAddresses] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [tokensPerPage] = useState(24); // 20-25 tokens per page
-  const [aggregateStats, setAggregateStats] = useState<{
-    totalMarketCap: number;
-    tradingTokens: number;
-  }>({
-    totalMarketCap: 0,
-    tradingTokens: 0
-  });
 
   // Use the new optimized IPFS fetching with caching and racing
   const fetchTokenMetadata = async (metadataURI: string): Promise<TokenMetadata | null> => {
     return fetchIPFSMetadata(metadataURI);
+  };
+
+  // Helper function to remove ETH prefix from token symbols
+  const stripETHPrefix = (symbol: string): string => {
+    if (!symbol) return '';
+    let cleaned = symbol.trim();
+    const upperSymbol = cleaned.toUpperCase();
+    // Handle "ETH " with space first
+    if (upperSymbol.startsWith('ETH ') && cleaned.length > 4) {
+      cleaned = cleaned.substring(4).trim();
+    }
+    // Then handle "ETH" without space
+    else if (upperSymbol.startsWith('ETH') && cleaned.length > 3) {
+      cleaned = cleaned.substring(3).trim();
+    }
+    return cleaned || symbol;
   };
 
   const fetchTokenDetails = async (tokenAddress: string, provider: ethers.Provider): Promise<{ name: string; symbol: string } | null> => {
@@ -70,9 +79,10 @@ export const useMarketplace = () => {
           tokenContract.name(),
           tokenContract.symbol()
         ]);
-        return { name, symbol };
+        // Strip ETH prefix from symbol for consistent display
+        const cleanedSymbol = stripETHPrefix(symbol);
+        return { name, symbol: cleanedSymbol };
       } catch (error) {
-        console.warn('Error fetching token details for:', tokenAddress, error);
         return null;
       }
     });
@@ -81,56 +91,24 @@ export const useMarketplace = () => {
   const fetchTokenHolderCount = async (tokenAddress: string, provider: ethers.Provider): Promise<number> => {
     return deduplicatedFetch(`token-holders-${tokenAddress}`, async () => {
       try {
-        console.log(`🔍 Fetching holder count for token: ${tokenAddress}`);
-        const tokenContract = new ethers.Contract(tokenAddress, LAUNCHPAD_TOKEN_ABI, provider);
+        // Use Push Donut API to get holder count
+        const response = await fetch(
+          `https://donut.push.network/api/v2/tokens/${tokenAddress}/counters`,
+          {
+            headers: {
+              'accept': 'application/json',
+            },
+          }
+        );
 
-        // Get all Transfer events from the token contract
-        const transferFilter = tokenContract.filters.Transfer();
-        const events = await tokenContract.queryFilter(transferFilter, 0, 'latest');
-
-        if (events.length === 0) {
-          console.log(`No transfer events found for ${tokenAddress}`);
+        if (response.ok) {
+          const data = await response.json();
+          const holders = parseInt(data.token_holders_count || '0', 10);
+          return holders;
+        } else {
           return 0;
         }
-
-        console.log(`Found ${events.length} transfer events for ${tokenAddress}`);
-
-        // Track unique addresses that have received tokens
-        const potentialHolders = new Set<string>();
-
-        for (const event of events) {
-          // Cast to EventLog to access args property
-          if ('args' in event) {
-            const { to } = event.args!;
-
-            // Add recipient to potential holders (if not zero address)
-            if (to !== ethers.ZeroAddress) {
-              potentialHolders.add(to.toLowerCase());
-            }
-          }
-        }
-
-        console.log(`Found ${potentialHolders.size} potential holders for ${tokenAddress}`);
-
-        // Check current balances for all potential holders
-        const holderPromises = Array.from(potentialHolders).map(async (holderAddress) => {
-          try {
-            const balance = await tokenContract.balanceOf(holderAddress);
-            return balance > BigInt(0) ? holderAddress : null;
-          } catch (error) {
-            console.warn(`Error checking balance for ${holderAddress}:`, error);
-            return null;
-          }
-        });
-
-        const results = await Promise.all(holderPromises);
-        const actualHolders = results.filter(holder => holder !== null);
-
-        console.log(`✅ Token ${tokenAddress} has ${actualHolders.length} holders`);
-        return actualHolders.length;
-
       } catch (error) {
-        console.warn('Error fetching holder count for:', tokenAddress, error);
         return 0;
       }
     });
@@ -151,32 +129,27 @@ export const useMarketplace = () => {
       );
 
       let tokenAddresses: string[] = [];
-      
+
       // First, try to load from indexed JSON file (fast, offline-first)
       try {
-        console.log('🔍 Trying to load tokens from indexed file...');
         const response = await fetch('/token-addresses.json');
         if (response.ok) {
           const indexedData = await response.json();
           if (indexedData.tokens && Array.isArray(indexedData.tokens) && indexedData.tokens.length > 0) {
             tokenAddresses = indexedData.tokens;
-            console.log(`✅ Loaded ${tokenAddresses.length} tokens from indexed file (last updated: ${indexedData.indexedAt || 'unknown'})`);
           }
         }
       } catch {
-        console.log('⚠️ Could not load indexed file, falling back to on-chain query...');
+        // Fallback to on-chain query
       }
-      
+
       // Fallback: Try getAllTokens() if indexed file doesn't exist or is empty
       if (tokenAddresses.length === 0) {
         try {
-          console.log('🔍 Fetching all token addresses from marketplace...');
           tokenAddresses = await marketplaceContract.getAllTokens();
-          console.log('📋 Found token addresses:', tokenAddresses.length);
         } catch (onChainError) {
           const errorMsg = onChainError instanceof Error ? onChainError.message : String(onChainError);
-          console.error('❌ Failed to fetch tokens from chain:', errorMsg);
-          
+
           // If both methods fail, show helpful error
           setError('Unable to load tokens. Please run "npm run index-tokens" to create the token index, or wait for the backend to be ready.');
           setIsInitializing(false);
@@ -202,87 +175,15 @@ export const useMarketplace = () => {
         setTotalTokens(tokenAddresses.length);
       }
 
-      // Fetch market caps in batches to sort tokens and calculate aggregate stats
-      console.log('📊 Fetching market caps for sorting and aggregate stats...');
-      const BATCH_SIZE = 50; // Fetch market caps in batches of 50
-      const tokenInfoPromises: Array<Promise<{ 
-        address: string; 
-        marketCap: bigint;
-        tradingEnabled: boolean;
-      }>> = [];
+      // Sort by newest first (tokens in listedTokens array are in chronological order)
+      // Use array as-is to show newest first (oldest last)
+      // This requires NO RPC calls, preventing rate limiting
+      const sorted = [...tokenAddresses]; // Use as-is to show newest first
 
-      for (let i = 0; i < tokenAddresses.length; i += BATCH_SIZE) {
-        const batch = tokenAddresses.slice(i, i + BATCH_SIZE);
-        const batchPromises = batch.map(async (address) => {
-          try {
-            const tokenInfo = await marketplaceContract.getTokenInfo(address);
-            return { 
-              address, 
-              marketCap: tokenInfo.marketCap,
-              tradingEnabled: tokenInfo.tradingEnabled
-            };
-          } catch (error) {
-            console.warn(`Failed to get token info for ${address}:`, error);
-            return { 
-              address, 
-              marketCap: BigInt(0),
-              tradingEnabled: false
-            };
-          }
-        });
-        tokenInfoPromises.push(...batchPromises);
-
-        // Add small delay between batches to avoid rate limiting
-        if (i + BATCH_SIZE < tokenAddresses.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-
-      const tokenInfos = await Promise.all(tokenInfoPromises);
-
-      // Calculate aggregate stats from all tokens
-      let totalMarketCap = BigInt(0);
-      let tradingTokensCount = 0;
-      
-      for (const info of tokenInfos) {
-        totalMarketCap += info.marketCap;
-        if (info.tradingEnabled) {
-          tradingTokensCount++;
-        }
-      }
-
-      const totalMarketCapEth = parseFloat(ethers.formatEther(totalMarketCap));
-      
-      console.log(`📊 Aggregate stats: Total Market Cap: ${totalMarketCapEth} ETH, Trading Tokens: ${tradingTokensCount}`);
-      
-      const aggregateStatsData = {
-        totalMarketCap: totalMarketCapEth,
-        tradingTokens: tradingTokensCount
-      };
-
-      // Cache aggregate stats
-      setCachedAggregateStats(aggregateStatsData);
-
-      // Only update state if not in silent mode
-      if (!silent) {
-        setAggregateStats(aggregateStatsData);
-      }
-
-      // Sort by market cap (descending)
-      const sorted = tokenInfos
-        .sort((a, b) => {
-          if (b.marketCap > a.marketCap) return 1;
-          if (b.marketCap < a.marketCap) return -1;
-          return 0;
-        })
-        .map(info => info.address);
-
-      console.log('✅ Sorted tokens by market cap');
-
-      // Cache sorted token addresses for fast subsequent loads
+      // Cache sorted token addresses
       setCachedSortedTokens(sorted);
 
-      // Only update state if not in silent mode or if data changed
+      // Only update state if not in silent mode
       if (!silent) {
         setSortedTokenAddresses(sorted);
         setIsInitializing(false);
@@ -290,7 +191,6 @@ export const useMarketplace = () => {
 
       return sorted;
     } catch (error) {
-      console.error('❌ Error fetching and sorting token addresses:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch token addresses');
       setIsInitializing(false);
       return [];
@@ -318,11 +218,9 @@ export const useMarketplace = () => {
       const endIndex = startIndex + tokensPerPage;
       const pageTokenAddresses = sortedAddresses.slice(startIndex, endIndex);
 
-      console.log(`📄 Loading page ${page}: tokens ${startIndex + 1}-${Math.min(endIndex, sortedAddresses.length)} of ${sortedAddresses.length}`);
-
       // Create provider for reading data
       const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
-      
+
       // Create marketplace contract instance
       const marketplaceContract = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenMarketplace,
@@ -336,21 +234,17 @@ export const useMarketplace = () => {
           // Check cache first
           const cached = getCachedToken<MarketplaceToken>(address);
           if (cached) {
-            console.log(`✅ Using cached data for ${address}`);
             return cached;
           }
-          
-          console.log(`🔍 Fetching info for token: ${address}`);
-          
-          // Fetch essential data in parallel for speed
+
+          // Fetch essential data in parallel for speed (don't wait for metadata)
           const [tokenInfo, tokenDetails, priceWei] = await Promise.all([
             marketplaceContract.getTokenInfo(address),
             fetchTokenDetails(address, provider),
             marketplaceContract.getCurrentPrice(address).catch(() => BigInt(0))
           ]);
-          
+
           if (!tokenDetails) {
-            console.warn(`⚠️ Could not fetch token details for ${address}`);
             return null;
           }
 
@@ -360,7 +254,7 @@ export const useMarketplace = () => {
           const currentSupply = parseFloat(ethers.formatEther(tokenInfo.currentSupply));
           const reserveBalance = parseFloat(ethers.formatEther(tokenInfo.reserveBalance));
 
-          // Create token with essential data immediately
+          // Create token with essential data immediately (show tokens fast)
           const marketplaceToken: MarketplaceToken = {
             address,
             name: tokenDetails.name,
@@ -384,53 +278,50 @@ export const useMarketplace = () => {
           // Cache the basic token data
           setCachedToken(address, marketplaceToken);
 
-          // Fetch metadata and holder count asynchronously (non-blocking)
+          // Fetch metadata and holder count asynchronously (non-blocking, but start immediately)
+          // Start fetching right away so images appear as soon as possible
           Promise.all([
             fetchTokenMetadata(tokenInfo.metadataURI).catch(() => null),
             fetchTokenHolderCount(address, provider).catch(() => 0)
           ]).then(([metadata, holderCount]) => {
             // Update token with additional data
+            // Use metadata image directly without validation (same as token details page)
             const updatedToken = {
               ...marketplaceToken,
               description: metadata?.description || 'No description available',
-              logo: metadata?.image || undefined,
+              logo: metadata?.image,
               holders: holderCount
             };
-            
+
             // Update cache
             setCachedToken(address, updatedToken);
-            
+
             // Update state
             setTokens(prevTokens =>
               prevTokens.map(t => t.address === address ? updatedToken : t)
             );
-            
-            console.log(`📊 Updated ${tokenDetails.symbol} with metadata and holders: ${holderCount}`);
           });
 
-          console.log(`✅ Loaded basic data for ${tokenDetails.symbol}`);
           return marketplaceToken;
 
         } catch (error) {
-          console.error(`❌ Error fetching token info for ${address}:`, error);
           return null;
         }
       });
 
       // Wait for all token data to be fetched
       const tokenResults = await Promise.all(tokenPromises);
-      
+
       // Filter out null results and set tokens
       const validTokens = tokenResults.filter((token): token is MarketplaceToken => token !== null);
-      
-      // Sort by market cap to maintain order (in case of async updates)
-      validTokens.sort((a, b) => b.marketCap - a.marketCap);
-      
-      console.log(`✅ Successfully fetched ${validTokens.length} tokens for page ${page}`);
+
+      // Tokens are already sorted by creation order (oldest first) from sortedTokenAddresses
+      // Promise.all maintains the order of results, so no need to re-sort
+      // This prevents RPC rate limiting that would occur from fetching market caps for all tokens
+
       setTokens(validTokens);
 
     } catch (error) {
-      console.error('❌ Error fetching marketplace tokens:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch marketplace tokens');
     } finally {
       setIsLoading(false);
@@ -446,6 +337,89 @@ export const useMarketplace = () => {
     }
   }, [fetchAndSortTokenAddresses, fetchMarketplaceTokens, currentPage]);
 
+  // Refresh a specific token's data (used after trades)
+  const refreshTokenData = useCallback(async (tokenAddress: string) => {
+    try {
+      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+      const marketplaceContract = new ethers.Contract(
+        CONTRACT_ADDRESSES.TokenMarketplace,
+        TOKEN_MARKETPLACE_ABI,
+        provider
+      );
+
+      // Fetch fresh token info from blockchain
+      const [tokenInfo, tokenDetails, priceWei] = await Promise.all([
+        marketplaceContract.getTokenInfo(tokenAddress),
+        fetchTokenDetails(tokenAddress, provider),
+        marketplaceContract.getCurrentPrice(tokenAddress).catch(() => BigInt(0))
+      ]);
+
+      if (!tokenDetails) return;
+
+      const currentPrice = parseFloat(ethers.formatEther(priceWei));
+      const marketCap = parseFloat(ethers.formatEther(tokenInfo.marketCap));
+      const totalSupply = parseFloat(ethers.formatEther(tokenInfo.totalSupply));
+      const currentSupply = parseFloat(ethers.formatEther(tokenInfo.currentSupply));
+      const reserveBalance = parseFloat(ethers.formatEther(tokenInfo.reserveBalance));
+
+      const updatedToken: MarketplaceToken = {
+        address: tokenAddress,
+        name: tokenDetails.name,
+        symbol: tokenDetails.symbol,
+        description: 'Loading...',
+        price: currentPrice,
+        priceChange24h: 0,
+        marketCap,
+        volume24h: 0,
+        holders: 0,
+        createdAt: new Date(Number(tokenInfo.launchTimestamp) * 1000).toISOString().split('T')[0],
+        creator: tokenInfo.creator,
+        reserveRatio: Number(tokenInfo.reserveRatio) / 100,
+        isTrading: tokenInfo.tradingEnabled,
+        logo: undefined,
+        currentSupply,
+        totalSupply,
+        reserveBalance
+      };
+
+      // Update cache with fresh data
+      setCachedToken(tokenAddress, updatedToken);
+
+      // Update state if token is on current page
+      setTokens(prevTokens =>
+        prevTokens.map(t => t.address === tokenAddress ? updatedToken : t)
+      );
+
+      // Fetch metadata asynchronously (non-blocking)
+      fetchTokenMetadata(tokenInfo.metadataURI).then((metadata) => {
+        if (metadata) {
+          // Only use IPFS images - filter out random image services like picsum
+          const isValidIPFSImage = metadata.image && (
+            metadata.image.startsWith('ipfs://') ||
+            metadata.image.includes('/ipfs/') ||
+            metadata.image.includes('pinata.cloud') ||
+            metadata.image.includes('cloudflare-ipfs.com') ||
+            metadata.image.includes('dweb.link')
+          );
+
+          const finalToken = {
+            ...updatedToken,
+            description: metadata.description || 'No description available',
+            logo: isValidIPFSImage ? metadata.image : undefined
+          };
+          setCachedToken(tokenAddress, finalToken);
+          setTokens(prevTokens =>
+            prevTokens.map(t => t.address === tokenAddress ? finalToken : t)
+          );
+        }
+      }).catch(() => {
+        // Metadata fetch failed, but we still have the updated market cap
+      });
+    } catch (error) {
+      // Error refreshing token data
+    }
+  }, []);
+
   const loadPage = useCallback(async (page: number) => {
     setCurrentPage(page);
     await fetchMarketplaceTokens(page);
@@ -454,27 +428,37 @@ export const useMarketplace = () => {
   // Listen for token data changes (from trading transactions)
   useEffect(() => {
     const handleTokenDataChanged = (event: CustomEvent) => {
-      console.log('🔄 Token data changed, refreshing marketplace...', event.detail);
-      refreshTokens();
+      const tokenAddress = event.detail?.tokenAddress;
+
+      if (tokenAddress) {
+        // Invalidate cache for the specific token that was traded
+        removeCachedToken(tokenAddress);
+
+        // Refresh the specific token's data immediately
+        refreshTokenData(tokenAddress);
+      }
+
+      // Also refresh the current page to ensure all data is up to date
+      setTimeout(() => {
+        fetchMarketplaceTokens(currentPage);
+      }, 1000); // Small delay to ensure blockchain state is updated
     };
 
     window.addEventListener('tokenDataChanged', handleTokenDataChanged as EventListener);
-    
+
     return () => {
       window.removeEventListener('tokenDataChanged', handleTokenDataChanged as EventListener);
     };
-  }, [refreshTokens]);
+  }, [currentPage, fetchMarketplaceTokens, refreshTokenData]);
 
   // Load cached data on mount and fetch fresh data in background
   useEffect(() => {
     if (sortedTokenAddresses.length === 0) {
       // Try to load from cache first for instant display
       const cachedAddresses = getCachedSortedTokens();
-      const cachedStats = getCachedAggregateStats();
       const cachedTotal = getCachedTotalTokens();
 
       if (cachedAddresses && cachedAddresses.length > 0) {
-        console.log('✅ Loaded sorted token addresses from cache:', cachedAddresses.length);
         setSortedTokenAddresses(cachedAddresses);
         setIsInitializing(false);
 
@@ -485,18 +469,10 @@ export const useMarketplace = () => {
           setTotalTokens(cachedAddresses.length);
         }
 
-        // Load cached stats
-        if (cachedStats) {
-          console.log('✅ Loaded aggregate stats from cache');
-          setAggregateStats(cachedStats);
-        }
-
         // Fetch fresh data in the background to update cache (silent mode - no state updates)
-        console.log('🔄 Refreshing data in background...');
         fetchAndSortTokenAddresses(true);
       } else {
         // No cache, fetch from network (shows "Initializing")
-        console.log('🔄 No cached data found, fetching from network...');
         fetchAndSortTokenAddresses(false);
       }
     }
@@ -507,7 +483,7 @@ export const useMarketplace = () => {
     if (sortedTokenAddresses.length > 0) {
       fetchMarketplaceTokens(currentPage);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, sortedTokenAddresses.length]);
 
   const totalPages = Math.ceil(totalTokens / tokensPerPage);
@@ -523,7 +499,6 @@ export const useMarketplace = () => {
     currentPage,
     totalPages,
     tokensPerPage,
-    loadPage,
-    aggregateStats
+    loadPage
   };
 };

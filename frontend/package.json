@@ -1,5 +1,5 @@
 {
-  "name": "hodl.fun",
+  "name": "Hodl.fun",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -24,8 +24,9 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "ethers": "^6.15.0",
+    "lightweight-charts": "^5.0.9",
     "lucide-react": "^0.545.0",
-    "next": "15.5.4",
+    "next": "^15.5.5",
     "pino-pretty": "^13.1.2",
     "pixel-retroui": "^2.1.0",
     "react": "19.1.0",
@@ -40,7 +41,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.5.4",
+    "eslint-config-next": "^15.5.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

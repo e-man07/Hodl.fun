@@ -1,535 +1,652 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Zap,
+  Search,
   TrendingUp,
-  Shield,
   Coins,
   Users,
+  Clock,
   BarChart3,
-  Rocket,
-  ArrowRight,
-  Star,
-  Globe,
-  Clock
+  RefreshCw,
+  Loader2,
+  Filter,
+  SortAsc,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
-import Image from 'next/image';
 import Navbar from '@/components/layout/Navbar';
-import { VoteBanner } from '@/components/VoteBanner';
+import { DegenOnboardingModal } from '@/components/DegenOnboardingModal';
+import { TradingActivityBanner } from '@/components/TradingActivityBanner';
+import { formatCurrency, formatNumber } from '@/lib/utils';
+import { useMarketplace } from '@/hooks/useMarketplace';
+import { useDebounce } from '@/hooks/useDebounce';
+import { getIPFSImageUrl, createIPFSImageErrorHandler } from '@/utils/ipfsImage';
 
-// Animation hook for intersection observer
-const useInView = (options = {}) => {
-  const ref = useRef<HTMLElement>(null);
-  const [isInView, setIsInView] = useState(false);
+interface Token {
+  address: string;
+  name: string;
+  symbol: string;
+  description: string;
+  price: number;
+  marketCap: number;
+  holders: number;
+  createdAt: string;
+  creator: string;
+  reserveRatio: number;
+  isTrading: boolean;
+  logo?: string;
+  currentSupply: number;
+  totalSupply: number;
+  reserveBalance: number;
+}
 
+// Trending Section with card-based design matching the provided design
+const TrendingSection = ({ tokens, router }: { tokens: Token[]; router: ReturnType<typeof useRouter> }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isPaused, setIsPaused] = useState(false);
+
+  const trendingTokens = tokens
+    .sort((a, b) => b.marketCap - a.marketCap)
+    .slice(0, 6);
+
+  // Auto-scroll animation for mobile
   useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setIsInView(true);
-      }
-    }, { threshold: 0.1, ...options });
+    const scrollContainer = scrollRef.current;
+    if (!scrollContainer) return;
 
-    const currentRef = ref.current;
-    if (currentRef) {
-      observer.observe(currentRef);
-    }
+    // Only auto-scroll on mobile (check if we're in horizontal scroll mode)
+    const checkMobile = () => window.innerWidth < 768;
+
+    let animationId: number;
+    let scrollPosition = scrollContainer.scrollLeft;
+    const scrollSpeed = 0.5; // pixels per frame
+
+    const animate = () => {
+      if (!checkMobile() || isPaused || !scrollContainer) {
+        animationId = requestAnimationFrame(animate);
+        return;
+      }
+
+      scrollPosition += scrollSpeed;
+      const maxScroll = scrollContainer.scrollWidth - scrollContainer.clientWidth;
+
+      // Reset to start when reaching the end
+      if (scrollPosition >= maxScroll) {
+        scrollPosition = 0;
+      }
+
+      scrollContainer.scrollLeft = scrollPosition;
+      animationId = requestAnimationFrame(animate);
+    };
+
+    animationId = requestAnimationFrame(animate);
+
+    // Sync scroll position when user manually scrolls
+    const handleScroll = () => {
+      scrollPosition = scrollContainer.scrollLeft;
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
 
     return () => {
-      if (currentRef) {
-        observer.unobserve(currentRef);
-      }
+      cancelAnimationFrame(animationId);
+      scrollContainer.removeEventListener('scroll', handleScroll);
     };
-  }, [options]);
+  }, [isPaused]);
 
-  return { ref, isInView };
-};
+  // Format market cap for display (e.g., "4 ETH", "781.2 ETH")
+  const formatMarketCap = (marketCap: number): string => {
+    if (marketCap >= 1e9) {
+      return `${(marketCap / 1e9).toFixed(1)} ETH`;
+    }
+    if (marketCap >= 1e6) {
+      return `${(marketCap / 1e6).toFixed(1)} ETH`;
+    }
+    if (marketCap >= 1e3) {
+      return `${(marketCap / 1e3).toFixed(1)} ETH`;
+    }
+    return `${marketCap.toFixed(2)} ETH`;
+  };
 
-// Counter animation hook
-const useCountUp = (end: number, duration = 2000, isInView: boolean) => {
-  const [count, setCount] = useState(0);
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          {/* Blinking purple arrow icon */}
+          <TrendingUp className="h-5 w-5 text-primary animate-pulse" />
+          <span className="text-white font-bold text-xl">Trending Now</span>
+          <span className="text-lg">🔥</span>
+        </div>
+      </div>
+      <div className="relative">
+        <div
+          ref={scrollRef}
+          className="flex gap-4 overflow-x-auto pb-2 pt-3 scrollbar-hide md:grid md:grid-cols-3 lg:grid-cols-6 md:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+          onTouchStart={() => setIsPaused(true)}
+          onTouchEnd={() => setTimeout(() => setIsPaused(false), 3000)}
+        >
+          {trendingTokens.map((token, index) => (
+            <div
+              key={token.address}
+              className="group relative bg-card border border-border rounded-xl p-3 cursor-pointer transition-all duration-300 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1 flex-shrink-0 w-[180px] md:w-auto"
+              onClick={() => router.push(`/token/${token.address}`)}
+            >
+              {/* Card content: Image on left, Text on right */}
+              <div className="flex items-center gap-3">
+                {/* Token Image - Left side */}
+                <div className="flex-shrink-0">
+                  {token.logo ? (
+                    <div className="w-16 h-16 rounded-lg overflow-hidden border border-border group-hover:border-primary/30 transition-colors">
+                      <Image
+                        src={getIPFSImageUrl(token.logo)}
+                        alt={token.name}
+                        width={64}
+                        height={64}
+                        className="w-full h-full object-cover"
+                        onError={createIPFSImageErrorHandler(token.logo)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 border border-border group-hover:border-primary/30 flex items-center justify-center text-primary font-bold text-xl transition-colors">
+                      {token.symbol.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                </div>
 
-  useEffect(() => {
-    if (!isInView) return;
+                {/* Token Info - Right side */}
+                <div className="flex-1 min-w-0">
+                  {/* Token Ticker Badge - Above token name */}
+                  <Badge 
+                    variant="secondary" 
+                    className="bg-zinc-700/90 text-zinc-300 border-0 text-[10px] px-2 py-0.5 h-5 font-normal rounded-full mb-1.5 inline-block"
+                  >
+                    {token.symbol}
+                  </Badge>
+                  
+                  {/* Token Name - Larger white font */}
+                  <h3 className="font-bold text-base text-white group-hover:text-primary transition-colors truncate mb-1">
+                    {token.name}
+                  </h3>
+                  
+                  {/* Market Cap - Smaller purple font at bottom */}
+                  <p className="text-xs font-medium whitespace-nowrap">
+                    <span className="text-gray-400">MCap: </span>
+                    <span className="text-primary">{formatMarketCap(token.marketCap)}</span>
+                  </p>
+                </div>
+              </div>
 
-    let startTime: number;
-    let animationFrame: number;
-
-    const animate = (currentTime: number) => {
-      if (!startTime) startTime = currentTime;
-      const progress = Math.min((currentTime - startTime) / duration, 1);
-
-      setCount(Math.floor(progress * end));
-
-      if (progress < 1) {
-        animationFrame = requestAnimationFrame(animate);
-      }
-    };
-
-    animationFrame = requestAnimationFrame(animate);
-
-    return () => cancelAnimationFrame(animationFrame);
-  }, [end, duration, isInView]);
-
-  return count;
+              {/* Optional: Arrow button for last card (like in the image) */}
+              {index === trendingTokens.length - 1 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Could navigate to a "View All" page or scroll to see more
+                  }}
+                  className="absolute bottom-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary transition-colors opacity-0 group-hover:opacity-100"
+                  aria-label="View more"
+                >
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const HomePage = () => {
-  const [mounted, setMounted] = useState(false);
-  const stats = useInView();
-  const features = useInView();
-  const steps = useInView();
-  const cta = useInView();
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'marketCap' | 'holders' | 'createdAt'>('marketCap');
+  const [filterBy, setFilterBy] = useState<'all' | 'new' | 'trading'>('all');
+  const [showRefreshNotification, setShowRefreshNotification] = useState(false);
 
+  // Debounce search query for better performance
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  // Fetch real tokens from blockchain
+  const {
+    tokens,
+    isLoading,
+    isInitializing,
+    error,
+    refreshTokens,
+    totalTokens,
+    currentPage,
+    totalPages,
+    loadPage
+  } = useMarketplace();
+
+  // Removed auto-refresh to prevent random platform refreshes
+  // Users can manually refresh using the refresh button if needed
+
+  const filteredTokens = tokens
+    .filter(token => {
+      // Use debounced search query for better performance
+      const matchesSearch = debouncedSearchQuery === '' ||
+        token.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        token.symbol.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        token.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+
+      switch (filterBy) {
+        case 'new':
+          return matchesSearch && new Date(token.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Last 7 days
+        case 'trading':
+          return matchesSearch && token.isTrading;
+        default:
+          return matchesSearch;
+      }
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'marketCap':
+          return b.marketCap - a.marketCap;
+        case 'holders':
+          return b.holders - a.holders;
+        case 'createdAt':
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        default:
+          return 0;
+      }
+    });
+
+
+  // Listen for token data changes and show notification
   useEffect(() => {
-    setMounted(true);
+    const handleTokenDataChanged = () => {
+      setShowRefreshNotification(true);
+      setTimeout(() => {
+        setShowRefreshNotification(false);
+      }, 3000); // Hide notification after 3 seconds
+    };
+
+    window.addEventListener('tokenDataChanged', handleTokenDataChanged);
+
+    return () => {
+      window.removeEventListener('tokenDataChanged', handleTokenDataChanged);
+    };
   }, []);
 
-  const featuresData = [
-    {
-      icon: <Zap className="h-6 w-6" />,
-      title: 'Instant Token Creation',
-      description: 'Launch your ERC20 token in minutes with our intuitive interface and automated smart contracts.',
-    },
-    {
-      icon: <TrendingUp className="h-6 w-6" />,
-      title: 'Bonding Curve Pricing',
-      description: 'Automated price discovery through bonding curves ensures fair token distribution and liquidity.',
-    },
-    {
-      icon: <Shield className="h-6 w-6" />,
-      title: 'Security First',
-      description: 'Built with battle-tested OpenZeppelin contracts and comprehensive security measures.',
-    },
-    {
-      icon: <Coins className="h-6 w-6" />,
-      title: 'Auto Marketplace Listing',
-      description: 'Tokens are automatically listed on our marketplace with built-in trading functionality.',
-    },
-    {
-      icon: <Users className="h-6 w-6" />,
-      title: 'Community Driven',
-      description: 'Connect with other token creators and traders in our vibrant ecosystem.',
-    },
-    {
-      icon: <BarChart3 className="h-6 w-6" />,
-      title: 'Advanced Analytics',
-      description: 'Track your token performance with detailed analytics and real-time metrics.',
-    },
-  ];
+  const TokenCard = ({ token, index }: { token: Token; index: number }) => {
+    const [isVisible, setIsVisible] = useState(false);
+    const cardRef = useRef<HTMLDivElement>(null);
 
-  const statsData = [
-    { label: 'Tokens Launched', value: '1,234+', numericValue: 1234, suffix: '+' },
-    { label: 'Total Volume', value: '$2.5M+', numericValue: 2.5, suffix: 'M+', prefix: '$' },
-    { label: 'Active Users', value: '5,678+', numericValue: 5678, suffix: '+' },
-    { label: 'Success Rate', value: '98%', numericValue: 98, suffix: '%' },
-  ];
+    useEffect(() => {
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            setTimeout(() => setIsVisible(true), index * 100);
+          }
+        },
+        { threshold: 0.1 }
+      );
 
-  const stepsData = [
-    {
-      step: '01',
-      title: 'Create Token',
-      description: 'Define your token parameters including name, symbol, supply, and metadata.',
-    },
-    {
-      step: '02',
-      title: 'Auto Deploy',
-      description: 'Our smart contracts automatically deploy and list your token on the marketplace.',
-    },
-    {
-      step: '03',
-      title: 'Start Trading',
-      description: 'Begin trading immediately with bonding curve pricing and automated liquidity.',
-    },
-  ];
+      const currentRef = cardRef.current;
+      if (currentRef) {
+        observer.observe(currentRef);
+      }
+
+      return () => {
+        if (currentRef) {
+          observer.unobserve(currentRef);
+        }
+      };
+    }, [index]);
+
+    return (
+      <div
+        ref={cardRef}
+        className={`group cursor-pointer transition-all duration-500 hover:-translate-y-1 hover:shadow-xl bg-black border-2 border-zinc-800 rounded-xl p-3 hover:border-primary/50 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+          }`}
+        onClick={() => router.push(`/token/${token.address}`)}
+      >
+        {/* Large Token Image - IPFS or ticker initials */}
+        <div className="relative aspect-square w-full overflow-hidden rounded-xl border-2 border-zinc-800 group-hover:border-primary/50 transition-colors">
+          {token.logo && isVisible ? (
+            <Image
+              src={getIPFSImageUrl(token.logo)}
+              alt={`${token.name} logo`}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
+              unoptimized
+              loading={index < 8 ? "eager" : "lazy"}
+              priority={index < 4}
+              className="object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={createIPFSImageErrorHandler(token.logo)}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-bold text-4xl">
+              {token.symbol.slice(0, 2)}
+            </div>
+          )}
+        </div>
+
+        {/* Token Info */}
+        <div className="mt-3 space-y-2">
+          {/* Symbol Badge */}
+          <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30">
+            {token.symbol}
+          </Badge>
+
+          {/* Token Name */}
+          <h3 className="font-bold text-white group-hover:text-primary transition-colors truncate">
+            {token.name}
+          </h3>
+
+          {/* Description */}
+          <p className="text-xs text-zinc-400 line-clamp-2">
+            {token.description || 'No description available'}
+          </p>
+
+          {/* Stats Row */}
+          <div className="flex items-center gap-4 text-xs text-zinc-400 pt-1">
+            <span className="text-green-500 font-medium">+0%</span>
+            <span>Vol {formatCurrency(token.marketCap * 0.1)}</span>
+            <span className="flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              {token.holders}
+            </span>
+          </div>
+
+          {/* ATH Progress Bar */}
+          <div className="pt-2">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="text-zinc-400">MC <span className="text-white font-semibold"> {formatCurrency(token.marketCap)}</span></span>
+              <span className="text-zinc-400">ATH <span className="text-white font-semibold"> {formatCurrency(token.marketCap)}</span></span>
+            </div>
+            <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-500 rounded-full"
+                style={{ width: '100%' }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
-      <VoteBanner />
+      <DegenOnboardingModal />
       <Navbar />
-      
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-background">
-        {/* Animated background gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5 animate-gradient-shift" />
+      <TradingActivityBanner />
 
-        <div className="container relative mx-auto px-4 py-12 sm:py-20 lg:py-32">
-          <div className="mx-auto max-w-5xl">
-            <div className="text-center mb-12 sm:mb-16">
-              <Badge
-                variant="secondary"
-                className={`mb-6 sm:mb-8 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold tracking-wide transition-all duration-700 ${
-                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
-                }`}
-                style={{ transitionDelay: '100ms' }}
-              >
-                <Star className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-pulse" />
-                Live On Push Chain Testnet
-              </Badge>
+      <div className="container mx-auto px-4 pt-4 pb-12">
+        {/* Header - Degen Style */}
+        <div className="mb-8">
+          {/* Trending Now Section */}
+          {!isInitializing && filteredTokens.length > 0 && (
+            <TrendingSection tokens={filteredTokens} router={router} />
+          )}
 
-              <h1
-                className={`mb-6 sm:mb-8 text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight text-center transition-all duration-700 ${
-                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '200ms' }}
-              >
-                <span className="bg-gradient-to-r from-primary via-primary/80 to-primary bg-clip-text text-transparent block">
-                  Universal Token Launchpad
-                </span>
-              </h1>
+          {/* Loading/Error States */}
+          {isInitializing && (
+            <div className="flex flex-col items-center justify-center gap-3 mt-4">
+              <div className="flex items-center gap-2 text-primary">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-lg font-medium">Loading tokens...</span>
+              </div>
+            </div>
+          )}
 
-              <p
-                className={`mx-auto mb-8 sm:mb-10 max-w-3xl text-base sm:text-xl md:text-2xl text-muted-foreground leading-relaxed font-normal text-center transition-all duration-700 ${
-                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '300ms' }}
-              >
-                The first universal token launchpad. Launch tokens using any chain&apos;s native currency—Ethereum, Solana, and more. 
-                Trade seamlessly across chains with automated liquidity and bonding curves.{' '}
-                <span className="text-primary font-semibold">Launch Once, Trade Anywhere.</span>
-              </p>
+          {!isInitializing && isLoading && (
+            <div className="flex items-center justify-center gap-2 mt-4 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading page tokens...</span>
+            </div>
+          )}
 
-              <div
-                className={`flex flex-col gap-4 sm:gap-5 sm:flex-row sm:justify-center mb-12 sm:mb-16 px-4 transition-all duration-700 ${
-                  mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '400ms' }}
+          {/* Refresh Notification */}
+          {showRefreshNotification && (
+            <div className="flex items-center justify-center gap-2 mt-4 text-primary bg-primary/10 border border-primary/20 rounded-lg p-3 animate-in slide-in-from-top-2">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span>Updating market data after your transaction...</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
+              <p><strong>Error loading tokens:</strong> {error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshTokens}
+                className="mt-2"
               >
-                <Button
-                  size="lg"
-                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 group relative overflow-hidden"
-                  asChild
-                >
-                  <Link href="/launch">
-                    <span className="absolute inset-0 bg-gradient-to-r from-primary/0 via-white/20 to-primary/0 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
-                    <Rocket className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:rotate-12 transition-transform duration-300" />
-                    Launch Your Token
-                  </Link>
-                </Button>
+                Try Again
+              </Button>
+            </div>
+          )}
+
+          {!isInitializing && !isLoading && !error && tokens.length === 0 && (
+            <div className="mt-4 p-4 bg-muted/30 border border-border rounded-lg text-muted-foreground">
+              <p>No tokens found on the marketplace yet. Be the first to launch a token!</p>
+            </div>
+          )}
+        </div>
+
+        {/* Compact Filters and Search */}
+        {!isInitializing && (
+          <div className="mb-6">
+            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+              {/* Search Bar */}
+              <div className="relative flex-1 w-full sm:max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Search tokens..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 h-9 text-sm border-primary/20 focus:border-primary/50"
+                />
+              </div>
+
+              {/* Compact Filter Controls */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select value={filterBy} onValueChange={(value) => setFilterBy(value as 'all' | 'new' | 'trading')}>
+                  <SelectTrigger className="w-[120px] h-9 text-sm border-primary/20">
+                    <Filter className="mr-1.5 h-3.5 w-3.5" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="new">✨ New</SelectItem>
+                    <SelectItem value="trading">📈 Trading</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'marketCap' | 'holders' | 'createdAt')}>
+                  <SelectTrigger className="w-[130px] h-9 text-sm border-primary/20">
+                    <SortAsc className="mr-1.5 h-3.5 w-3.5" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="marketCap">Market Cap</SelectItem>
+                    <SelectItem value="holders">Holders</SelectItem>
+                    <SelectItem value="createdAt">Newest</SelectItem>
+                  </SelectContent>
+                </Select>
+
                 <Button
                   variant="outline"
-                  size="lg"
-                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto hover:bg-primary/10 border-2 transition-all duration-300 hover:border-primary/50 group"
-                  asChild
+                  size="sm"
+                  onClick={refreshTokens}
+                  disabled={isLoading || isInitializing}
+                  className="h-9 px-3 border-primary/20 hover:border-primary/50"
                 >
-                  <Link href="/marketplace">
-                    <BarChart3 className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:scale-110 transition-transform duration-300" />
-                    Explore Marketplace
-                    <ArrowRight className="ml-2 sm:ml-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:translate-x-1 transition-transform duration-300" />
-                  </Link>
+                  <RefreshCw className={`h-3.5 w-3.5 ${isLoading || isInitializing ? 'animate-spin' : ''}`} />
                 </Button>
+              </div>
+
+              {/* Compact Token Count */}
+              <div className="text-xs text-muted-foreground whitespace-nowrap ml-auto">
+                {filteredTokens.length} / {tokens.length}
+                {totalTokens > tokens.length && (
+                  <span className="text-muted-foreground/70"> ({totalTokens} total)</span>
+                )}
               </div>
             </div>
 
-            {/* Key Benefits */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8 max-w-5xl mx-auto">
-              {[
-                {
-                  icon: <Clock className="h-6 w-6 sm:h-7 sm:w-7 text-primary" />,
-                  title: 'Launch in Minutes',
-                  description: 'Deploy your token in under 5 minutes with our streamlined interface',
-                  bgColor: 'bg-primary/10',
-                  borderColor: 'border-primary/20',
-                  hoverBg: 'group-hover:bg-primary/20',
-                },
-                {
-                  icon: <Shield className="h-6 w-6 sm:h-7 sm:w-7 text-secondary" />,
-                  title: 'Enterprise Security',
-                  description: 'Battle-tested smart contracts with comprehensive security audits',
-                  bgColor: 'bg-secondary/10',
-                  borderColor: 'border-secondary/20',
-                  hoverBg: 'group-hover:bg-secondary/20',
-                },
-                {
-                  icon: <Globe className="h-6 w-6 sm:h-7 sm:w-7 text-accent-foreground" />,
-                  title: 'Global Marketplace',
-                  description: 'Instant listing with automated liquidity and global accessibility',
-                  bgColor: 'bg-accent/20',
-                  borderColor: 'border-accent/30',
-                  hoverBg: 'group-hover:bg-accent/30',
-                },
-              ].map((benefit, index) => (
-                <Card
-                  key={index}
-                  className={`group text-center border-2 hover:border-primary/50 transition-all duration-500 hover:shadow-lg hover:-translate-y-2 bg-card ${
-                    mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                  }`}
-                  style={{ transitionDelay: `${500 + index * 100}ms` }}
-                >
-                  <CardContent className="pt-6 pb-6 px-5 sm:pt-8 sm:pb-8 sm:px-6">
-                    <div className={`w-12 h-12 sm:w-14 sm:h-14 ${benefit.bgColor} border-2 ${benefit.borderColor} rounded-xl flex items-center justify-center mx-auto mb-4 sm:mb-5 ${benefit.hoverBg} transition-all duration-300 group-hover:scale-110 group-hover:rotate-3`}>
-                      {benefit.icon}
+            {/* Active Filters - Compact Badges */}
+            {(debouncedSearchQuery || filterBy !== 'all') && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                {debouncedSearchQuery && (
+                  <Badge variant="secondary" className="text-xs h-6 px-2 bg-primary/10 border-primary/20 text-primary">
+                    🔍 {debouncedSearchQuery}
+                  </Badge>
+                )}
+                {filterBy !== 'all' && (
+                  <Badge variant="secondary" className="text-xs h-6 px-2 bg-primary/10 border-primary/20 text-primary">
+                    {filterBy === 'new' ? '✨ New' : filterBy === 'trading' ? '📈 Trading' : filterBy}
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Token Grid */}
+        {(isInitializing || isLoading) && tokens.length === 0 ? (
+          // Skeleton loaders for token cards
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} className="border-2 animate-pulse">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3 min-w-0 flex-1">
+                      <div className="w-12 h-12 rounded-full bg-muted/30" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-5 w-32 bg-muted/30 rounded" />
+                        <div className="h-4 w-24 bg-muted/30 rounded" />
+                      </div>
                     </div>
-                    <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-foreground group-hover:text-primary transition-colors duration-300">
-                      {benefit.title}
-                    </h3>
-                    <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-                      {benefit.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section ref={stats.ref} className="bg-muted/30 py-12 sm:py-16 lg:py-20 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5" />
-        <div className="container mx-auto px-4 relative">
-          <div className="grid grid-cols-2 gap-6 sm:gap-8 md:gap-10 md:grid-cols-4 max-w-5xl mx-auto">
-            {statsData.map((stat, index) => {
-              const StatCounter = () => {
-                const count = useCountUp(stat.numericValue, 2000, stats.isInView);
-                const displayValue = stat.label === 'Total Volume'
-                  ? (count / 1).toFixed(1)
-                  : count.toLocaleString();
-
-                return (
-                  <div
-                    className={`text-2xl sm:text-4xl md:text-5xl font-bold text-primary mb-2 sm:mb-3 group-hover:scale-110 transition-all duration-300 ${
-                      stats.isInView ? 'opacity-100' : 'opacity-0'
-                    }`}
-                    style={{ transitionDelay: `${index * 100}ms` }}
-                  >
-                    {stat.prefix}{displayValue}{stat.suffix}
+                    <div className="space-y-2">
+                      <div className="h-4 w-16 bg-muted/30 rounded" />
+                      <div className="h-6 w-20 bg-muted/30 rounded" />
+                    </div>
                   </div>
-                );
-              };
-
-              return (
-                <div
-                  key={index}
-                  className={`text-center group transition-all duration-500 ${
-                    stats.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                  }`}
-                  style={{ transitionDelay: `${index * 100}ms` }}
-                >
-                  <StatCounter />
-                  <div className="text-sm sm:text-base md:text-lg text-muted-foreground font-semibold group-hover:text-foreground transition-colors duration-300">
-                    {stat.label}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section ref={features.ref} className="py-16 sm:py-20 lg:py-28 bg-background">
-        <div className="container mx-auto px-4">
-          <div
-            className={`mx-auto max-w-3xl text-center mb-12 sm:mb-16 lg:mb-20 transition-all duration-700 ${
-              features.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}
-          >
-            <Badge variant="outline" className="mb-4 sm:mb-6 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold">
-              <Zap className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Advanced Features
-            </Badge>
-            <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4 sm:mb-6 leading-tight px-2">
-              Enterprise-Grade Token Infrastructure
-            </h2>
-            <p className="text-base sm:text-xl text-muted-foreground leading-relaxed px-4">
-              Professional-grade tools and infrastructure designed for serious token creators and traders.
-            </p>
-          </div>
-
-          <div className="grid gap-6 sm:gap-8 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
-            {featuresData.map((feature, index) => (
-              <Card
-                key={index}
-                className={`group hover:shadow-xl transition-all duration-500 border-2 hover:border-primary/50 hover:-translate-y-2 bg-card ${
-                  features.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
-                }`}
-                style={{ transitionDelay: `${index * 100}ms` }}
-              >
-                <CardHeader className="pb-4 sm:pb-5 pt-6 sm:pt-7 px-6 sm:px-7">
-                  <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl bg-primary/10 text-primary mb-4 sm:mb-5 group-hover:bg-primary/20 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6">
-                    {feature.icon}
-                  </div>
-                  <CardTitle className="text-lg sm:text-xl font-bold group-hover:text-primary transition-colors duration-300">{feature.title}</CardTitle>
                 </CardHeader>
-                <CardContent className="px-6 sm:px-7 pb-6 sm:pb-7">
-                  <CardDescription className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-                    {feature.description}
-                  </CardDescription>
+                <CardContent className="pt-0">
+                  <div className="space-y-2 mb-4">
+                    <div className="h-4 w-full bg-muted/30 rounded" />
+                    <div className="h-4 w-3/4 bg-muted/30 rounded" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-muted/10 rounded-lg">
+                    {[1, 2, 3, 4].map((j) => (
+                      <div key={j} className="space-y-2">
+                        <div className="h-3 w-16 bg-muted/30 rounded" />
+                        <div className="h-5 w-20 bg-muted/30 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="h-9 w-full bg-muted/30 rounded" />
                 </CardContent>
               </Card>
             ))}
           </div>
-        </div>
-      </section>
+        ) : !isLoading && filteredTokens.length > 0 ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
+              {filteredTokens.map((token, index) => (
+                <TokenCard key={token.address} token={token} index={index} />
+              ))}
+            </div>
 
-      {/* How It Works Section */}
-      <section ref={steps.ref} className="py-16 sm:py-20 lg:py-28 bg-muted/20 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent" />
-        <div className="container mx-auto px-4 relative">
-          <div
-            className={`mx-auto max-w-3xl text-center mb-12 sm:mb-16 lg:mb-20 transition-all duration-700 ${
-              steps.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}
-          >
-            <Badge variant="secondary" className="mb-4 sm:mb-6 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold">
-              <Rocket className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Getting Started
-            </Badge>
-            <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4 sm:mb-6 leading-tight px-2">
-              Simple Three-Step Process
-            </h2>
-            <p className="text-base sm:text-xl text-muted-foreground leading-relaxed px-4">
-              Launch your token in minutes with our streamlined, automated platform.
-            </p>
-          </div>
-
-          <div className="grid gap-8 sm:gap-10 md:gap-12 md:grid-cols-3 max-w-6xl mx-auto">
-            {stepsData.map((step, index) => (
-              <div
-                key={index}
-                className={`relative transition-all duration-700 ${
-                  steps.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
-                }`}
-                style={{ transitionDelay: `${index * 150}ms` }}
-              >
-                <Card className="text-center border-2 hover:border-primary/50 transition-all duration-500 p-6 sm:p-8 hover:shadow-xl group bg-card hover:-translate-y-2">
-                  <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl sm:text-2xl font-bold mb-5 sm:mb-7 mx-auto group-hover:scale-110 transition-all duration-300 shadow-lg group-hover:shadow-xl group-hover:rotate-12">
-                    {step.step}
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-5 group-hover:text-primary transition-colors duration-300">{step.title}</h3>
-                  <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">{step.description}</p>
-                </Card>
-                {index < stepsData.length - 1 && (
-                  <div className="hidden md:flex absolute top-1/2 -right-6 transform -translate-y-1/2 z-10">
-                    <div className="bg-background p-3 rounded-full border-2 border-primary/20 shadow-sm group-hover:border-primary/50 transition-colors duration-300">
-                      <ArrowRight className="h-5 w-5 text-primary animate-pulse" />
-                    </div>
-                  </div>
-                )}
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex justify-end mt-8">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => loadPage(currentPage - 1)}
+                    disabled={currentPage === 1 || isLoading}
+                    className="w-8 h-8 flex items-center justify-center rounded-md bg-zinc-900 border border-zinc-700 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => loadPage(currentPage + 1)}
+                    disabled={currentPage === totalPages || isLoading}
+                    className="w-8 h-8 flex items-center justify-center rounded-md bg-zinc-900 border border-zinc-700 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section ref={cta.ref} className="py-16 sm:py-20 lg:py-28 bg-background relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-secondary/10 animate-gradient-shift" />
-        <div className="container mx-auto px-4 relative">
-          <Card
-            className={`border-2 shadow-xl max-w-5xl mx-auto bg-gradient-to-br from-card to-muted/30 overflow-hidden relative transition-all duration-700 ${
-              cta.isInView ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-12 scale-95'
-            }`}
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5" />
-            <CardContent className="p-8 sm:p-12 lg:p-14 text-center relative">
-              <Badge
-                variant="outline"
-                className={`mb-6 sm:mb-8 px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all duration-700 ${
-                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
-                }`}
-                style={{ transitionDelay: '200ms' }}
-              >
-                <Star className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-pulse" />
-                Ready to Get Started?
-              </Badge>
-              <h2
-                className={`text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-5 sm:mb-7 leading-tight px-2 transition-all duration-700 ${
-                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '300ms' }}
-              >
-                Ready to Launch Your Token?
-              </h2>
-              <p
-                className={`text-base sm:text-xl text-muted-foreground mb-8 sm:mb-10 max-w-3xl mx-auto leading-relaxed px-4 transition-all duration-700 ${
-                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '400ms' }}
-              >
-                Join the growing ecosystem of professional token creators. Launch your token with
-                automated marketplace listing and enterprise-grade infrastructure.
+            )}
+          </>
+        ) : !isInitializing && !isLoading ? (
+          <Card className="text-center py-16 border-2 border-dashed border-border">
+            <CardContent>
+              <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Search className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-xl font-semibold mb-3 text-foreground">
+                {tokens.length === 0 ? 'No tokens launched yet' : 'No tokens found'}
+              </h3>
+              <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                {tokens.length === 0
+                  ? 'Be the first to launch a token on our platform!'
+                  : 'Try adjusting your search or filter criteria'
+                }
               </p>
-              <div
-                className={`flex flex-col gap-4 sm:gap-5 sm:flex-row sm:justify-center transition-all duration-700 ${
-                  cta.isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-                style={{ transitionDelay: '500ms' }}
-              >
-                <Button
-                  size="lg"
-                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 group relative overflow-hidden"
-                  asChild
-                >
-                  <Link href="/launch">
-                    <span className="absolute inset-0 bg-gradient-to-r from-primary/0 via-white/20 to-primary/0 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
-                    <Rocket className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:rotate-12 transition-transform duration-300" />
-                    Start Building Now
-                    <ArrowRight className="ml-2 sm:ml-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:translate-x-1 transition-transform duration-300" />
-                  </Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="text-base sm:text-lg font-semibold px-8 sm:px-10 py-6 sm:py-7 h-auto hover:bg-primary/10 border-2 transition-all duration-300 hover:border-primary/50 group"
-                  asChild
-                >
-                  <Link href="/marketplace">
-                    <BarChart3 className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 group-hover:scale-110 transition-transform duration-300" />
-                    Browse Tokens
-                  </Link>
-                </Button>
+              <div className="flex gap-2 justify-center">
+                {tokens.length === 0 ? (
+                  <Button asChild>
+                    <a href="/launch">Launch Your Token</a>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setFilterBy('all');
+                    }}
+                  >
+                    Clear Filters
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
-        </div>
-      </section>
+        ) : null}
 
-      {/* Footer */}
-      <footer className="border-t bg-muted/20 py-12 sm:py-16 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent opacity-50" />
-        <div className="container mx-auto px-4 relative">
-          <div className="flex flex-col items-center justify-between gap-6 sm:gap-8 md:flex-row">
-            <div className="flex items-center space-x-3 sm:space-x-4 group">
-              <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg overflow-hidden shadow-md transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
-                <Image
-                  src="/hodl-logo.png"
-                  alt="hodl.fun logo"
-                  width={48}
-                  height={48}
-                  className="object-contain"
-                />
-              </div>
-              <span className="text-2xl sm:text-3xl font-bold text-primary transition-all duration-300 group-hover:scale-105">
-                hodl.fun
-              </span>
-            </div>
-            <div className="flex flex-col items-center gap-5 sm:gap-6 md:flex-row md:gap-10">
-              <nav className="flex gap-6 sm:gap-8">
-                <Link href="/launch" className="text-sm sm:text-base text-muted-foreground hover:text-primary transition-all duration-300 font-semibold hover:scale-110 inline-block">
-                  Launch
-                </Link>
-                <Link href="/marketplace" className="text-sm sm:text-base text-muted-foreground hover:text-primary transition-all duration-300 font-semibold hover:scale-110 inline-block">
-                  Marketplace
-                </Link>
-                <Link href="/dashboard" className="text-sm sm:text-base text-muted-foreground hover:text-primary transition-all duration-300 font-semibold hover:scale-110 inline-block">
-                  Dashboard
-                </Link>
-              </nav>
-              <p className="text-sm sm:text-base text-muted-foreground font-medium text-center">
-                © 2024 hodl.fun. Professional token infrastructure.
-              </p>
-            </div>
-          </div>
+        {/* Social Link */}
+        <div className="mt-12 flex justify-center">
+          <a
+            href="https://x.com/thehodldotfun"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="h-6 w-6 fill-current"
+              aria-hidden="true"
+            >
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+            <span className="text-sm font-medium">Follow us on X</span>
+          </a>
         </div>
-      </footer>
+      </div>
+
     </div>
   );
 };
 
 export default HomePage;
+
