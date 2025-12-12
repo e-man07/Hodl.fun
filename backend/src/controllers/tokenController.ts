@@ -202,6 +202,56 @@ export class TokenController {
   });
 
   /**
+   * POST /api/v1/tokens/batch
+   * Get multiple tokens by addresses in a single request
+   */
+  getTokensBatch = asyncHandler(async (req: Request, res: Response) => {
+    const { addresses } = req.body;
+
+    // Validate addresses array
+    if (!addresses || !Array.isArray(addresses)) {
+      throw new ValidationError('addresses must be an array');
+    }
+
+    if (addresses.length === 0) {
+      sendSuccess(res, { tokens: [] });
+      return;
+    }
+
+    if (addresses.length > 100) {
+      throw new ValidationError('Maximum 100 addresses per request');
+    }
+
+    // Validate each address format
+    for (const address of addresses) {
+      if (!address || !address.match(/^0x[a-fA-F0-9]{40}$/)) {
+        throw new ValidationError(`Invalid token address format: ${address}`);
+      }
+    }
+
+    // Fetch all tokens in parallel
+    const tokens = await Promise.all(
+      addresses.map(async (address: string) => {
+        try {
+          return await tokenService.getTokenByAddress(address);
+        } catch {
+          // Return null for tokens that don't exist
+          return null;
+        }
+      })
+    );
+
+    // Filter out null values (non-existent tokens)
+    const validTokens = tokens.filter(token => token !== null);
+
+    sendSuccess(res, {
+      tokens: validTokens,
+      requested: addresses.length,
+      found: validTokens.length,
+    });
+  });
+
+  /**
    * POST /api/v1/tokens/:address/calculate-buy
    * Calculate how many tokens user will receive for given ETH amount
    */

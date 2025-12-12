@@ -69,24 +69,11 @@ export const useMarketplaceBackend = (): UseMarketplaceBackendReturn => {
     try {
       const response = await getMarketStats();
       if (response.success) {
-        // Backend returns totalMarketCap in broken scientific notation (e.g., 5.677e-16)
-        // This is a backend bug where market cap is not properly converted from wei
-        // Fix: if totalMarketCap is suspiciously small (< 0.001 ETH), calculate from tokens
-        let totalMarketCap = response.data.totalMarketCap;
-
-        // Check if market cap is broken (scientific notation near zero, or < 0.001 ETH)
-        if (totalMarketCap < 0.001 || isNaN(totalMarketCap)) {
-          console.warn(`⚠️ Backend returned broken totalMarketCap: ${totalMarketCap}, will calculate from tokens`);
-          // We'll calculate it from individual tokens after they load
-          // For now, set to 0 and it will be updated when tokens load
-          totalMarketCap = 0;
-        }
-
         setAggregateStats({
-          totalMarketCap: totalMarketCap,
-          tradingTokens: response.data.totalTokens, // Approximation - backend can add this field
-          totalVolume24h: response.data.totalVolume24h,
-          totalHolders: response.data.totalHolders,
+          totalMarketCap: response.data.totalMarketCap || 0,
+          tradingTokens: response.data.totalTokens || 0,
+          totalVolume24h: response.data.totalVolume24h || 0,
+          totalHolders: response.data.totalHolders || 0,
         });
       }
     } catch (err) {
@@ -96,80 +83,35 @@ export const useMarketplaceBackend = (): UseMarketplaceBackendReturn => {
   }, []);
 
   // Convert backend TokenData to MarketplaceToken format
+  // Backend now returns properly formatted data after fixes
   const convertToMarketplaceToken = (token: TokenData): MarketplaceToken => {
-    // Backend has multiple data quality issues that need fixing on frontend:
-    // 1. currentSupply is always "32" (WRONG)
-    // 2. reserveRatio is in basis points and needs conversion
-    // 3. marketCap is scientific notation garbage (e.g., 2.685e-18)
-    // 4. reserveBalance is in wei format but as a huge string
+    // Parse supply values - backend now returns formatted strings (e.g., "32.0")
+    const currentSupply = parseFloat(token.currentSupply) || 0;
+    const totalSupply = parseFloat(token.totalSupply) || 0;
+    const reserveBalance = parseFloat(token.reserveBalance) || 0;
 
-    // Parse totalSupply from wei to tokens
-    const totalSupplyWei = parseFloat(token.totalSupply); // In wei
-    const totalSupply = totalSupplyWei / 1e18; // Convert to tokens
-
-    // Backend's currentSupply is broken (always "32"), so we use totalSupply
-    // Note: In reality currentSupply ≠ totalSupply (some tokens are in circulation)
-    // But this is the best approximation we have without direct contract calls
-    const currentSupply = totalSupply;
-
-    const price = token.price; // Price is correct from backend
-
-    // Convert reserve ratio from basis points to percentage
-    // Backend sends 500000 for 50%, 390000 for 39%, etc.
-    // Formula: basis points / 10000 = percentage
+    // Reserve ratio is still in basis points from contract (e.g., 500000 for 50%)
+    // Convert to percentage for display
     const reserveRatio = token.reserveRatio / 10000;
-
-    // Backend's reserveBalance is a huge number in wei-like format
-    // Try to parse and convert, fallback to 0 if it fails
-    let reserveBalance = 0;
-    try {
-      const reserveBalanceStr = token.reserveBalance;
-      // If it's a reasonable number (less than 1e20), convert from wei
-      const reserveBalanceNum = parseFloat(reserveBalanceStr);
-      if (!isNaN(reserveBalanceNum) && reserveBalanceNum < 1e20) {
-        reserveBalance = reserveBalanceNum / 1e18;
-      } else if (!isNaN(reserveBalanceNum)) {
-        // If it's a huge garbage value, estimate from market cap
-        // Reserve balance ≈ market cap (for bonding curves)
-        reserveBalance = currentSupply * price;
-      }
-    } catch {
-      // If parsing fails, estimate from market cap
-      reserveBalance = currentSupply * price;
-    }
-
-    // Backend's market cap is always broken (returns values like 2.685e-18)
-    // We ALWAYS need to recalculate it
-    let marketCap = token.marketCap;
-
-    // Check if market cap is broken (scientific notation near zero, or actually zero)
-    if (marketCap < 0.000001 || isNaN(marketCap)) {
-      // Recalculate: market cap = current supply × price
-      if (!isNaN(currentSupply) && !isNaN(price) && currentSupply > 0 && price > 0) {
-        marketCap = currentSupply * price;
-      } else {
-        marketCap = 0; // Fallback
-      }
-    }
 
     return {
       address: token.address,
       name: token.name,
       symbol: token.symbol,
       description: token.description || '',
-      price: token.price, // ✅ Price is correct from backend
+      price: token.price,
       priceChange24h: token.priceChange24h,
-      marketCap: marketCap, // ✅ Fixed: recalculated
+      marketCap: token.marketCap,
       volume24h: token.volume24h,
       holders: token.holders,
       createdAt: token.createdAt,
       creator: token.creator,
-      reserveRatio: reserveRatio, // ✅ Fixed: converted from basis points
+      reserveRatio: reserveRatio,
       isTrading: token.tradingEnabled,
       logo: token.logo,
-      currentSupply: currentSupply, // ✅ Fixed: using totalSupply as approximation
-      totalSupply: totalSupply, // ✅ Fixed: converted from wei
-      reserveBalance: reserveBalance, // ✅ Fixed: converted or estimated
+      currentSupply: currentSupply,
+      totalSupply: totalSupply,
+      reserveBalance: reserveBalance,
     };
   };
 

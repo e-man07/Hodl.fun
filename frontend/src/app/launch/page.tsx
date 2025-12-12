@@ -138,7 +138,7 @@ const LaunchPage = () => {
             if (address) {
               setTokenAddress(address);
             }
-          }).catch((error) => {
+          }).catch(() => {
             // Failed to extract token address
           });
         }
@@ -146,7 +146,7 @@ const LaunchPage = () => {
         // Token creation returned null
         // Error should already be set by the createToken function
       }
-    } catch (err) {
+    } catch {
       // Token launch failed
       // Additional error handling if needed
     }

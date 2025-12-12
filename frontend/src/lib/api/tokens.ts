@@ -133,3 +133,13 @@ export async function getAllowance(
 ): Promise<ApiResponse<{ allowance: string; allowanceFormatted: string }>> {
   return apiClient.get(`/tokens/${tokenAddress}/allowance/${owner}/${spender}`);
 }
+
+/**
+ * Get multiple tokens by addresses in a single request
+ * More efficient than making individual requests
+ */
+export async function getTokensBatch(
+  addresses: string[]
+): Promise<ApiResponse<{ tokens: TokenData[]; requested: number; found: number }>> {
+  return apiClient.post('/tokens/batch', { addresses });
+}

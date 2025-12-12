@@ -52,7 +52,7 @@ export const useTokenTrading = () => {
 
       const balance = await tokenContract.balanceOf(address);
       return ethers.formatEther(balance);
-    } catch (error) {
+    } catch {
       return '0';
     }
   };
@@ -88,7 +88,7 @@ export const useTokenTrading = () => {
       );
 
       return ethers.formatEther(tokensOut);
-    } catch (error) {
+    } catch {
       return '0';
     }
   };
@@ -125,7 +125,7 @@ export const useTokenTrading = () => {
       );
 
       return ethers.formatEther(ethOut);
-    } catch (error) {
+    } catch {
       return '0';
     }
   };

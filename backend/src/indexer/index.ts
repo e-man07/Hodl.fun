@@ -577,6 +577,7 @@ export class BlockchainIndexer {
 
   /**
    * Update user portfolio
+   * Uses weighted average cost basis method for PnL calculation
    */
   private async updateUserPortfolio(
     userAddress: string,
@@ -595,34 +596,61 @@ export class BlockchainIndexer {
         orderBy: { timestamp: 'asc' },
       });
 
-      // Calculate average price and total invested
-      let totalInvested = 0;
-      let totalTokensBought = 0;
-      let realizedPnL = 0;
+      // Use weighted average cost basis method for accurate PnL tracking
+      // This properly tracks cost basis through buys and sells
+      let totalCostBasis = 0; // Total cost of tokens currently held
+      let tokensHeld = 0; // Number of tokens currently held
+      let realizedPnL = 0; // Profit/loss from completed sales
+      let totalInvested = 0; // Total ETH ever invested (for reference)
 
       for (const tx of transactions) {
         if (tx.type === 'BUY') {
           const ethSpent = Number(tx.amountIn) / 1e18;
           const tokensBought = Number(tx.amountOut) / 1e18;
+
+          // Add to cost basis and token count
+          totalCostBasis += ethSpent;
+          tokensHeld += tokensBought;
           totalInvested += ethSpent;
-          totalTokensBought += tokensBought;
+
         } else if (tx.type === 'SELL') {
+          const tokensSold = Number(tx.amountIn) / 1e18;
           const ethReceived = Number(tx.amountOut) / 1e18;
-          realizedPnL += ethReceived;
+
+          // Calculate cost basis of tokens being sold (weighted average)
+          const avgCostPerToken = tokensHeld > 0 ? totalCostBasis / tokensHeld : 0;
+          const costBasisOfSoldTokens = avgCostPerToken * tokensSold;
+
+          // Realized PnL = ETH received - cost basis of sold tokens
+          realizedPnL += ethReceived - costBasisOfSoldTokens;
+
+          // Remove sold tokens from holdings
+          tokensHeld -= tokensSold;
+          totalCostBasis -= costBasisOfSoldTokens;
+
+          // Prevent negative values due to floating point errors
+          if (tokensHeld < 0.0000001) tokensHeld = 0;
+          if (totalCostBasis < 0) totalCostBasis = 0;
+
+        } else if (tx.type === 'CREATE') {
+          // Token creators receive initial supply at zero cost
+          const tokensCreated = Number(tx.amountOut) / 1e18;
+          tokensHeld += tokensCreated;
+          // Cost basis is 0 for created tokens (they didn't pay for them)
         }
       }
 
-      const averagePrice = totalTokensBought > 0 ? totalInvested / totalTokensBought : 0;
+      // Calculate average price (cost per token currently held)
+      const averagePrice = tokensHeld > 0 ? totalCostBasis / tokensHeld : 0;
 
       // Get current price
       const currentPriceBigInt = await contractService.getCurrentPrice(tokenAddress);
       const currentPrice = Number(currentPriceBigInt) / 1e18;
 
-      // Calculate unrealized PnL
+      // Calculate unrealized PnL on remaining holdings
       const currentBalance = Number(balance) / 1e18;
-      const unrealizedPnL = currentBalance > 0
-        ? (currentPrice * currentBalance) - (averagePrice * currentBalance)
-        : 0;
+      const currentValue = currentPrice * currentBalance;
+      const unrealizedPnL = currentBalance > 0 ? currentValue - totalCostBasis : 0;
 
       // Update portfolio
       await db.userPortfolio.upsert({
@@ -696,12 +724,33 @@ export class BlockchainIndexer {
       }, 0);
 
       // Calculate 24h price change
-      const oldestTrade = recentTrades.sort((a, b) =>
-        a.timestamp.getTime() - b.timestamp.getTime()
-      )[0];
-      const priceChange24h = oldestTrade
-        ? ((currentPrice - oldestTrade.price) / oldestTrade.price) * 100
-        : 0;
+      // Find the trade closest to 24 hours ago (not just the oldest in the range)
+      let priceChange24h = 0;
+      if (recentTrades.length > 0) {
+        const twentyFourHoursAgoTime = twentyFourHoursAgo.getTime();
+
+        // Sort by timestamp ascending
+        const sortedTrades = [...recentTrades].sort((a, b) =>
+          a.timestamp.getTime() - b.timestamp.getTime()
+        );
+
+        // Find the trade closest to 24h ago for baseline price
+        let baselinePrice = sortedTrades[0]?.price || currentPrice;
+        let closestTimeDiff = Math.abs(sortedTrades[0]?.timestamp.getTime() - twentyFourHoursAgoTime);
+
+        for (const trade of sortedTrades) {
+          const timeDiff = Math.abs(trade.timestamp.getTime() - twentyFourHoursAgoTime);
+          if (timeDiff < closestTimeDiff) {
+            closestTimeDiff = timeDiff;
+            baselinePrice = trade.price;
+          }
+        }
+
+        // Calculate percentage change from baseline
+        if (baselinePrice > 0) {
+          priceChange24h = ((currentPrice - baselinePrice) / baselinePrice) * 100;
+        }
+      }
 
       // Update token record with new metrics
       await db.token.update({

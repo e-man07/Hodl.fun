@@ -294,12 +294,33 @@ export class TokenService {
       }, 0);
 
       // Calculate 24h price change
-      const oldestTrade = recentTrades.sort((a, b) =>
-        a.timestamp.getTime() - b.timestamp.getTime()
-      )[0];
-      const priceChange24h = oldestTrade
-        ? ((currentPrice - oldestTrade.price) / oldestTrade.price) * 100
-        : 0;
+      // Find the trade closest to 24 hours ago (not just the oldest in the range)
+      let priceChange24h = 0;
+      if (recentTrades.length > 0) {
+        const twentyFourHoursAgoTime = twentyFourHoursAgo.getTime();
+
+        // Sort by timestamp ascending
+        const sortedTrades = [...recentTrades].sort((a, b) =>
+          a.timestamp.getTime() - b.timestamp.getTime()
+        );
+
+        // Find the trade closest to 24h ago for baseline price
+        let baselinePrice = sortedTrades[0]?.price || currentPrice;
+        let closestTimeDiff = Math.abs(sortedTrades[0]?.timestamp.getTime() - twentyFourHoursAgoTime);
+
+        for (const trade of sortedTrades) {
+          const timeDiff = Math.abs(trade.timestamp.getTime() - twentyFourHoursAgoTime);
+          if (timeDiff < closestTimeDiff) {
+            closestTimeDiff = timeDiff;
+            baselinePrice = trade.price;
+          }
+        }
+
+        // Calculate percentage change from baseline
+        if (baselinePrice > 0) {
+          priceChange24h = ((currentPrice - baselinePrice) / baselinePrice) * 100;
+        }
+      }
 
       // Update token record with new metrics
       await db.token.update({
@@ -329,18 +350,57 @@ export class TokenService {
   /**
    * Format token data
    * Returns metrics stored in database (updated by indexer and workers)
+   * Converts wei values to human-readable numbers for frontend consumption
    */
   private formatTokenData(token: any): TokenData {
     const metadata = token.metadataCache as any;
+
+    // Convert wei strings to human-readable token amounts
+    // Database stores raw BigInt strings (e.g., "32000000000000000000" for 32 tokens)
+    const currentSupplyWei = token.currentSupply || token.totalSupply || '0';
+    const totalSupplyWei = token.totalSupply || '0';
+    const reserveBalanceWei = token.reserveBalance || '0';
+
+    // Safe conversion from wei to tokens (18 decimals)
+    const formatWeiToTokens = (weiString: string): string => {
+      try {
+        // Handle already formatted numbers (backwards compatibility)
+        const num = Number(weiString);
+        if (!isNaN(num) && num > 0 && num < 1e15) {
+          // Already a reasonable number, not wei
+          return weiString;
+        }
+        // Convert from wei (18 decimals)
+        return ethers.formatEther(weiString);
+      } catch {
+        return '0';
+      }
+    };
+
+    // Format supplies as token amounts
+    const currentSupplyFormatted = formatWeiToTokens(currentSupplyWei);
+    const totalSupplyFormatted = formatWeiToTokens(totalSupplyWei);
+    const reserveBalanceFormatted = formatWeiToTokens(reserveBalanceWei);
+
+    // Recalculate market cap if it seems incorrect
+    // Market cap = currentSupply (in tokens) × price
+    let marketCap = token.marketCap || 0;
+    const currentSupplyNum = parseFloat(currentSupplyFormatted);
+    const price = token.currentPrice || 0;
+
+    // If stored marketCap is suspiciously small (scientific notation bug) or zero, recalculate
+    if (marketCap < 0.000001 && currentSupplyNum > 0 && price > 0) {
+      marketCap = currentSupplyNum * price;
+    }
 
     return {
       address: token.address,
       name: token.name,
       symbol: token.symbol,
       description: token.description || metadata?.description,
-      price: token.currentPrice || 0,
+      price: price,
       priceChange24h: token.priceChange24h || 0,
-      marketCap: token.marketCap || 0,
+      marketCap: marketCap,
       volume24h: token.volume24h || 0,
       holders: token.holderCount || 0,
       createdAt: token.createdAt.toISOString(),
@@ -348,9 +408,9 @@ export class TokenService {
       reserveRatio: token.reserveRatio,
       tradingEnabled: token.tradingEnabled,
       logo: token.logoURL || metadata?.image,
-      currentSupply: token.currentSupply || token.totalSupply,
-      totalSupply: token.totalSupply,
-      reserveBalance: token.reserveBalance || '0',
+      currentSupply: currentSupplyFormatted,
+      totalSupply: totalSupplyFormatted,
+      reserveBalance: reserveBalanceFormatted,
       socialLinks: token.socialLinks || metadata?.social,
     };
   }

@@ -43,4 +43,11 @@ router.get('/losers', marketController.getLosers);
  */
 router.get('/sorted', marketController.getMarketplaceSorted);
 
+/**
+ * GET /api/v1/market/recent-trades
+ * Get recent trades across all tokens (for trading activity banner)
+ * Query params: limit (default 10, max 50)
+ */
+router.get('/recent-trades', marketController.getRecentTrades);
+
 export default router;

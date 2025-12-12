@@ -107,6 +107,25 @@ export class MarketController {
       totalPages: Math.ceil(result.total / limit),
     });
   });
+
+  /**
+   * GET /api/v1/market/recent-trades
+   * Get recent trades across all tokens (for trading activity banner)
+   */
+  getRecentTrades = asyncHandler(async (req: Request, res: Response) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+
+    if (limit < 1 || limit > 50) {
+      throw new ValidationError('Limit must be between 1 and 50');
+    }
+
+    const trades = await marketService.getRecentTrades(limit);
+
+    sendSuccess(res, {
+      trades,
+      count: trades.length,
+    });
+  });
 }
 
 // Export singleton instance

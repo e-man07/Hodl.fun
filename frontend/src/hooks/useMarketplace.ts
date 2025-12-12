@@ -82,13 +82,13 @@ export const useMarketplace = () => {
         // Strip ETH prefix from symbol for consistent display
         const cleanedSymbol = stripETHPrefix(symbol);
         return { name, symbol: cleanedSymbol };
-      } catch (error) {
+      } catch {
         return null;
       }
     });
   };
 
-  const fetchTokenHolderCount = async (tokenAddress: string, provider: ethers.Provider): Promise<number> => {
+  const fetchTokenHolderCount = async (tokenAddress: string): Promise<number> => {
     return deduplicatedFetch(`token-holders-${tokenAddress}`, async () => {
       try {
         // Use Push Donut API to get holder count
@@ -108,7 +108,7 @@ export const useMarketplace = () => {
         } else {
           return 0;
         }
-      } catch (error) {
+      } catch {
         return 0;
       }
     });
@@ -147,9 +147,7 @@ export const useMarketplace = () => {
       if (tokenAddresses.length === 0) {
         try {
           tokenAddresses = await marketplaceContract.getAllTokens();
-        } catch (onChainError) {
-          const errorMsg = onChainError instanceof Error ? onChainError.message : String(onChainError);
-
+        } catch {
           // If both methods fail, show helpful error
           setError('Unable to load tokens. Please run "npm run index-tokens" to create the token index, or wait for the backend to be ready.');
           setIsInitializing(false);
@@ -190,8 +188,8 @@ export const useMarketplace = () => {
       }
 
       return sorted;
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to fetch token addresses');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch token addresses');
       setIsInitializing(false);
       return [];
     }
@@ -282,7 +280,7 @@ export const useMarketplace = () => {
           // Start fetching right away so images appear as soon as possible
           Promise.all([
             fetchTokenMetadata(tokenInfo.metadataURI).catch(() => null),
-            fetchTokenHolderCount(address, provider).catch(() => 0)
+            fetchTokenHolderCount(address).catch(() => 0)
           ]).then(([metadata, holderCount]) => {
             // Update token with additional data
             // Use metadata image directly without validation (same as token details page)
@@ -304,7 +302,7 @@ export const useMarketplace = () => {
 
           return marketplaceToken;
 
-        } catch (error) {
+        } catch {
           return null;
         }
       });
@@ -321,12 +319,13 @@ export const useMarketplace = () => {
 
       setTokens(validTokens);
 
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to fetch marketplace tokens');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch marketplace tokens');
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, tokensPerPage, sortedTokenAddresses, fetchAndSortTokenAddresses]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, tokensPerPage, sortedTokenAddresses]);
 
   const refreshTokens = useCallback(async () => {
     // Reset sorted addresses to trigger re-fetch and re-sort
@@ -415,9 +414,10 @@ export const useMarketplace = () => {
       }).catch(() => {
         // Metadata fetch failed, but we still have the updated market cap
       });
-    } catch (error) {
+    } catch {
       // Error refreshing token data
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadPage = useCallback(async (page: number) => {

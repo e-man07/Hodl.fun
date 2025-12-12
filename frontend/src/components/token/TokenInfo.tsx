@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 import { TrendingUp, Users, Coins, BarChart3, Calendar, Wallet, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import Link from 'next/link';
 
 interface TokenInfoProps {
   tokenData: {

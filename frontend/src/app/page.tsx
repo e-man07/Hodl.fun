@@ -2,20 +2,16 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Search,
   TrendingUp,
-  Coins,
   Users,
-  Clock,
-  BarChart3,
   RefreshCw,
   Loader2,
   Filter,
@@ -26,8 +22,8 @@ import {
 import Navbar from '@/components/layout/Navbar';
 import { DegenOnboardingModal } from '@/components/DegenOnboardingModal';
 import { TradingActivityBanner } from '@/components/TradingActivityBanner';
-import { formatCurrency, formatNumber } from '@/lib/utils';
-import { useMarketplace } from '@/hooks/useMarketplace';
+import { formatCurrency } from '@/lib/utils';
+import { useMarketplaceBackend } from '@/hooks/useMarketplaceBackend';
 import { useDebounce } from '@/hooks/useDebounce';
 import { getIPFSImageUrl, createIPFSImageErrorHandler } from '@/utils/ipfsImage';
 
@@ -229,7 +225,7 @@ const HomePage = () => {
     currentPage,
     totalPages,
     loadPage
-  } = useMarketplace();
+  } = useMarketplaceBackend();
 
   // Removed auto-refresh to prevent random platform refreshes
   // Users can manually refresh using the refresh button if needed

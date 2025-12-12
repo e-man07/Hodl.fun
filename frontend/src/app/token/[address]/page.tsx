@@ -5,16 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowLeft, ExternalLink, TrendingUp, TrendingDown, Copy, Check } from 'lucide-react';
+import { Loader2, ArrowLeft, ExternalLink, TrendingUp, Copy, Check } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { getIPFSImageUrl, createIPFSImageErrorHandler } from '@/utils/ipfsImage';
-import { ethers } from 'ethers';
-import { CONTRACT_ADDRESSES } from '@/config/contracts';
-import { TOKEN_MARKETPLACE_ABI, LAUNCHPAD_TOKEN_ABI } from '@/config/abis';
-import { fetchIPFSMetadata } from '@/lib/ipfsCache';
+import { getToken, getTokenHolderCount } from '@/lib/api/tokens';
 import { PriceChart } from '@/components/token/PriceChart';
 import { TokenInfo } from '@/components/token/TokenInfo';
 import { TokenTradingPanel } from '@/components/token/TokenTradingPanel';
@@ -54,100 +51,70 @@ export default function TokenDetailPage() {
   const [copied, setCopied] = useState(false);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
 
-  useEffect(() => {
-    if (tokenAddress) {
-      fetchTokenData();
-    }
-  }, [tokenAddress]);
-
   const fetchTokenData = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
-      const marketplace = new ethers.Contract(
-        CONTRACT_ADDRESSES.TokenMarketplace,
-        TOKEN_MARKETPLACE_ABI,
-        provider
-      );
-      const tokenContract = new ethers.Contract(
-        tokenAddress,
-        LAUNCHPAD_TOKEN_ABI,
-        provider
-      );
-
-      // Fetch token data in parallel
-      const [
-        tokenInfo,
-        name,
-        symbol,
-        totalSupply,
-        currentSupply,
-      ] = await Promise.all([
-        marketplace.getTokenInfo(tokenAddress),
-        tokenContract.name(),
-        tokenContract.symbol(),
-        tokenContract.totalSupply(),
-        tokenContract.balanceOf(CONTRACT_ADDRESSES.TokenMarketplace),
+      // Fetch token data from backend API (much faster than RPC)
+      const [tokenResponse, holderCountResponse] = await Promise.all([
+        getToken(tokenAddress),
+        getTokenHolderCount(tokenAddress).catch(() => ({ success: false, data: { holderCount: 0 } })),
       ]);
 
-      // Fetch metadata if available (metadataURI is already in tokenInfo)
-      let metadata = null;
-      if (tokenInfo.metadataURI) {
-        try {
-          metadata = await fetchIPFSMetadata(tokenInfo.metadataURI);
-        } catch (err) {
-          // Failed to fetch metadata
-        }
+      if (!tokenResponse.success || !tokenResponse.data) {
+        throw new Error('Token not found');
       }
 
-      // Calculate price
-      const price = await marketplace.getCurrentPrice(tokenAddress);
-      const priceFormatted = parseFloat(ethers.formatEther(price));
+      const backendToken = tokenResponse.data;
 
-      // Use market cap from contract (more accurate as it's updated on each trade)
-      const marketCap = parseFloat(ethers.formatEther(tokenInfo.marketCap || 0));
+      // Parse supply values (backend returns formatted strings)
+      const currentSupply = parseFloat(backendToken.currentSupply) || 0;
+      const totalSupply = parseFloat(backendToken.totalSupply) || 0;
+      const reserveBalance = parseFloat(backendToken.reserveBalance) || 0;
 
-      // Get holder count from Push Donut API
-      let holders = 0;
-      try {
-        const response = await fetch(
-          `https://donut.push.network/api/v2/tokens/${tokenAddress}/counters`,
-          {
-            headers: {
-              'accept': 'application/json',
-            },
+      // Get holder count - prefer backend, fallback to Push API
+      let holders = holderCountResponse.success ? holderCountResponse.data.holderCount : 0;
+      if (holders === 0) {
+        // Fallback to Push Donut API
+        try {
+          const response = await fetch(
+            `https://donut.push.network/api/v2/tokens/${tokenAddress}/counters`,
+            {
+              headers: {
+                'accept': 'application/json',
+              },
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            holders = parseInt(data.token_holders_count || '0', 10);
           }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          holders = parseInt(data.token_holders_count || '0', 10);
+        } catch {
+          // Error fetching holder count from API
         }
-      } catch (err) {
-        // Error fetching holder count from API
       }
 
       const token: TokenData = {
         address: tokenAddress,
-        name: metadata?.name || name,
-        symbol: symbol,
-        description: metadata?.description || 'No description available',
-        price: priceFormatted,
-        priceChange24h: 0, // Would need historical data
-        marketCap,
-        volume24h: 0, // Would need transaction history
+        name: backendToken.name,
+        symbol: backendToken.symbol,
+        description: backendToken.description || 'No description available',
+        price: backendToken.price,
+        priceChange24h: backendToken.priceChange24h || 0,
+        marketCap: backendToken.marketCap,
+        volume24h: backendToken.volume24h || 0,
         holders,
-        createdAt: new Date(Number(tokenInfo.launchTimestamp) * 1000).toISOString(),
-        creator: tokenInfo.creator,
-        reserveRatio: Number(tokenInfo.reserveRatio) / 100, // Convert from basis points (5000 = 50%)
-        isTrading: tokenInfo.tradingEnabled,
-        logo: metadata?.image,
-        currentSupply: parseFloat(ethers.formatEther(tokenInfo.currentSupply)),
-        totalSupply: parseFloat(ethers.formatEther(tokenInfo.totalSupply)),
-        reserveBalance: parseFloat(ethers.formatEther(tokenInfo.reserveBalance)),
-        metadataURI: tokenInfo.metadataURI || undefined,
+        createdAt: backendToken.createdAt,
+        creator: backendToken.creator,
+        reserveRatio: backendToken.reserveRatio / 10000, // Convert from basis points (500000 = 50%)
+        isTrading: backendToken.tradingEnabled,
+        logo: backendToken.logo,
+        currentSupply,
+        totalSupply,
+        reserveBalance,
+        metadataURI: undefined, // Backend handles metadata internally
       };
 
       setTokenData(token);
@@ -157,6 +124,13 @@ export default function TokenDetailPage() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (tokenAddress) {
+      fetchTokenData();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokenAddress]);
 
   const copyAddress = () => {
     navigator.clipboard.writeText(tokenAddress);

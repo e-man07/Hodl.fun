@@ -31,6 +31,13 @@ router.get('/trending', tokenController.getTrendingTokens);
 router.get('/new', tokenController.getNewTokens);
 
 /**
+ * POST /api/v1/tokens/batch
+ * Get multiple tokens by addresses in a single request
+ * Body: { addresses: string[] }
+ */
+router.post('/batch', tokenController.getTokensBatch);
+
+/**
  * GET /api/v1/tokens/:address
  * Get token details by address
  */

@@ -2,6 +2,7 @@
 // Calculates market stats from Token table (metrics updated by indexer/workers)
 
 import { db } from '../config/database';
+import { ethers } from 'ethers';
 import logger from '../utils/logger';
 
 export class MarketService {
@@ -184,6 +185,71 @@ export class MarketService {
         activeUsers24h: 0,
         avgTokenPrice: 0,
       };
+    }
+  }
+
+  /**
+   * Get recent trades across all tokens (for trading activity banner)
+   */
+  async getRecentTrades(limit: number = 10) {
+    try {
+      const transactions = await db.transaction.findMany({
+        where: {
+          type: { in: ['BUY', 'SELL'] },
+        },
+        orderBy: { timestamp: 'desc' },
+        take: limit,
+        include: {
+          token: {
+            select: {
+              name: true,
+              symbol: true,
+              metadataCache: true,
+            },
+          },
+        },
+      });
+
+      // Format transaction data for frontend
+      const trades = transactions.map((tx) => {
+        // Convert wei strings to formatted numbers
+        const amountInFormatted = ethers.formatEther(tx.amountIn);
+        const amountOutFormatted = ethers.formatEther(tx.amountOut);
+
+        // For BUY: amountIn is ETH spent, amountOut is tokens received
+        // For SELL: amountIn is tokens sold, amountOut is ETH received
+        const ethAmount = tx.type === 'BUY' ? amountInFormatted : amountOutFormatted;
+        const tokenAmount = tx.type === 'BUY' ? amountOutFormatted : amountInFormatted;
+
+        // Clean token symbol (remove ETH prefix if present)
+        let symbol = tx.token.symbol;
+        const upperSymbol = symbol.toUpperCase();
+        if (upperSymbol.startsWith('ETH ') && symbol.length > 4) {
+          symbol = symbol.substring(4).trim();
+        } else if (upperSymbol.startsWith('ETH') && symbol.length > 3 && upperSymbol !== 'ETH') {
+          symbol = symbol.substring(3).trim();
+        }
+
+        return {
+          hash: tx.hash,
+          type: tx.type.toLowerCase() as 'buy' | 'sell',
+          userAddress: tx.userAddress,
+          tokenAddress: tx.tokenAddress,
+          ethAmount,
+          tokenAmount,
+          price: tx.price,
+          timestamp: tx.timestamp.toISOString(),
+          blockNumber: Number(tx.blockNumber),
+          tokenSymbol: symbol || 'TOKEN',
+          tokenName: tx.token.name,
+          tokenLogo: (tx.token.metadataCache as any)?.image,
+        };
+      });
+
+      return trades;
+    } catch (error) {
+      logger.error('Error getting recent trades:', error);
+      return [];
     }
   }
 }

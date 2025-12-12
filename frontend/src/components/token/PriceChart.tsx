@@ -3,13 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { formatCurrency } from '@/lib/utils';
-import { ethers } from 'ethers';
-import { CONTRACT_ADDRESSES } from '@/config/contracts';
-import { TOKEN_MARKETPLACE_ABI } from '@/config/abis';
 import { createChart, ColorType, IChartApi, ISeriesApi, Time, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
 import { Maximize2, Settings, Camera, Zap } from 'lucide-react';
 import { getCandleVolumeColor } from '@/lib/candlestick-utils';
+import { getTokenTrades } from '@/lib/api/tokens';
 
 interface PriceChartProps {
   tokenAddress: string;
@@ -18,11 +15,6 @@ interface PriceChartProps {
     priceChange24h: number;
     marketCap?: number;
   };
-}
-
-interface PricePoint {
-  time: Time;
-  value: number;
 }
 
 interface CandlestickData {
@@ -45,11 +37,10 @@ export const PriceChart: React.FC<PriceChartProps> = ({ tokenAddress, tokenData 
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
-  const [currentPrice, setCurrentPrice] = useState<number>(tokenData.price);
-  const [priceChange, setPriceChange] = useState<number>(tokenData.priceChange24h);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [athPrice, setAthPrice] = useState<number>(0); // All-Time High price
-  const [athMarketCap, setAthMarketCap] = useState<number>(0); // All-Time High market cap
+  // Track chart data for potential future display features
+  const athPriceRef = useRef<number>(0);
+  const athMarketCapRef = useRef<number>(0);
 
   // Initialize Chart
   useEffect(() => {
@@ -120,65 +111,27 @@ export const PriceChart: React.FC<PriceChartProps> = ({ tokenAddress, tokenData 
     };
   }, []);
 
-  // Fetch ATH from all historical data (runs once on mount and when token changes)
+  // Fetch ATH from backend API (runs once on mount and when token changes)
   useEffect(() => {
     const fetchATH = async () => {
       try {
-        // Small delay to ensure RPC is ready
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Fetch historical trades from backend API - much more efficient than RPC
+        const response = await getTokenTrades(tokenAddress, 1, 100); // Get last 100 trades
 
-        const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
-        const marketplace = new ethers.Contract(
-          CONTRACT_ADDRESSES.TokenMarketplace,
-          TOKEN_MARKETPLACE_ABI,
-          provider
-        );
-
-        // Get current block - use same range as OrderBook (10000 blocks)
-        const currentBlock = await provider.getBlockNumber();
-        const maxBlockRange = 10000; // RPC provider limit
-        const fromBlock = Math.max(0, currentBlock - maxBlockRange + 1); // +1 to ensure we don't exceed limit
-        const toBlock = currentBlock; // Use current block instead of 'latest' to ensure exact range
-
-        // Fetch historical buy and sell events for this token
-        const buyEventFilter = marketplace.filters.TokensBought(tokenAddress, null);
-        const sellEventFilter = marketplace.filters.TokensSold(tokenAddress, null);
-
-        const [buyEvents, sellEvents] = await Promise.all([
-          marketplace.queryFilter(buyEventFilter, fromBlock, toBlock).catch(() => {
-            return [];
-          }),
-          marketplace.queryFilter(sellEventFilter, fromBlock, toBlock).catch(() => {
-            return [];
-          }),
-        ]);
-
-
-
-        // Process all events to find the highest price
+        // Process all trades to find the highest price
         let maxPrice = tokenData.price || 0.001;
 
-        [...buyEvents, ...sellEvents].forEach((event) => {
-          if ('args' in event && event.args) {
-            try {
-              const args = event.args as { price?: bigint };
-              const priceValue = args.price;
-              if (priceValue) {
-                const price = parseFloat(ethers.formatEther(priceValue));
-                if (price > maxPrice && !isNaN(price) && isFinite(price) && price > 0) {
-                  maxPrice = price;
-                }
-              }
-            } catch (err) {
-              // Silently ignore parsing errors
+        if (response.success && response.data) {
+          for (const trade of response.data) {
+            if (trade.price > maxPrice && !isNaN(trade.price) && isFinite(trade.price) && trade.price > 0) {
+              maxPrice = trade.price;
             }
           }
-        });
-
+        }
 
         // If we found a higher price, use it; otherwise use current price
         const finalAthPrice = maxPrice > 0 ? maxPrice : (tokenData.price || 0.001);
-        setAthPrice(finalAthPrice);
+        athPriceRef.current = finalAthPrice;
 
         // Calculate ATH market cap from ATH price
         // Market cap = price × supply. We estimate supply from current market cap / current price
@@ -192,17 +145,18 @@ export const PriceChart: React.FC<PriceChartProps> = ({ tokenAddress, tokenData 
         const athMcapFromPrice = finalAthPrice * estimatedSupply;
 
         // Use the higher of: calculated ATH market cap or current market cap
-        setAthMarketCap(Math.max(athMcapFromPrice, currentMarketCap));
-      } catch (error) {
+        athMarketCapRef.current = Math.max(athMcapFromPrice, currentMarketCap);
+      } catch {
         // Fallback to current values
-        setAthPrice(tokenData.price || 0.001);
-        setAthMarketCap(tokenData.marketCap || 0);
+        athPriceRef.current = tokenData.price || 0.001;
+        athMarketCapRef.current = tokenData.marketCap || 0;
       }
     };
 
     if (tokenAddress) {
       fetchATH();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tokenAddress, tokenData.price]);
 
   // Fetch and Update Data
@@ -212,59 +166,18 @@ export const PriceChart: React.FC<PriceChartProps> = ({ tokenAddress, tokenData 
 
       setIsLoading(true);
       try {
-        const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
-        const marketplace = new ethers.Contract(
-          CONTRACT_ADDRESSES.TokenMarketplace,
-          TOKEN_MARKETPLACE_ABI,
-          provider
-        );
-
-        // Get current block number
-        const currentBlock = await provider.getBlockNumber();
-
-        // Calculate how many blocks to look back based on timeframe
-        // Assuming ~2 second block time for Push Chain
+        // Fetch trades from backend API - much more efficient than RPC
+        // Calculate how many trades we need based on timeframe
         const intervalSeconds = getIntervalSeconds(timeframe);
         const lookbackSeconds = intervalSeconds * 200; // Get enough data for 200 candles
-        const blocksToLookBack = Math.floor(lookbackSeconds / 2); // ~2 sec per block
-        const fromBlock = Math.max(0, currentBlock - blocksToLookBack);
 
-        // Ensure block range doesn't exceed 10000 blocks (RPC limit)
-        const maxBlockRange = 10000;
-        const safeFromBlock = Math.max(0, currentBlock - maxBlockRange + 1);
-        const safeToBlock = currentBlock;
-        const finalFromBlock = Math.max(fromBlock, safeFromBlock); // Use the more restrictive range
+        // Estimate trades needed - request more to ensure coverage
+        // Backend is cached so this is efficient
+        const tradesNeeded = Math.min(500, Math.max(100, Math.floor(lookbackSeconds / 60)));
 
-        // Fetch buy and sell events for this specific token
-        // In ethers v6, filters accept indexed parameters: (tokenAddress, buyer/seller)
-        const buyEventFilter = marketplace.filters.TokensBought(tokenAddress, null);
-        const sellEventFilter = marketplace.filters.TokensSold(tokenAddress, null);
+        const response = await getTokenTrades(tokenAddress, 1, tradesNeeded);
 
-        const [buyEvents, sellEvents] = await Promise.all([
-          marketplace.queryFilter(buyEventFilter, finalFromBlock, safeToBlock).catch(() => []),
-          marketplace.queryFilter(sellEventFilter, finalFromBlock, safeToBlock).catch(() => []),
-        ]);
-
-        // Get unique block numbers
-        const blockNumbers = new Set<number>();
-        [...buyEvents, ...sellEvents].forEach(event => {
-          blockNumbers.add(event.blockNumber);
-        });
-
-        // Fetch blocks to get timestamps
-        const blocksMap = new Map<number, ethers.Block>();
-        await Promise.all(
-          Array.from(blockNumbers).map(async (blockNum) => {
-            try {
-              const block = await provider.getBlock(blockNum);
-              if (block) blocksMap.set(blockNum, block);
-            } catch {
-              // Ignore errors
-            }
-          })
-        );
-
-        // Process all events into price points
+        // Process all trades into price events
         interface PriceEvent {
           timestamp: number;
           blockNumber: number;
@@ -275,37 +188,24 @@ export const PriceChart: React.FC<PriceChartProps> = ({ tokenAddress, tokenData 
 
         const priceEvents: PriceEvent[] = [];
 
-        // Process buy events
-        buyEvents.forEach((event) => {
-          if ('args' in event && event.args) {
-            const block = blocksMap.get(event.blockNumber);
-            if (block && event.args.price) {
-              priceEvents.push({
-                timestamp: block.timestamp,
-                blockNumber: event.blockNumber,
-                price: parseFloat(ethers.formatEther(event.args.price)),
-                volume: parseFloat(ethers.formatEther(event.args.ethAmount || 0)),
-                type: 'buy',
-              });
-            }
-          }
-        });
+        if (response.success && response.data) {
+          for (const trade of response.data) {
+            // Parse amountIn/amountOut from wei
+            const amountIn = parseFloat(trade.amountIn) / 1e18;
+            const amountOut = parseFloat(trade.amountOut) / 1e18;
 
-        // Process sell events
-        sellEvents.forEach((event) => {
-          if ('args' in event && event.args) {
-            const block = blocksMap.get(event.blockNumber);
-            if (block && event.args.price) {
-              priceEvents.push({
-                timestamp: block.timestamp,
-                blockNumber: event.blockNumber,
-                price: parseFloat(ethers.formatEther(event.args.price)),
-                volume: parseFloat(ethers.formatEther(event.args.ethAmount || 0)),
-                type: 'sell',
-              });
-            }
+            // Determine ETH volume based on trade type
+            const volume = trade.type === 'BUY' ? amountIn : amountOut;
+
+            priceEvents.push({
+              timestamp: new Date(trade.timestamp).getTime() / 1000, // Convert to Unix timestamp
+              blockNumber: trade.blockNumber,
+              price: trade.price,
+              volume,
+              type: trade.type.toLowerCase() as 'buy' | 'sell',
+            });
           }
-        });
+        }
 
         // Sort by timestamp first, then by block number to ensure correct sequence
         priceEvents.sort((a, b) => {
@@ -341,8 +241,6 @@ export const PriceChart: React.FC<PriceChartProps> = ({ tokenAddress, tokenData 
 
           candlestickSeriesRef.current.setData(data);
           volumeSeriesRef.current.setData(volData);
-          setCurrentPrice(currentPrice);
-          setPriceChange(0);
           return;
         }
 
@@ -400,7 +298,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({ tokenAddress, tokenData 
         // Track the price before the first transaction in each interval
         let previousClose: number | null = null;
 
-        intervals.forEach((intervalStart, index) => {
+        intervals.forEach((intervalStart) => {
           const events = grouped[intervalStart];
           if (events.length === 0) return;
 
@@ -515,49 +413,32 @@ export const PriceChart: React.FC<PriceChartProps> = ({ tokenAddress, tokenData 
           candlestickSeriesRef.current.setData(candles);
           volumeSeriesRef.current.setData(volumes);
 
-          // Update current price
-          const lastCandle = candles[candles.length - 1];
-          setCurrentPrice(lastCandle.close);
-
           // Update ATH price if we found a higher price in this timeframe's data
           const allHighs = candles.map(c => c.high);
           const timeframeMax = allHighs.length > 0 ? Math.max(...allHighs) : 0;
-          setAthPrice(prevAth => {
-            if (timeframeMax > prevAth) {
-              return timeframeMax;
-            }
-            return prevAth;
-          });
+          if (timeframeMax > athPriceRef.current) {
+            athPriceRef.current = timeframeMax;
+          }
 
           // Update ATH market cap
-          setAthMarketCap(prevAthMcap => Math.max(prevAthMcap, tokenData.marketCap || 0));
-
-          // Calculate price change
-          if (candles.length > 1) {
-            const firstCandle = candles[0];
-            const change = ((lastCandle.close - firstCandle.open) / firstCandle.open) * 100;
-            setPriceChange(change);
-          } else {
-            setPriceChange(0);
-          }
+          athMarketCapRef.current = Math.max(athMarketCapRef.current, tokenData.marketCap || 0);
         } else {
           // If no candles, don't reset ATH - keep the existing value
           // Only update if we don't have an ATH yet
-          setAthPrice(prevAth => prevAth > 0 ? prevAth : (tokenData.price || 0.001));
-          setAthMarketCap(prevAthMcap => Math.max(prevAthMcap, tokenData.marketCap || 0));
+          if (athPriceRef.current === 0) {
+            athPriceRef.current = tokenData.price || 0.001;
+          }
+          athMarketCapRef.current = Math.max(athMarketCapRef.current, tokenData.marketCap || 0);
         }
-      } catch (error) {
-        // Error fetching price history
-        // Fallback to current price
-        const currentPrice = tokenData.price || 0.001;
-        setCurrentPrice(currentPrice);
-        setPriceChange(0);
+      } catch {
+        // Error fetching price history - silently fail, chart will show no data
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeframe, tokenAddress, tokenData.price]);
 
   const getIntervalSeconds = (tf: string) => {
