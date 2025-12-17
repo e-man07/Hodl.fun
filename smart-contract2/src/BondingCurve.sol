@@ -1,0 +1,365 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./interfaces/IBondingCurve.sol";
+import "./interfaces/IToken.sol";
+import "./interfaces/IUniswapV2Factory.sol";
+import "./interfaces/IUniswapV2Pair.sol";
+import "./interfaces/IUniswapV2ERC20.sol";
+import "./interfaces/IBondingCurveFactory.sol";
+import "./interfaces/ICore.sol";
+
+/**
+ * @title BondingCurve
+ * @notice Upgradeable bonding curve contract implementing constant product AMM
+ * @dev One bonding curve per token, uses UUPS upgradeable pattern
+ */
+contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessControlUpgradeable {
+    using SafeERC20 for IERC20;
+
+    /// @notice Role for core contract
+    bytes32 public constant CORE_ROLE = keccak256("CORE_ROLE");
+
+    /// @notice Immutable factory address
+    address public immutable factory;
+    
+    /// @notice Immutable core address
+    address public immutable core;
+    
+    /// @notice Immutable wrapped native token
+    address public immutable wNative;
+    
+    /// @notice Token address
+    address public token;
+    
+    /// @notice Uniswap pair address (set after listing)
+    address public pair;
+    
+    /// @notice Virtual reserves for price calculation
+    uint256 private virtualNative;
+    uint256 private virtualToken;
+    uint256 private k;
+    uint256 private targetToken;
+    
+    /// @notice Fee configuration
+    struct Fee {
+        uint8 denominator;
+        uint16 numerator;
+    }
+    Fee private feeConfig;
+    
+    /// @notice Real reserves tracking actual balances
+    uint256 public realNativeReserves;
+    uint256 public realTokenReserves;
+    
+    /// @notice State flags
+    bool public lock;
+    bool public isListing;
+
+    /// @notice Custom errors
+    error BondingCurveLocked();
+    error OnlyCore();
+    error OnlyFactory();
+    error InvalidAmountOut();
+    error InvalidAmountIn();
+    error InvalidTo();
+    error OverflowTarget();
+    error InvalidK();
+    error OnlyLock();
+    error AlreadyListed();
+    error MustListing();
+
+    /// @notice Disable initializers in implementation
+    constructor(address _core, address _wNative) {
+        factory = msg.sender;
+        core = _core;
+        wNative = _wNative;
+        _disableInitializers();
+    }
+
+    /**
+     * @notice Initialize the bonding curve
+     * @param _token Token address
+     * @param _virtualNative Initial virtual native reserve
+     * @param _virtualToken Initial virtual token reserve
+     * @param _k Constant product parameter
+     * @param _targetToken Target token amount for listing
+     * @param _feeDenominator Fee denominator
+     * @param _feeNumerator Fee numerator
+     */
+    function initialize(
+        address _token,
+        uint256 _virtualNative,
+        uint256 _virtualToken,
+        uint256 _k,
+        uint256 _targetToken,
+        uint8 _feeDenominator,
+        uint16 _feeNumerator
+    ) external initializer {
+        if (msg.sender != factory) {
+            revert OnlyFactory();
+        }
+
+        __UUPSUpgradeable_init();
+        __AccessControl_init();
+
+        token = _token;
+        virtualNative = _virtualNative;
+        virtualToken = _virtualToken;
+        k = _k;
+        targetToken = _targetToken;
+        feeConfig = Fee(_feeDenominator, _feeNumerator);
+        isListing = false;
+        lock = false;
+
+        _grantRole(DEFAULT_ADMIN_ROLE, core);
+        _grantRole(CORE_ROLE, core);
+
+        // Initialize real reserves
+        realNativeReserves = IERC20(wNative).balanceOf(address(this));
+        realTokenReserves = IERC20(_token).balanceOf(address(this));
+    }
+
+    /**
+     * @notice Execute a buy order
+     * @param to Recipient address
+     * @param amountOut Amount of tokens to buy
+     */
+    function buy(address to, uint256 amountOut) external override onlyRole(CORE_ROLE) {
+        if (lock) {
+            revert BondingCurveLocked();
+        }
+        if (amountOut == 0) {
+            revert InvalidAmountOut();
+        }
+        if (to == wNative || to == token) {
+            revert InvalidTo();
+        }
+
+        address _wNative = wNative;
+        address _token = token;
+
+        (uint256 _realNativeReserves, uint256 _realTokenReserves) = getReserves();
+
+        // Ensure remaining tokens stay above target
+        if (_realTokenReserves - amountOut < targetToken) {
+            revert OverflowTarget();
+        }
+
+        uint256 balanceNative;
+        {
+            IERC20(_token).safeTransfer(core, amountOut);
+            balanceNative = IERC20(_wNative).balanceOf(address(this));
+        }
+
+        uint256 amountNativeIn = balanceNative - _realNativeReserves;
+        _update(amountNativeIn, amountOut, true);
+        
+        if (virtualNative * virtualToken < k) {
+            revert InvalidK();
+        }
+        
+        emit Buy(to, token, amountNativeIn, amountOut);
+        _checkTarget();
+    }
+
+    /**
+     * @notice Execute a sell order
+     * @param to Recipient address
+     * @param amountOut Amount of native to receive
+     */
+    function sell(address to, uint256 amountOut) external override onlyRole(CORE_ROLE) {
+        if (lock) {
+            revert BondingCurveLocked();
+        }
+        if (amountOut == 0) {
+            revert InvalidAmountOut();
+        }
+
+        address _wNative = wNative;
+        address _token = token;
+        
+        (uint256 _realNativeReserves, uint256 _realTokenReserves) = getReserves();
+        if (amountOut > _realNativeReserves) {
+            revert InvalidAmountOut();
+        }
+
+        uint256 balanceToken;
+        {
+            if (to == _wNative || to == _token) {
+                revert InvalidTo();
+            }
+            IERC20(_wNative).safeTransfer(core, amountOut);
+            balanceToken = IERC20(_token).balanceOf(address(this));
+        }
+
+        uint256 amountTokenIn = balanceToken - _realTokenReserves;
+        if (amountTokenIn == 0) {
+            revert InvalidAmountIn();
+        }
+
+        _update(amountTokenIn, amountOut, false);
+        
+        if (virtualNative * virtualToken < k) {
+            revert InvalidK();
+        }
+        
+        emit Sell(to, token, amountTokenIn, amountOut);
+        _checkTarget();
+    }
+
+    /**
+     * @notice List token on Uniswap after reaching target
+     * @return pair_ Address of the created pair
+     */
+    function listing() external override returns (address pair_) {
+        if (!lock) {
+            revert OnlyLock();
+        }
+        if (isListing) {
+            revert AlreadyListed();
+        }
+
+        IBondingCurveFactory _factory = IBondingCurveFactory(factory);
+        address dexFactory = _factory.getDexFactory();
+        pair_ = IUniswapV2Factory(dexFactory).createPair(wNative, token);
+        pair = pair_;
+
+        uint256 listingFee = _factory.getListingFee();
+
+        // Calculate and burn excess tokens
+        uint256 burnTokenAmount;
+        {
+            burnTokenAmount = realTokenReserves - ((realNativeReserves - listingFee) * virtualToken) / virtualNative;
+            if (burnTokenAmount > 0) {
+                IToken(token).burn(burnTokenAmount);
+            }
+            IERC20(wNative).safeTransfer(ICore(_factory.getCore()).getFeeVault(), listingFee);
+        }
+
+        uint256 listingNativeAmount = IERC20(wNative).balanceOf(address(this));
+        uint256 listingTokenAmount = IERC20(token).balanceOf(address(this));
+        
+        IERC20(wNative).transfer(pair_, listingNativeAmount);
+        IERC20(token).transfer(pair_, listingTokenAmount);
+
+        // Reset reserves and provide liquidity
+        realNativeReserves = 0;
+        realTokenReserves = 0;
+        uint256 liquidity = IUniswapV2Pair(pair_).mint(address(this));
+
+        // Burn LP tokens
+        IUniswapV2ERC20(pair_).transfer(address(0), liquidity);
+        
+        isListing = true;
+        emit Listing(address(this), token, pair_, listingNativeAmount, listingTokenAmount, liquidity);
+        
+        return pair_;
+    }
+
+    /**
+     * @notice Update virtual and real reserves after trades
+     * @param amountIn Amount coming in
+     * @param amountOut Amount going out
+     * @param isBuy Whether this is a buy order
+     */
+    function _update(uint256 amountIn, uint256 amountOut, bool isBuy) private {
+        realNativeReserves = IERC20(wNative).balanceOf(address(this));
+        realTokenReserves = IERC20(token).balanceOf(address(this));
+
+        if (isBuy) {
+            virtualNative += amountIn;
+            virtualToken -= amountOut;
+        } else {
+            virtualNative -= amountOut;
+            virtualToken += amountIn;
+        }
+
+        emit Sync(token, realNativeReserves, realTokenReserves, virtualNative, virtualToken);
+    }
+
+    /**
+     * @notice Check if target is reached and lock if so
+     */
+    function _checkTarget() private {
+        if (realTokenReserves <= targetToken) {
+            lock = true;
+            emit Lock(token);
+        }
+    }
+
+    /**
+     * @notice Get real reserves
+     * @return nativeReserves Native reserves
+     * @return tokenReserves Token reserves
+     */
+    function getReserves() public view override returns (uint256 nativeReserves, uint256 tokenReserves) {
+        nativeReserves = realNativeReserves;
+        tokenReserves = realTokenReserves;
+    }
+
+    /**
+     * @notice Get virtual reserves
+     * @return virtualNativeReserve Virtual native reserve
+     * @return virtualTokenReserve Virtual token reserve
+     */
+    function getVirtualReserves() public view override returns (uint256 virtualNativeReserve, uint256 virtualTokenReserve) {
+        virtualNativeReserve = virtualNative;
+        virtualTokenReserve = virtualToken;
+    }
+
+    /**
+     * @notice Get constant product k
+     * @return k_ Constant product value
+     */
+    function getK() external view override returns (uint256 k_) {
+        k_ = k;
+    }
+
+    /**
+     * @notice Get target token amount
+     * @return targetToken_ Target token amount
+     */
+    function getTargetToken() public view override returns (uint256 targetToken_) {
+        targetToken_ = targetToken;
+    }
+
+    /**
+     * @notice Get lock status
+     * @return lock_ True if locked
+     */
+    function getLock() public view override returns (bool lock_) {
+        lock_ = lock;
+    }
+
+    /**
+     * @notice Get listing status
+     * @return isListing_ True if listed
+     */
+    function getIsListing() public view override returns (bool isListing_) {
+        isListing_ = isListing;
+    }
+
+    /**
+     * @notice Get fee configuration
+     * @return denominator Fee denominator
+     * @return numerator Fee numerator
+     */
+    function getFeeConfig() public view override returns (uint8 denominator, uint16 numerator) {
+        Fee memory fee = feeConfig;
+        denominator = fee.denominator;
+        numerator = fee.numerator;
+    }
+
+    /**
+     * @notice Authorize upgrade (only admin)
+     * @param newImplementation New implementation address
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+}
+

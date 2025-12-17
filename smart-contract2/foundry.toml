@@ -1,0 +1,22 @@
+[profile.default]
+solc_version        = "0.8.22"
+
+src                 = "src"
+out                 = "out"
+libs                = ["lib"]
+remappings          = [
+    "@openzeppelin/=lib/openzeppelin-contracts/",
+    "forge-std/=lib/forge-std/src/"
+]
+
+# Push Chain Testnet configuration
+# Chain ID: 42101
+# Native Token: PUSH (18 decimals)
+# Explorer: https://donut.push.network
+[rpc_endpoints]
+push_testnet        = "https://evm.rpc-testnet-donut-node1.push.org/"
+push_testnet_alt    = "https://evm.rpc-testnet-donut-node2.push.org/"
+
+[etherscan]
+push_testnet        = { key = "blockscout", url = "https://donut.push.network/api", chain = 42101 }
+

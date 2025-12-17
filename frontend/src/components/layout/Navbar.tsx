@@ -37,7 +37,7 @@ const Navbar = () => {
             height={40}
             className="object-contain flex-shrink-0"
           />
-          <span className="text-2xl font-bold text-primary leading-tight">Hodl.fun</span>
+          <span className="text-2xl font-bold text-primary leading-tight">thehodl.fun</span>
         </Link>
 
         {/* Desktop Navigation */}
@@ -88,12 +88,12 @@ const Navbar = () => {
               <div className="flex items-center space-x-3 mb-6">
                 <Image
                   src="/hodl-logo.png"
-                  alt="Hodl.fun logo"
+                  alt="thehodl.fun logo"
                   width={32}
                   height={32}
                   className="object-contain"
                 />
-                <span className="text-xl font-bold text-primary">Hodl.fun</span>
+                <span className="text-xl font-bold text-primary">thehodl.fun</span>
               </div>
 
               <nav className="flex flex-col space-y-2">

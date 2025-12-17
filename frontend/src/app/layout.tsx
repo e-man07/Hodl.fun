@@ -21,12 +21,12 @@ const lora = Lora({
 });
 
 export const metadata: Metadata = {
-  title: "Hodl.fun - Token Launchpad",
+  title: "thehodl.fun - Token Launchpad",
   description: "Create and trade tokens with bonding curve mechanics on Push Chain - Hodl.fun",
   keywords: "token, crypto, blockchain, hodl, push chain, bonding curve, defi, trading",
-  authors: [{ name: "Hodl.fun" }],
-  creator: "Hodl.fun",
-  publisher: "Hodl.fun",
+  authors: [{ name: "thehodl.fun" }],
+  creator: "thehodl.fun",
+  publisher: "thehodl.fun",
   formatDetection: {
     email: false,
     address: false,
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
         url: '/hodl-logo.png',
         width: 1200,
         height: 630,
-        alt: 'Hodl.fun - Token Launchpad',
+        alt: 'thehodl.fun - Token Launchpad',
       },
     ],
     locale: 'en_US',
@@ -55,7 +55,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: "Hodl.fun - Token Launchpad",
+    title: "thehodl.fun - Token Launchpad",
     description: "Create and trade tokens with bonding curve mechanics on Push Chain",
     images: ['/hodl-logo.png'],
   },
