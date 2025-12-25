@@ -158,11 +158,19 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             // Transfer wrapped native to curve
             IERC20(wNative).safeTransfer(curve_, amountIn);
             
-            // Execute buy
+            // Get balance before buy to calculate actual tokens received (after fee)
+            uint256 balanceBefore = IERC20(token_).balanceOf(address(this));
+            
+            // Execute buy - tokens will be transferred to Core (address(this))
             curve.buy(address(this), tokensOut);
             
-            // Transfer tokens to creator
-            IERC20(token_).safeTransfer(creator, tokensOut);
+            // Get actual tokens received (after fee deduction)
+            uint256 tokensReceived = IERC20(token_).balanceOf(address(this)) - balanceBefore;
+            
+            // Transfer tokens to creator (actual amount received after fees)
+            if (tokensReceived > 0) {
+                IERC20(token_).safeTransfer(creator, tokensReceived);
+            }
         }
 
         // Transfer deploy fee to vault

@@ -136,11 +136,11 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
         // Initialize token
         tokenContract.initialize(name, symbol, tokenURI, core);
         
-        // Mint tokens to bonding curve
-        IToken(token_).mint(curve);
-        
-        // Set bonding curve role on token
+        // Set bonding curve role on token FIRST (required for mint)
         tokenContract.setBondingCurve(curve);
+        
+        // Mint tokens to bonding curve (now curve has the role)
+        IToken(token_).mint(curve);
 
         // Initialize bonding curve
         IBondingCurve(curve).initialize(

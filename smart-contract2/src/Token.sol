@@ -27,16 +27,23 @@ contract Token is
     /// @notice Role for core contract
     bytes32 public constant CORE_ROLE = keccak256("CORE_ROLE");
     
+    /// @notice Fixed total supply for all tokens
+    uint256 public constant TOTAL_SUPPLY = 100_000_000 * 10**18; // 100M tokens
+    
     /// @notice Token metadata URI
     string private _tokenURI;
     
     /// @notice Core contract address
     address public core;
+    
+    /// @notice Flag to prevent multiple mints
+    bool private hasMinted;
 
     /// @notice Custom errors
     error OnlyBondingCurve();
     error OnlyCore();
     error InvalidAddress();
+    error AlreadyMinted();
 
     /// @notice Disable initializers in implementation
     constructor() {
@@ -76,11 +83,14 @@ contract Token is
     /**
      * @notice Mint tokens to bonding curve
      * @param curve Bonding curve address
+     * @dev Can only be called once per token instance
      */
     function mint(address curve) external override onlyRole(BONDING_CURVE_ROLE) {
-        // Mint total supply to bonding curve
-        uint256 totalSupply = 100_000_000 * 10**decimals(); // 100M tokens
-        _mint(curve, totalSupply);
+        if (hasMinted) {
+            revert AlreadyMinted();
+        }
+        hasMinted = true;
+        _mint(curve, TOTAL_SUPPLY);
     }
 
     /**

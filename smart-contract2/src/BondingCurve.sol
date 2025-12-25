@@ -128,7 +128,7 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     /**
      * @notice Execute a buy order
      * @param to Recipient address
-     * @param amountOut Amount of tokens to buy
+     * @param amountOut Amount of tokens to buy (before fee deduction)
      */
     function buy(address to, uint256 amountOut) external override onlyRole(CORE_ROLE) {
         if (lock) {
@@ -146,18 +146,27 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
 
         (uint256 _realNativeReserves, uint256 _realTokenReserves) = getReserves();
 
-        // Ensure remaining tokens stay above target
+        // Calculate fee: deduct fee from token output
+        Fee memory fee = feeConfig;
+        uint256 feeAmount = (amountOut * fee.numerator) / fee.denominator;
+        uint256 tokensToUser = amountOut - feeAmount;
+
+        // Ensure remaining tokens stay above target (check with original amountOut for target validation)
         if (_realTokenReserves - amountOut < targetToken) {
             revert OverflowTarget();
         }
 
         uint256 balanceNative;
         {
-            IERC20(_token).safeTransfer(core, amountOut);
+            // Transfer tokens directly to user (after fee deduction)
+            // Fee tokens remain in bonding curve reserves (not transferred)
+            IERC20(_token).safeTransfer(to, tokensToUser);
             balanceNative = IERC20(_wNative).balanceOf(address(this));
         }
 
         uint256 amountNativeIn = balanceNative - _realNativeReserves;
+        
+        // Update reserves with full amountOut (fee included in reserves)
         _update(amountNativeIn, amountOut, true);
         
         if (virtualNative * virtualToken < k) {
@@ -167,14 +176,15 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
         uint256 price = (virtualNative * 1e18) / virtualToken;
         
-        emit Buy(to, token, amountNativeIn, amountOut, price, block.timestamp);
+        // Emit event with actual amounts (tokensToUser is what user receives)
+        emit Buy(to, token, amountNativeIn, tokensToUser, price, block.timestamp);
         _checkTarget();
     }
 
     /**
      * @notice Execute a sell order
      * @param to Recipient address
-     * @param amountOut Amount of native to receive
+     * @param amountOut Amount of native to receive (before fee deduction)
      */
     function sell(address to, uint256 amountOut) external override onlyRole(CORE_ROLE) {
         if (lock) {
@@ -192,12 +202,23 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
             revert InvalidAmountOut();
         }
 
+        // Calculate fee: deduct fee from native output
+        Fee memory fee = feeConfig;
+        uint256 feeAmount = (amountOut * fee.numerator) / fee.denominator;
+        uint256 nativeToUser = amountOut - feeAmount;
+
         uint256 balanceToken;
+        address feeVault = ICore(core).getFeeVault();
         {
             if (to == _wNative || to == _token) {
                 revert InvalidTo();
             }
-            IERC20(_wNative).safeTransfer(core, amountOut);
+            // Transfer native directly to user (after fee)
+            IERC20(_wNative).safeTransfer(to, nativeToUser);
+            // Transfer fee to vault
+            if (feeAmount > 0) {
+                IERC20(_wNative).safeTransfer(feeVault, feeAmount);
+            }
             balanceToken = IERC20(_token).balanceOf(address(this));
         }
 
@@ -206,6 +227,7 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
             revert InvalidAmountIn();
         }
 
+        // Update reserves with full amountOut (fee included)
         _update(amountTokenIn, amountOut, false);
         
         if (virtualNative * virtualToken < k) {
@@ -215,7 +237,8 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
         uint256 price = (virtualNative * 1e18) / virtualToken;
         
-        emit Sell(to, token, amountTokenIn, amountOut, price, block.timestamp);
+        // Emit event with actual amounts (nativeToUser is what user receives)
+        emit Sell(to, token, amountTokenIn, nativeToUser, price, block.timestamp);
         _checkTarget();
     }
 
