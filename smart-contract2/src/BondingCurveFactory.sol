@@ -75,7 +75,6 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
         config = Config(
             params.deployFee,
             params.listingFee,
-            params.tokenTotalSupply,
             params.virtualNative,
             params.virtualToken,
             k,
@@ -90,7 +89,6 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
         emit SetInitialize(
             params.deployFee,
             params.listingFee,
-            params.tokenTotalSupply,
             params.virtualNative,
             params.virtualToken,
             k,

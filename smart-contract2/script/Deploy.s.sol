@@ -21,7 +21,7 @@ contract DeployScript is Script {
     // Initialization parameters
     uint256 public constant DEPLOY_FEE = 0.01 ether;
     uint256 public constant LISTING_FEE = 0.1 ether;
-    uint256 public constant TOKEN_TOTAL_SUPPLY = 100_000_000 * 10**18; // 100M tokens
+    // Note: Token total supply is fixed at 100M tokens in Token.sol (hardcoded)
     uint256 public constant VIRTUAL_NATIVE = 1 ether;
     uint256 public constant VIRTUAL_TOKEN = 50_000_000 * 10**18; // 50M tokens
     uint256 public constant TARGET_TOKEN = 25_000_000 * 10**18; // 25M tokens (50% of virtual)
@@ -82,7 +82,6 @@ contract DeployScript is Script {
         IBondingCurveFactory.InitializeParams memory initParams = IBondingCurveFactory.InitializeParams({
             deployFee: DEPLOY_FEE,
             listingFee: LISTING_FEE,
-            tokenTotalSupply: TOKEN_TOTAL_SUPPLY,
             virtualNative: VIRTUAL_NATIVE,
             virtualToken: VIRTUAL_TOKEN,
             targetToken: TARGET_TOKEN,

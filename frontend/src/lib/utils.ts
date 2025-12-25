@@ -18,8 +18,25 @@ export const formatNumber = (num: number, decimals: number = 2): string => {
   return num.toFixed(decimals);
 };
 
-export const formatCurrency = (amount: number, currency: string = 'ETH'): string => {
+export const formatCurrency = (amount: number, currency: string = 'ETH', ethPrice?: number | null): string => {
+  // If currency is USD and ethPrice is provided, convert from ETH to USD
+  if (currency === 'USD' && ethPrice) {
+    const usdAmount = amount * ethPrice;
+    return `$${formatNumber(usdAmount)}`;
+  }
   return `${formatNumber(amount)} ${currency}`;
+};
+
+/**
+ * Format market cap in USD (converts from ETH)
+ */
+export const formatMarketCapUSD = (ethAmount: number, ethPrice: number | null | undefined): string => {
+  if (!ethPrice) {
+    // Fallback to ETH if price not available
+    return formatCurrency(ethAmount, 'ETH');
+  }
+  const usdAmount = ethAmount * ethPrice;
+  return `$${formatNumber(usdAmount)}`;
 };
 
 export const truncateAddress = (address: string, startLength: number = 6, endLength: number = 4): string => {

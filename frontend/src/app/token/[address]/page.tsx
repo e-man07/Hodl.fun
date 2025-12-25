@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Loader2, ArrowLeft, ExternalLink, TrendingUp, TrendingDown, Copy, Check } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatCurrency, formatNumber, formatMarketCapUSD } from '@/lib/utils';
+import { useEthPrice } from '@/hooks/useEthPrice';
 import { getIPFSImageUrl, createIPFSImageErrorHandler } from '@/utils/ipfsImage';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
@@ -47,6 +48,7 @@ export default function TokenDetailPage() {
   const params = useParams();
   const router = useRouter();
   const tokenAddress = params.address as string;
+  const { ethPrice } = useEthPrice();
 
   const [tokenData, setTokenData] = useState<TokenData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -326,7 +328,7 @@ export default function TokenDetailPage() {
                   <div className="text-xs text-muted-foreground mb-1">Market Cap</div>
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-lg sm:text-xl font-bold text-white">
-                      {formatCurrency(tokenData.marketCap || 0)}
+                      {formatMarketCapUSD(tokenData.marketCap || 0, ethPrice)}
                     </span>
                     <span className="text-xs text-green-500">
                       +0.00%
@@ -337,7 +339,7 @@ export default function TokenDetailPage() {
                   <div className="text-right">
                     <div className="text-xs text-muted-foreground">ATH</div>
                     <div className="text-sm font-medium text-white whitespace-nowrap">
-                      {formatCurrency(tokenData.marketCap || 0)}
+                      {formatMarketCapUSD(tokenData.marketCap || 0, ethPrice)}
                     </div>
                   </div>
                   {/* Compact Progress Bar */}

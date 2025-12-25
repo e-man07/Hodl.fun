@@ -10,7 +10,6 @@ interface IBondingCurveFactory {
     struct Config {
         uint256 deployFee;
         uint256 listingFee;
-        uint256 tokenTotalSupply;
         uint256 virtualNative;
         uint256 virtualToken;
         uint256 k;
@@ -23,7 +22,6 @@ interface IBondingCurveFactory {
     struct InitializeParams {
         uint256 deployFee;
         uint256 listingFee;
-        uint256 tokenTotalSupply;
         uint256 virtualNative;
         uint256 virtualToken;
         uint256 targetToken;
@@ -36,7 +34,6 @@ interface IBondingCurveFactory {
     event SetInitialize(
         uint256 deployFee,
         uint256 listingFee,
-        uint256 tokenTotalSupply,
         uint256 virtualNative,
         uint256 virtualToken,
         uint256 k,

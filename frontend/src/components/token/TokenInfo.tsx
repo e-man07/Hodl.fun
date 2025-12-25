@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatCurrency, formatNumber, formatMarketCapUSD } from '@/lib/utils';
+import { useEthPrice } from '@/hooks/useEthPrice';
 import { TrendingUp, Users, Coins, BarChart3, Calendar, Wallet, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -26,6 +27,8 @@ interface TokenInfoProps {
 }
 
 export const TokenInfo: React.FC<TokenInfoProps> = ({ tokenData }) => {
+  const { ethPrice } = useEthPrice();
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -51,7 +54,7 @@ export const TokenInfo: React.FC<TokenInfoProps> = ({ tokenData }) => {
               <TrendingUp className="w-3 h-3" />
               Market Cap
             </div>
-            <div className="text-sm sm:text-base font-semibold">{formatCurrency(tokenData.marketCap)}</div>
+            <div className="text-sm sm:text-base font-semibold">{formatMarketCapUSD(tokenData.marketCap, ethPrice)}</div>
           </div>
           <div className="space-y-0.5">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

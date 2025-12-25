@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Trophy, TrendingUp, Users } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatMarketCapUSD } from '@/lib/utils';
+import { useEthPrice } from '@/hooks/useEthPrice';
 import Image from 'next/image';
 import { getIPFSImageUrl, createIPFSImageErrorHandler } from '@/utils/ipfsImage';
 
@@ -25,6 +26,7 @@ interface LeaderboardProps {
 
 export const Leaderboard = ({ tokens, title = 'Top Tokens' }: LeaderboardProps) => {
   const router = useRouter();
+  const { ethPrice } = useEthPrice();
   const topTokens = tokens
     .sort((a, b) => b.marketCap - a.marketCap)
     .slice(0, 10);
@@ -89,7 +91,7 @@ export const Leaderboard = ({ tokens, title = 'Top Tokens' }: LeaderboardProps) 
                     <div className="flex items-center gap-3 mt-1">
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <TrendingUp className="h-3 w-3" />
-                        <span>{formatCurrency(token.marketCap)}</span>
+                        <span>{formatMarketCapUSD(token.marketCap, ethPrice)}</span>
                       </div>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Users className="h-3 w-3" />
@@ -99,8 +101,8 @@ export const Leaderboard = ({ tokens, title = 'Top Tokens' }: LeaderboardProps) 
                     {/* ATH Progress Bar */}
                     <div className="mt-2 p-2 bg-zinc-900/80 rounded-lg border border-zinc-800">
                       <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className="text-zinc-400">MC <span className="text-white font-semibold">{formatCurrency(token.marketCap)}</span></span>
-                        <span className="text-zinc-400">ATH <span className="text-white font-semibold">{formatCurrency(token.marketCap)}</span></span>
+                        <span className="text-zinc-400">MC <span className="text-white font-semibold">{formatMarketCapUSD(token.marketCap, ethPrice)}</span></span>
+                        <span className="text-zinc-400">ATH <span className="text-white font-semibold">{formatMarketCapUSD(token.marketCap, ethPrice)}</span></span>
                       </div>
                       <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
                         <div

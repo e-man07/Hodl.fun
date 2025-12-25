@@ -164,7 +164,10 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
             revert InvalidK();
         }
         
-        emit Buy(to, token, amountNativeIn, amountOut);
+        // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
+        uint256 price = (virtualNative * 1e18) / virtualToken;
+        
+        emit Buy(to, token, amountNativeIn, amountOut, price, block.timestamp);
         _checkTarget();
     }
 
@@ -209,7 +212,10 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
             revert InvalidK();
         }
         
-        emit Sell(to, token, amountTokenIn, amountOut);
+        // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
+        uint256 price = (virtualNative * 1e18) / virtualToken;
+        
+        emit Sell(to, token, amountTokenIn, amountOut, price, block.timestamp);
         _checkTarget();
     }
 
@@ -280,7 +286,10 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
             virtualToken += amountIn;
         }
 
-        emit Sync(token, realNativeReserves, realTokenReserves, virtualNative, virtualToken);
+        // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
+        uint256 price = (virtualNative * 1e18) / virtualToken;
+
+        emit Sync(token, realNativeReserves, realTokenReserves, virtualNative, virtualToken, price, block.timestamp);
     }
 
     /**
@@ -354,6 +363,29 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         Fee memory fee = feeConfig;
         denominator = fee.denominator;
         numerator = fee.numerator;
+    }
+
+    /**
+     * @notice Get current token price
+     * @return price Current price per token in native currency (scaled by 1e18)
+     * @dev Price is calculated from virtual reserves: price = virtualNative / virtualToken
+     */
+    function getCurrentPrice() public view override returns (uint256 price) {
+        if (virtualToken == 0) {
+            return 0;
+        }
+        price = (virtualNative * 1e18) / virtualToken;
+    }
+
+    /**
+     * @notice Calculate market cap for the token
+     * @return marketCap Market cap in native currency (ETH/PUSH)
+     * @dev Market cap = totalSupply * price
+     */
+    function calculateMarketCap() public view override returns (uint256 marketCap) {
+        uint256 price = getCurrentPrice();
+        uint256 totalSupply = IERC20(token).totalSupply();
+        marketCap = (totalSupply * price) / 1e18;
     }
 
     /**

@@ -29,8 +29,10 @@ import {
 import Navbar from "@/components/layout/Navbar";
 import {
   formatCurrency,
+  formatMarketCapUSD,
   truncateAddress,
 } from "@/lib/utils";
+import { useEthPrice } from "@/hooks/useEthPrice";
 import { usePushWalletContext, usePushChainClient, PushUI } from '@pushchain/ui-kit';
 import { useUserPortfolio } from "@/hooks/useUserPortfolio";
 
@@ -38,6 +40,7 @@ const DashboardPage = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"portfolio" | "created">("portfolio");
   const [copiedAddress, setCopiedAddress] = useState(false);
+  const { ethPrice } = useEthPrice();
 
   // Get wallet connection state and user data
   const { connectionStatus } = usePushWalletContext();
@@ -392,7 +395,7 @@ const DashboardPage = () => {
                       <div>
                         <p className="text-muted-foreground">Market Cap</p>
                         <p className="font-medium">
-                          {formatCurrency(token.marketCap || 0)}
+                          {formatMarketCapUSD(token.marketCap || 0, ethPrice)}
                         </p>
                       </div>
                       <div>

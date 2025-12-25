@@ -7,10 +7,24 @@ pragma solidity ^0.8.22;
  */
 interface IBondingCurve {
     /// @notice Emitted when tokens are bought
-    event Buy(address indexed to, address indexed token, uint256 amountNativeIn, uint256 amountOut);
+    event Buy(
+        address indexed to, 
+        address indexed token, 
+        uint256 amountNativeIn, 
+        uint256 amountOut,
+        uint256 price,
+        uint256 timestamp
+    );
     
     /// @notice Emitted when tokens are sold
-    event Sell(address indexed to, address indexed token, uint256 amountTokenIn, uint256 amountOut);
+    event Sell(
+        address indexed to, 
+        address indexed token, 
+        uint256 amountTokenIn, 
+        uint256 amountOut,
+        uint256 price,
+        uint256 timestamp
+    );
     
     /// @notice Emitted when curve is locked
     event Lock(address indexed token);
@@ -19,7 +33,15 @@ interface IBondingCurve {
     event Listing(address indexed curve, address indexed token, address indexed pair, uint256 nativeAmount, uint256 tokenAmount, uint256 liquidity);
     
     /// @notice Emitted when reserves are synced
-    event Sync(address indexed token, uint256 realNative, uint256 realToken, uint256 virtualNative, uint256 virtualToken);
+    event Sync(
+        address indexed token, 
+        uint256 realNative, 
+        uint256 realToken, 
+        uint256 virtualNative, 
+        uint256 virtualToken,
+        uint256 price,
+        uint256 timestamp
+    );
 
     /**
      * @notice Initialize the bonding curve
@@ -105,5 +127,17 @@ interface IBondingCurve {
      * @return numerator Fee numerator
      */
     function getFeeConfig() external view returns (uint8 denominator, uint16 numerator);
+
+    /**
+     * @notice Get current token price
+     * @return price Current price per token in native currency (scaled by 1e18)
+     */
+    function getCurrentPrice() external view returns (uint256 price);
+
+    /**
+     * @notice Calculate market cap for the token
+     * @return marketCap Market cap in native currency (ETH/PUSH)
+     */
+    function calculateMarketCap() external view returns (uint256 marketCap);
 }
 

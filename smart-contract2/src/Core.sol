@@ -230,7 +230,10 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         // Execute buy
         curveContract.buy(to, amountOut);
 
-        emit Buy(token, to, amountIn, amountOut);
+        // Calculate price: price per token = amountIn / amountOut (scaled by 1e18)
+        uint256 price = (amountIn * 1e18) / amountOut;
+        
+        emit Buy(token, to, amountIn, amountOut, price, block.timestamp);
     }
 
     /**
@@ -290,7 +293,10 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         // Execute buy
         curveContract.buy(to, amountOut);
 
-        emit Buy(token, to, amountIn, amountOut);
+        // Calculate price: price per token = amountIn / amountOut (scaled by 1e18)
+        uint256 price = (amountIn * 1e18) / amountOut;
+        
+        emit Buy(token, to, amountIn, amountOut, price, block.timestamp);
     }
 
     /**
@@ -347,7 +353,10 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         // Execute sell
         curveContract.sell(to, amountOut);
 
-        emit Sell(token, from, to, amountIn, amountOut);
+        // Calculate price: price per token = amountOut / amountIn (scaled by 1e18)
+        uint256 price = (amountOut * 1e18) / amountIn;
+        
+        emit Sell(token, from, to, amountIn, amountOut, price, block.timestamp);
     }
 
     /**
@@ -404,7 +413,10 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         // Execute sell
         curveContract.sell(to, amountOut);
 
-        emit Sell(token, from, to, amountIn, amountOut);
+        // Calculate price: price per token = amountOut / amountIn (scaled by 1e18)
+        uint256 price = (amountOut * 1e18) / amountIn;
+        
+        emit Sell(token, from, to, amountIn, amountOut, price, block.timestamp);
     }
 
     /**
@@ -464,6 +476,32 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
      */
     function getFeeVault() external view override returns (address vault_) {
         vault_ = vault;
+    }
+
+    /**
+     * @notice Get current price for a token
+     * @param token Token address
+     * @return price Current price per token in native currency (scaled by 1e18)
+     */
+    function getCurrentPrice(address token) external view override returns (uint256 price) {
+        address curve = IBondingCurveFactory(factory).getCurve(token);
+        if (curve == address(0)) {
+            revert InvalidAddress();
+        }
+        return IBondingCurve(curve).getCurrentPrice();
+    }
+
+    /**
+     * @notice Calculate market cap for a token
+     * @param token Token address
+     * @return marketCap Market cap in native currency (ETH/PUSH)
+     */
+    function calculateMarketCap(address token) external view override returns (uint256 marketCap) {
+        address curve = IBondingCurveFactory(factory).getCurve(token);
+        if (curve == address(0)) {
+            revert InvalidAddress();
+        }
+        return IBondingCurve(curve).calculateMarketCap();
     }
 
     /**

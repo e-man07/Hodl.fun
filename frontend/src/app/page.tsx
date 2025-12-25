@@ -26,7 +26,8 @@ import {
 import Navbar from '@/components/layout/Navbar';
 import { DegenOnboardingModal } from '@/components/DegenOnboardingModal';
 import { TradingActivityBanner } from '@/components/TradingActivityBanner';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatCurrency, formatNumber, formatMarketCapUSD } from '@/lib/utils';
+import { useEthPrice } from '@/hooks/useEthPrice';
 import { useMarketplace } from '@/hooks/useMarketplace';
 import { useDebounce } from '@/hooks/useDebounce';
 import { getIPFSImageUrl, createIPFSImageErrorHandler } from '@/utils/ipfsImage';
@@ -53,6 +54,7 @@ interface Token {
 const TrendingSection = ({ tokens, router }: { tokens: Token[]; router: ReturnType<typeof useRouter> }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isPaused, setIsPaused] = useState(false);
+  const { ethPrice } = useEthPrice();
 
   const trendingTokens = tokens
     .sort((a, b) => b.marketCap - a.marketCap)
@@ -103,18 +105,9 @@ const TrendingSection = ({ tokens, router }: { tokens: Token[]; router: ReturnTy
     };
   }, [isPaused]);
 
-  // Format market cap for display (e.g., "4 ETH", "781.2 ETH")
+  // Format market cap for display in USD
   const formatMarketCap = (marketCap: number): string => {
-    if (marketCap >= 1e9) {
-      return `${(marketCap / 1e9).toFixed(1)} ETH`;
-    }
-    if (marketCap >= 1e6) {
-      return `${(marketCap / 1e6).toFixed(1)} ETH`;
-    }
-    if (marketCap >= 1e3) {
-      return `${(marketCap / 1e3).toFixed(1)} ETH`;
-    }
-    return `${marketCap.toFixed(2)} ETH`;
+    return formatMarketCapUSD(marketCap, ethPrice);
   };
 
   return (
@@ -210,6 +203,7 @@ const TrendingSection = ({ tokens, router }: { tokens: Token[]; router: ReturnTy
 
 const HomePage = () => {
   const router = useRouter();
+  const { ethPrice } = useEthPrice();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'marketCap' | 'holders' | 'createdAt'>('marketCap');
   const [filterBy, setFilterBy] = useState<'all' | 'new' | 'trading'>('all');
@@ -281,7 +275,7 @@ const HomePage = () => {
     };
   }, []);
 
-  const TokenCard = ({ token, index }: { token: Token; index: number }) => {
+  const TokenCard = ({ token, index, ethPrice }: { token: Token; index: number; ethPrice: number | null }) => {
     const [isVisible, setIsVisible] = useState(false);
     const cardRef = useRef<HTMLDivElement>(null);
 
@@ -355,7 +349,7 @@ const HomePage = () => {
           {/* Stats Row */}
           <div className="flex items-center gap-4 text-xs text-zinc-400 pt-1">
             <span className="text-green-500 font-medium">+0%</span>
-            <span>Vol {formatCurrency(token.marketCap * 0.1)}</span>
+            <span>Vol {formatMarketCapUSD(token.marketCap * 0.1, ethPrice)}</span>
             <span className="flex items-center gap-1">
               <Users className="w-3 h-3" />
               {token.holders}
@@ -365,8 +359,8 @@ const HomePage = () => {
           {/* ATH Progress Bar */}
           <div className="pt-2">
             <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="text-zinc-400">MC <span className="text-white font-semibold"> {formatCurrency(token.marketCap)}</span></span>
-              <span className="text-zinc-400">ATH <span className="text-white font-semibold"> {formatCurrency(token.marketCap)}</span></span>
+              <span className="text-zinc-400">MC <span className="text-white font-semibold"> {formatMarketCapUSD(token.marketCap, ethPrice)}</span></span>
+              <span className="text-zinc-400">ATH <span className="text-white font-semibold"> {formatMarketCapUSD(token.marketCap, ethPrice)}</span></span>
             </div>
             <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
               <div
@@ -562,7 +556,7 @@ const HomePage = () => {
           <>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
               {filteredTokens.map((token, index) => (
-                <TokenCard key={token.address} token={token} index={index} />
+                <TokenCard key={token.address} token={token} index={index} ethPrice={ethPrice} />
               ))}
             </div>
 

@@ -21,7 +21,9 @@ interface ICore {
         address indexed token,
         address indexed to,
         uint256 amountIn,
-        uint256 amountOut
+        uint256 amountOut,
+        uint256 price,
+        uint256 timestamp
     );
 
     /// @notice Emitted when tokens are sold
@@ -30,7 +32,9 @@ interface ICore {
         address indexed from,
         address indexed to,
         uint256 amountIn,
-        uint256 amountOut
+        uint256 amountOut,
+        uint256 price,
+        uint256 timestamp
     );
 
     /**
@@ -155,5 +159,19 @@ interface ICore {
      * @return vault Fee vault address
      */
     function getFeeVault() external view returns (address vault);
+
+    /**
+     * @notice Get current price for a token
+     * @param token Token address
+     * @return price Current price per token in native currency (scaled by 1e18)
+     */
+    function getCurrentPrice(address token) external view returns (uint256 price);
+
+    /**
+     * @notice Calculate market cap for a token
+     * @param token Token address
+     * @return marketCap Market cap in native currency (ETH/PUSH)
+     */
+    function calculateMarketCap(address token) external view returns (uint256 marketCap);
 }
 
