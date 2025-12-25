@@ -117,7 +117,7 @@ interface IBondingCurveFactory {
      * @notice Get deploy fee
      * @return deployFee Deploy fee amount
      */
-    function getDelpyFee() external view returns (uint256 deployFee);
+    function getDeployFee() external view returns (uint256 deployFee);
 
     /**
      * @notice Get listing fee

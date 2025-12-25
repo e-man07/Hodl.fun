@@ -128,7 +128,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         IBondingCurveFactory factoryContract = IBondingCurveFactory(factory);
         
         // Validate fee
-        uint256 deployFee = factoryContract.getDelpyFee();
+        uint256 deployFee = factoryContract.getDeployFee();
         if (fee < deployFee) {
             revert InvalidFee();
         }

@@ -4,6 +4,7 @@ pragma solidity ^0.8.22;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IBondingCurve.sol";
@@ -19,7 +20,7 @@ import "./interfaces/ICore.sol";
  * @notice Upgradeable bonding curve contract implementing constant product AMM
  * @dev One bonding curve per token, uses UUPS upgradeable pattern
  */
-contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessControlUpgradeable {
+contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Role for core contract
@@ -78,6 +79,13 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     error OnlyLock();
     error AlreadyListed();
     error MustListing();
+    error InvalidReserves();
+    error InvalidFeeConfig();
+    error InsufficientVirtualTokenReserves();
+    error InsufficientVirtualNativeReserves();
+    error InsufficientNativeReserves();
+    error InvalidAddress();
+    error InvalidToken();
 
     /// @notice Disable initializers in implementation
     constructor(address _core, address _wNative) {
@@ -112,6 +120,32 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
 
         __UUPSUpgradeable_init();
         __AccessControl_init();
+        __ReentrancyGuard_init();
+
+        // Validate token address
+        if (_token == address(0)) {
+            revert InvalidAddress();
+        }
+        // Verify it's a contract (has code)
+        if (_token.code.length == 0) {
+            revert InvalidToken();
+        }
+
+        // Validate reserves
+        if (_virtualNative == 0 || _virtualToken == 0) {
+            revert InvalidReserves();
+        }
+        if (_k == 0) {
+            revert InvalidK();
+        }
+        
+        // Validate fee configuration
+        if (_feeDenominator == 0) {
+            revert InvalidFeeConfig();
+        }
+        if (_feeNumerator >= _feeDenominator) {
+            revert InvalidFeeConfig(); // Fee must be < 100%
+        }
 
         token = _token;
         virtualNative = _virtualNative;
@@ -143,8 +177,10 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
      * @notice Execute a buy order
      * @param to Recipient address
      * @param amountOut Amount of tokens to buy (before fee deduction)
+     * @dev Follows CEI pattern: Checks → Effects → Interactions
      */
-    function buy(address to, uint256 amountOut) external override onlyRole(CORE_ROLE) {
+    function buy(address to, uint256 amountOut) external override nonReentrant onlyRole(CORE_ROLE) {
+        // Checks
         if (lock) {
             revert BondingCurveLocked();
         }
@@ -165,17 +201,11 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         uint256 feeAmount = (amountOut * fee.numerator) / fee.denominator;
         uint256 tokensToUser = amountOut - feeAmount;
 
-        uint256 balanceNative;
-        {
-            // Transfer tokens directly to user (after fee deduction)
-            // Fee tokens remain in bonding curve reserves (not transferred)
-            IERC20(_token).safeTransfer(to, tokensToUser);
-            balanceNative = IERC20(_wNative).balanceOf(address(this));
-        }
-
+        // Get balance of native tokens (should be increased by amount sent from Core)
+        uint256 balanceNative = IERC20(_wNative).balanceOf(address(this));
         uint256 amountNativeIn = balanceNative - _realNativeReserves;
         
-        // Update reserves with full amountOut (fee included in reserves)
+        // Effects: Update state FIRST (CEI pattern)
         _update(amountNativeIn, amountOut, true);
         
         if (virtualNative * virtualToken < k) {
@@ -184,6 +214,9 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         
         // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
         uint256 price = (virtualNative * 1e18) / virtualToken;
+        
+        // Interactions: Transfer AFTER state update (CEI pattern)
+        IERC20(_token).safeTransfer(to, tokensToUser);
         
         // Emit event with actual amounts (tokensToUser is what user receives)
         emit Buy(to, token, amountNativeIn, tokensToUser, price, block.timestamp);
@@ -194,13 +227,18 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
      * @notice Execute a sell order
      * @param to Recipient address
      * @param amountOut Amount of native to receive (before fee deduction)
+     * @dev Follows CEI pattern: Checks → Effects → Interactions
      */
-    function sell(address to, uint256 amountOut) external override onlyRole(CORE_ROLE) {
+    function sell(address to, uint256 amountOut) external override nonReentrant onlyRole(CORE_ROLE) {
+        // Checks
         if (lock) {
             revert BondingCurveLocked();
         }
         if (amountOut == 0) {
             revert InvalidAmountOut();
+        }
+        if (to == wNative || to == token) {
+            revert InvalidTo();
         }
 
         address _wNative = wNative;
@@ -216,27 +254,16 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         uint256 feeAmount = (amountOut * fee.numerator) / fee.denominator;
         uint256 nativeToUser = amountOut - feeAmount;
 
-        uint256 balanceToken;
-        address feeVault = ICore(core).getFeeVault();
-        {
-            if (to == _wNative || to == _token) {
-                revert InvalidTo();
-            }
-            // Transfer native directly to user (after fee)
-            IERC20(_wNative).safeTransfer(to, nativeToUser);
-            // Transfer fee to vault
-            if (feeAmount > 0) {
-                IERC20(_wNative).safeTransfer(feeVault, feeAmount);
-            }
-            balanceToken = IERC20(_token).balanceOf(address(this));
-        }
-
+        // Get balance of tokens (should be increased by amount sent from Core)
+        uint256 balanceToken = IERC20(_token).balanceOf(address(this));
         uint256 amountTokenIn = balanceToken - _realTokenReserves;
         if (amountTokenIn == 0) {
             revert InvalidAmountIn();
         }
 
-        // Update reserves with full amountOut (fee included)
+        address feeVault = ICore(core).getFeeVault();
+
+        // Effects: Update state FIRST (CEI pattern)
         _update(amountTokenIn, amountOut, false);
         
         if (virtualNative * virtualToken < k) {
@@ -246,6 +273,13 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
         uint256 price = (virtualNative * 1e18) / virtualToken;
         
+        // Interactions: Transfer AFTER state update (CEI pattern)
+        IERC20(_wNative).safeTransfer(to, nativeToUser);
+        // Transfer fee to vault
+        if (feeAmount > 0) {
+            IERC20(_wNative).safeTransfer(feeVault, feeAmount);
+        }
+        
         // Emit event with actual amounts (nativeToUser is what user receives)
         emit Sell(to, token, amountTokenIn, nativeToUser, price, block.timestamp);
         _checkTarget();
@@ -254,8 +288,9 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     /**
      * @notice List token on Uniswap after reaching target
      * @return pair_ Address of the created pair
+     * @dev Protected by nonReentrant and checks listingFee <= realNativeReserves
      */
-    function listing() external override returns (address pair_) {
+    function listing() external override nonReentrant returns (address pair_) {
         if (!lock) {
             revert OnlyLock();
         }
@@ -270,29 +305,45 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
 
         uint256 listingFee = _factory.getListingFee();
 
-        // Calculate and burn excess tokens
+        // Validate that listing fee doesn't exceed available reserves
+        if (listingFee > realNativeReserves) {
+            revert InsufficientNativeReserves();
+        }
+
+        // Calculate and burn excess tokens (with underflow protection)
         uint256 burnTokenAmount;
         {
-            burnTokenAmount = realTokenReserves - ((realNativeReserves - listingFee) * virtualToken) / virtualNative;
-            if (burnTokenAmount > 0) {
-                IToken(token).burn(burnTokenAmount);
+            // Calculate expected token amount based on native reserves after listing fee
+            // Safe to subtract now since we've checked listingFee <= realNativeReserves
+            uint256 expectedTokenAmount = ((realNativeReserves - listingFee) * virtualToken) / virtualNative;
+            
+            // Only burn if actual reserves exceed expected
+            if (realTokenReserves > expectedTokenAmount) {
+                burnTokenAmount = realTokenReserves - expectedTokenAmount;
+                if (burnTokenAmount > 0) {
+                    IToken(token).burn(burnTokenAmount);
+                }
             }
-            IERC20(wNative).safeTransfer(ICore(_factory.getCore()).getFeeVault(), listingFee);
+            // Transfer listing fee to vault
+            if (listingFee > 0) {
+                IERC20(wNative).safeTransfer(ICore(_factory.getCore()).getFeeVault(), listingFee);
+            }
         }
 
         uint256 listingNativeAmount = IERC20(wNative).balanceOf(address(this));
         uint256 listingTokenAmount = IERC20(token).balanceOf(address(this));
         
-        IERC20(wNative).transfer(pair_, listingNativeAmount);
-        IERC20(token).transfer(pair_, listingTokenAmount);
+        // Use safeTransfer instead of transfer for safety
+        IERC20(wNative).safeTransfer(pair_, listingNativeAmount);
+        IERC20(token).safeTransfer(pair_, listingTokenAmount);
 
         // Reset reserves and provide liquidity
         realNativeReserves = 0;
         realTokenReserves = 0;
         uint256 liquidity = IUniswapV2Pair(pair_).mint(address(this));
 
-        // Burn LP tokens
-        IUniswapV2ERC20(pair_).transfer(address(0), liquidity);
+        // Burn LP tokens using safeTransfer for consistency
+        IERC20(pair_).safeTransfer(address(0), liquidity);
         
         isListing = true;
         emit Listing(address(this), token, pair_, listingNativeAmount, listingTokenAmount, liquidity);
@@ -312,13 +363,22 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
 
         if (isBuy) {
             virtualNative += amountIn;
+            // Check for underflow (Solidity 0.8+ will revert, but explicit check is clearer)
+            if (virtualToken < amountOut) {
+                revert InsufficientVirtualTokenReserves();
+            }
             virtualToken -= amountOut;
         } else {
+            // Check for underflow (Solidity 0.8+ will revert, but explicit check is clearer)
+            if (virtualNative < amountOut) {
+                revert InsufficientVirtualNativeReserves();
+            }
             virtualNative -= amountOut;
             virtualToken += amountIn;
         }
 
         // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
+        // virtualToken is guaranteed to be > 0 at this point (checked in initialize and maintained by logic)
         uint256 price = (virtualNative * 1e18) / virtualToken;
 
         emit Sync(token, realNativeReserves, realTokenReserves, virtualNative, virtualToken, price, block.timestamp);

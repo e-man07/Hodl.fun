@@ -42,6 +42,8 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
     error OnlyCore();
     error InvalidAddress();
     error NotInitialized();
+    error InvalidReserves();
+    error InvalidFeeConfig();
 
     /// @notice Disable initializers in implementation
     constructor(address _wNative) {
@@ -66,6 +68,19 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
 
         __UUPSUpgradeable_init();
         __AccessControl_init();
+
+        // Validate reserves
+        if (params.virtualNative == 0 || params.virtualToken == 0) {
+            revert InvalidReserves();
+        }
+        
+        // Validate fee configuration
+        if (params.feeDenominator == 0) {
+            revert InvalidFeeConfig();
+        }
+        if (params.feeNumerator >= params.feeDenominator) {
+            revert InvalidFeeConfig(); // Fee must be < 100%
+        }
 
         owner = _owner;
         core = _core;
@@ -235,7 +250,16 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
      * @notice Get deploy fee
      * @return deployFee Deploy fee amount
      */
-    function getDelpyFee() external view override returns (uint256 deployFee) {
+    function getDeployFee() external view override returns (uint256 deployFee) {
+        deployFee = config.deployFee;
+    }
+
+    /**
+     * @notice Get deploy fee (legacy typo support for backward compatibility)
+     * @return deployFee Deploy fee amount
+     * @dev Deprecated: Use getDeployFee() instead
+     */
+    function getDelpyFee() external view returns (uint256 deployFee) {
         deployFee = config.deployFee;
     }
 
