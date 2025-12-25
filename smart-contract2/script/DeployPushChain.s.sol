@@ -25,7 +25,9 @@ contract DeployPushChainScript is Script {
     // Note: Token total supply is fixed at 100M tokens in Token.sol (hardcoded)
     uint256 public constant VIRTUAL_NATIVE = 1 ether; // 1 PUSH virtual reserve
     uint256 public constant VIRTUAL_TOKEN = 50_000_000 * 10**18; // 50M tokens virtual reserve
-    uint256 public constant TARGET_TOKEN = 25_000_000 * 10**18; // 25M tokens (50% of virtual) - locks when this amount is sold
+    // Graduation market cap: 1M PUSH (~$20k at $0.02 per PUSH)
+    // Similar to pump.fun's approach - fixed native currency threshold
+    uint256 public constant GRADUATION_MARKET_CAP = 1_000_000 ether;
     uint8 public constant FEE_DENOMINATOR = 100;
     uint16 public constant FEE_NUMERATOR = 1; // 1% fee
 
@@ -91,7 +93,7 @@ contract DeployPushChainScript is Script {
             listingFee: LISTING_FEE,
             virtualNative: VIRTUAL_NATIVE,
             virtualToken: VIRTUAL_TOKEN,
-            targetToken: TARGET_TOKEN,
+            graduationMarketCap: GRADUATION_MARKET_CAP,
             feeDenominator: FEE_DENOMINATOR,
             feeNumerator: FEE_NUMERATOR,
             dexFactory: DEX_FACTORY // May be zero if DEX not deployed yet

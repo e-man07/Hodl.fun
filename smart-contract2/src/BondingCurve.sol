@@ -44,7 +44,7 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     uint256 private virtualNative;
     uint256 private virtualToken;
     uint256 private k;
-    uint256 private targetToken;
+    uint256 private graduationMarketCap;
     
     /// @notice Fee configuration
     struct Fee {
@@ -57,6 +57,12 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     uint256 public realNativeReserves;
     uint256 public realTokenReserves;
     
+    /// @notice All-time high tracking
+    uint256 public athPrice; // All-time high price per token (scaled by 1e18)
+    uint256 public athMarketCap; // All-time high market cap (in native currency)
+    uint256 public athPriceTimestamp; // Timestamp when ATH price was reached
+    uint256 public athMarketCapTimestamp; // Timestamp when ATH market cap was reached
+    
     /// @notice State flags
     bool public lock;
     bool public isListing;
@@ -68,7 +74,6 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     error InvalidAmountOut();
     error InvalidAmountIn();
     error InvalidTo();
-    error OverflowTarget();
     error InvalidK();
     error OnlyLock();
     error AlreadyListed();
@@ -88,7 +93,7 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
      * @param _virtualNative Initial virtual native reserve
      * @param _virtualToken Initial virtual token reserve
      * @param _k Constant product parameter
-     * @param _targetToken Target token amount for listing
+     * @param _graduationMarketCap Market cap threshold for graduation (in native currency)
      * @param _feeDenominator Fee denominator
      * @param _feeNumerator Fee numerator
      */
@@ -97,7 +102,7 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         uint256 _virtualNative,
         uint256 _virtualToken,
         uint256 _k,
-        uint256 _targetToken,
+        uint256 _graduationMarketCap,
         uint8 _feeDenominator,
         uint16 _feeNumerator
     ) external initializer {
@@ -112,10 +117,19 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         virtualNative = _virtualNative;
         virtualToken = _virtualToken;
         k = _k;
-        targetToken = _targetToken;
+        graduationMarketCap = _graduationMarketCap;
         feeConfig = Fee(_feeDenominator, _feeNumerator);
         isListing = false;
         lock = false;
+        
+        // Initialize ATH values to initial price/market cap
+        uint256 initialPrice = (virtualNative * 1e18) / virtualToken;
+        uint256 totalSupply = IERC20(_token).totalSupply();
+        uint256 initialMarketCap = (totalSupply * initialPrice) / 1e18;
+        athPrice = initialPrice;
+        athMarketCap = initialMarketCap;
+        athPriceTimestamp = block.timestamp;
+        athMarketCapTimestamp = block.timestamp;
 
         _grantRole(DEFAULT_ADMIN_ROLE, core);
         _grantRole(CORE_ROLE, core);
@@ -150,11 +164,6 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         Fee memory fee = feeConfig;
         uint256 feeAmount = (amountOut * fee.numerator) / fee.denominator;
         uint256 tokensToUser = amountOut - feeAmount;
-
-        // Ensure remaining tokens stay above target (check with original amountOut for target validation)
-        if (_realTokenReserves - amountOut < targetToken) {
-            revert OverflowTarget();
-        }
 
         uint256 balanceNative;
         {
@@ -316,10 +325,31 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     }
 
     /**
-     * @notice Check if target is reached and lock if so
+     * @notice Check if graduation market cap is reached and lock if so
+     * Also updates ATH price and market cap if new highs are reached
      */
     function _checkTarget() private {
-        if (realTokenReserves <= targetToken) {
+        // Calculate current price and market cap
+        uint256 currentPrice = getCurrentPrice();
+        uint256 totalSupply = IERC20(token).totalSupply();
+        uint256 currentMarketCap = (totalSupply * currentPrice) / 1e18;
+        
+        // Update ATH price if new high
+        if (currentPrice > athPrice) {
+            athPrice = currentPrice;
+            athPriceTimestamp = block.timestamp;
+            emit NewATHPrice(token, currentPrice, block.timestamp);
+        }
+        
+        // Update ATH market cap if new high
+        if (currentMarketCap > athMarketCap) {
+            athMarketCap = currentMarketCap;
+            athMarketCapTimestamp = block.timestamp;
+            emit NewATHMarketCap(token, currentMarketCap, block.timestamp);
+        }
+        
+        // Lock if market cap reaches or exceeds graduation threshold
+        if (currentMarketCap >= graduationMarketCap) {
             lock = true;
             emit Lock(token);
         }
@@ -354,11 +384,11 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     }
 
     /**
-     * @notice Get target token amount
-     * @return targetToken_ Target token amount
+     * @notice Get graduation market cap threshold
+     * @return graduationMarketCap_ Market cap threshold for graduation (in native currency)
      */
-    function getTargetToken() public view override returns (uint256 targetToken_) {
-        targetToken_ = targetToken;
+    function getGraduationMarketCap() public view override returns (uint256 graduationMarketCap_) {
+        graduationMarketCap_ = graduationMarketCap;
     }
 
     /**
@@ -409,6 +439,26 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         uint256 price = getCurrentPrice();
         uint256 totalSupply = IERC20(token).totalSupply();
         marketCap = (totalSupply * price) / 1e18;
+    }
+
+    /**
+     * @notice Get all-time high price
+     * @return price_ ATH price per token (scaled by 1e18)
+     * @return timestamp_ Timestamp when ATH price was reached
+     */
+    function getATHPrice() public view override returns (uint256 price_, uint256 timestamp_) {
+        price_ = athPrice;
+        timestamp_ = athPriceTimestamp;
+    }
+
+    /**
+     * @notice Get all-time high market cap
+     * @return marketCap_ ATH market cap (in native currency)
+     * @return timestamp_ Timestamp when ATH market cap was reached
+     */
+    function getATHMarketCap() public view override returns (uint256 marketCap_, uint256 timestamp_) {
+        marketCap_ = athMarketCap;
+        timestamp_ = athMarketCapTimestamp;
     }
 
     /**

@@ -32,6 +32,12 @@ interface IBondingCurve {
     /// @notice Emitted when token is listed on DEX
     event Listing(address indexed curve, address indexed token, address indexed pair, uint256 nativeAmount, uint256 tokenAmount, uint256 liquidity);
     
+    /// @notice Emitted when new ATH price is reached
+    event NewATHPrice(address indexed token, uint256 newPrice, uint256 timestamp);
+    
+    /// @notice Emitted when new ATH market cap is reached
+    event NewATHMarketCap(address indexed token, uint256 newMarketCap, uint256 timestamp);
+    
     /// @notice Emitted when reserves are synced
     event Sync(
         address indexed token, 
@@ -49,7 +55,7 @@ interface IBondingCurve {
      * @param _virtualNative Initial virtual native reserve
      * @param _virtualToken Initial virtual token reserve
      * @param _k Constant product parameter
-     * @param _targetToken Target token amount for listing
+     * @param _graduationMarketCap Market cap threshold for graduation (in native currency)
      * @param _feeDenominator Fee denominator
      * @param _feeNumerator Fee numerator
      */
@@ -58,7 +64,7 @@ interface IBondingCurve {
         uint256 _virtualNative,
         uint256 _virtualToken,
         uint256 _k,
-        uint256 _targetToken,
+        uint256 _graduationMarketCap,
         uint8 _feeDenominator,
         uint16 _feeNumerator
     ) external;
@@ -104,10 +110,10 @@ interface IBondingCurve {
     function getK() external view returns (uint256 k);
 
     /**
-     * @notice Get target token amount
-     * @return targetToken Target token amount
+     * @notice Get graduation market cap threshold
+     * @return graduationMarketCap Market cap threshold for graduation (in native currency)
      */
-    function getTargetToken() external view returns (uint256 targetToken);
+    function getGraduationMarketCap() external view returns (uint256 graduationMarketCap);
 
     /**
      * @notice Get lock status
@@ -139,5 +145,19 @@ interface IBondingCurve {
      * @return marketCap Market cap in native currency (ETH/PUSH)
      */
     function calculateMarketCap() external view returns (uint256 marketCap);
+
+    /**
+     * @notice Get all-time high price
+     * @return price ATH price per token (scaled by 1e18)
+     * @return timestamp Timestamp when ATH price was reached
+     */
+    function getATHPrice() external view returns (uint256 price, uint256 timestamp);
+
+    /**
+     * @notice Get all-time high market cap
+     * @return marketCap ATH market cap (in native currency)
+     * @return timestamp Timestamp when ATH market cap was reached
+     */
+    function getATHMarketCap() external view returns (uint256 marketCap, uint256 timestamp);
 }
 

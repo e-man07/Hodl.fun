@@ -78,7 +78,7 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             params.virtualNative,
             params.virtualToken,
             k,
-            params.targetToken,
+            params.graduationMarketCap,
             params.feeDenominator,
             params.feeNumerator
         );
@@ -92,7 +92,7 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             params.virtualNative,
             params.virtualToken,
             k,
-            params.targetToken,
+            params.graduationMarketCap,
             params.feeNumerator,
             params.feeDenominator,
             dexFactory
@@ -148,7 +148,7 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             _config.virtualNative,
             _config.virtualToken,
             _config.k,
-            _config.targetToken,
+            _config.graduationMarketCap,
             _config.feeDenominator,
             _config.feeNumerator
         );
@@ -245,6 +245,18 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
      */
     function getListingFee() external view override returns (uint256 listingFee) {
         listingFee = config.listingFee;
+    }
+
+    /**
+     * @notice Update graduation market cap threshold
+     * @param _graduationMarketCap New graduation market cap threshold (in native currency)
+     * @dev Only admin can call this. Only affects new curves created after this update.
+     *      Existing curves keep their original threshold.
+     */
+    function setGraduationMarketCap(uint256 _graduationMarketCap) external override onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 oldMarketCap = config.graduationMarketCap;
+        config.graduationMarketCap = _graduationMarketCap;
+        emit SetGraduationMarketCap(oldMarketCap, _graduationMarketCap);
     }
 
     /**

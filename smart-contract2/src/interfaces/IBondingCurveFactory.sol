@@ -13,7 +13,7 @@ interface IBondingCurveFactory {
         uint256 virtualNative;
         uint256 virtualToken;
         uint256 k;
-        uint256 targetToken;
+        uint256 graduationMarketCap;
         uint8 feeDenominator;
         uint16 feeNumerator;
     }
@@ -24,7 +24,7 @@ interface IBondingCurveFactory {
         uint256 listingFee;
         uint256 virtualNative;
         uint256 virtualToken;
-        uint256 targetToken;
+        uint256 graduationMarketCap;
         uint8 feeDenominator;
         uint16 feeNumerator;
         address dexFactory;
@@ -37,7 +37,7 @@ interface IBondingCurveFactory {
         uint256 virtualNative,
         uint256 virtualToken,
         uint256 k,
-        uint256 targetToken,
+        uint256 graduationMarketCap,
         uint8 feeNumerator,
         uint8 feeDenominator,
         address dexFactory
@@ -60,6 +60,9 @@ interface IBondingCurveFactory {
 
     /// @notice Emitted when DEX factory is updated
     event SetDexFactory(address indexed dexFactory);
+
+    /// @notice Emitted when graduation market cap is updated
+    event SetGraduationMarketCap(uint256 oldMarketCap, uint256 newMarketCap);
 
     /**
      * @notice Initialize factory with configuration
@@ -121,5 +124,12 @@ interface IBondingCurveFactory {
      * @return listingFee Listing fee amount
      */
     function getListingFee() external view returns (uint256 listingFee);
+
+    /**
+     * @notice Update graduation market cap threshold
+     * @param _graduationMarketCap New graduation market cap threshold
+     * @dev Only admin can call this. Only affects new curves created after update.
+     */
+    function setGraduationMarketCap(uint256 _graduationMarketCap) external;
 }
 
