@@ -27,7 +27,6 @@ export function useUserPortfolio(address?: string) {
       setPortfolio(response.data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch portfolio');
-      console.error('Error fetching portfolio:', err);
     } finally {
       setLoading(false);
     }

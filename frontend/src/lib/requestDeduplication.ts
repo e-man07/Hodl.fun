@@ -12,9 +12,7 @@ export async function deduplicatedFetch<T>(
   key: string,
   fetcher: () => Promise<T>
 ): Promise<T> {
-  // Check if request is already in flight
   if (pendingRequests.has(key)) {
-    console.log('🔄 Reusing in-flight request:', key);
     return pendingRequests.get(key) as Promise<T>;
   }
 

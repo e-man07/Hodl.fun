@@ -107,11 +107,9 @@ export function createIPFSImageErrorHandler(
 ): (e: React.SyntheticEvent<HTMLImageElement>) => void {
   const gateways = getIPFSImageGateways(originalSrc);
   
-  // Only create handler if we have multiple gateways to try
   if (gateways.length <= 1) {
     return () => {
-      // No fallbacks available - this is fine, just log it
-      console.warn('❌ No fallback gateways available for:', originalSrc);
+      // No fallbacks available
     };
   }
 
@@ -128,18 +126,12 @@ export function createIPFSImageErrorHandler(
     // Get current gateway index for this image (default to 0 if first error)
     let currentIndex = gatewayIndexMap.get(imageKey) ?? 0;
     
-    // Try next gateway
     currentIndex++;
     if (currentIndex < gateways.length) {
       const nextGateway = gateways[currentIndex];
-      console.log(`🔄 Trying fallback gateway ${currentIndex + 1}/${gateways.length}:`, nextGateway);
-      
-      // Update the image src to try the next gateway
       gatewayIndexMap.set(imageKey, currentIndex);
       target.src = nextGateway;
     } else {
-      console.warn('❌ All IPFS gateways failed for:', originalSrc);
-      // All gateways failed - hide the image so fallback UI can show
       target.style.display = 'none';
     }
   };

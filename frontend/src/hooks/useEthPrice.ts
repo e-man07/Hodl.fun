@@ -60,7 +60,6 @@ export const useEthPrice = () => {
           timestamp: Date.now(),
         }));
       } catch (err) {
-        console.error('Error fetching ETH price:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch ETH price');
         
         // Try to use cached price even if expired

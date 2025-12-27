@@ -72,7 +72,6 @@ async function raceGateways(ipfsHash: string): Promise<TokenMetadata> {
   const successResult = results.find(r => r.success);
 
   if (successResult && successResult.success) {
-    console.log('✅ IPFS fetch succeeded from:', successResult.url);
     return successResult.data;
   }
 
@@ -99,46 +98,32 @@ export async function fetchIPFSMetadata(
           metadataURI.replace('data:application/json,', '')
         );
         const metadata = JSON.parse(jsonData);
-        console.log('✅ Parsed inline metadata');
         return metadata;
       } catch (parseError) {
-        console.warn('Failed to parse inline metadata:', parseError);
         return null;
       }
     }
 
-    // Validate IPFS URI
     if (!metadataURI || !metadataURI.startsWith('ipfs://')) {
-      console.warn('Invalid metadata URI:', metadataURI);
       return null;
     }
 
-    // Extract IPFS hash
     const ipfsHash = metadataURI.replace('ipfs://', '');
 
-    // Validate hash
     if (ipfsHash.includes('QmHash') || ipfsHash.length < 40) {
-      console.warn('Placeholder or invalid IPFS hash:', ipfsHash);
       return null;
     }
 
-    // Check cache first
     const cached = getCachedIPFS<TokenMetadata>(ipfsHash);
     if (cached) {
-      console.log('✅ IPFS metadata from cache:', ipfsHash);
       return cached;
     }
 
-    // Fetch from IPFS with gateway racing
-    console.log('🔄 Fetching IPFS metadata:', ipfsHash);
     const metadata = await raceGateways(ipfsHash);
-
-    // Cache the result
     setCachedIPFS(ipfsHash, metadata);
 
     return metadata;
   } catch (error) {
-    console.warn('Error fetching IPFS metadata:', error);
     return null;
   }
 }

@@ -20,23 +20,18 @@ interface TradingTransaction {
   tokenSymbol?: string;
 }
 
-// Helper function to remove ETH prefix from token symbols
 const stripETHPrefix = (symbol: string): string => {
   if (!symbol) return 'TOKEN';
   
   const cleaned = symbol.trim();
   if (!cleaned) return 'TOKEN';
   
-  // Convert to uppercase for case-insensitive comparison
   const upperSymbol = cleaned.toUpperCase();
   
-  // Remove "ETH " prefix (with space) - e.g., "ETH PUFF" -> "PUFF"
   if (upperSymbol.startsWith('ETH ') && cleaned.length > 4) {
     return cleaned.substring(4).trim() || 'TOKEN';
   }
   
-  // Remove "ETH" prefix (without space) - e.g., "ETHPUFF" -> "PUFF", "ethpuff" -> "puff"
-  // Only remove if there are characters after "ETH" (don't remove if symbol is just "ETH")
   if (upperSymbol.startsWith('ETH') && cleaned.length > 3 && upperSymbol !== 'ETH') {
     return cleaned.substring(3).trim() || 'TOKEN';
   }
@@ -57,11 +52,9 @@ export const TradingActivityBanner = () => {
         provider
       );
 
-      // Get current block number
       const currentBlock = await provider.getBlockNumber();
-      const fromBlock = Math.max(0, currentBlock - 5000); // Last 5k blocks (within RPC limit)
+      const fromBlock = Math.max(0, currentBlock - 5000);
 
-      // Fetch both buy and sell events (limit to recent ones)
       const [buyEvents, sellEvents] = await Promise.all([
         marketplaceContract.queryFilter(
           marketplaceContract.filters.TokensBought(),
@@ -75,17 +68,14 @@ export const TradingActivityBanner = () => {
         ).catch(() => [])
       ]);
 
-      // Get latest 20 events from each type, then get blocks in batch
       const recentBuyEvents = buyEvents.slice(-20);
       const recentSellEvents = sellEvents.slice(-20);
 
-      // Get unique block numbers to minimize RPC calls
       const blockNumbers = new Set([
         ...recentBuyEvents.map(e => e.blockNumber),
         ...recentSellEvents.map(e => e.blockNumber)
       ]);
       
-      // Fetch blocks in parallel
       const blocksMap = new Map<number, ethers.Block>();
       await Promise.all(
         Array.from(blockNumbers).map(async (blockNum) => {
@@ -93,12 +83,11 @@ export const TradingActivityBanner = () => {
             const block = await provider.getBlock(blockNum);
             if (block) blocksMap.set(blockNum, block);
           } catch {
-            // Ignore errors
+            // Silent fail
           }
         })
       );
 
-      // Process buy events
       const buyTransactions: TradingTransaction[] = recentBuyEvents
         .filter((event): event is ethers.EventLog => 'args' in event)
         .map((event) => {
@@ -115,7 +104,6 @@ export const TradingActivityBanner = () => {
           };
         });
 
-      // Process sell events
       const sellTransactions: TradingTransaction[] = recentSellEvents
         .filter((event): event is ethers.EventLog => 'args' in event)
         .map((event) => {
@@ -132,12 +120,10 @@ export const TradingActivityBanner = () => {
           };
         });
 
-      // Combine and sort by block number (most recent first)
       const allTransactions = [...buyTransactions, ...sellTransactions]
         .sort((a, b) => b.blockNumber - a.blockNumber)
         .slice(0, 5);
 
-      // Fetch token symbols for display
       const transactionsWithSymbols = await Promise.all(
         allTransactions.map(async (tx) => {
           try {
@@ -147,7 +133,6 @@ export const TradingActivityBanner = () => {
               provider
             );
             const symbol = await tokenContract.symbol();
-            // Remove "ETH" prefix from token symbols (e.g., "ETHPUFF" -> "PUFF", "ethpuff" -> "puff")
             const cleanedSymbol = stripETHPrefix(symbol);
             return { ...tx, tokenSymbol: cleanedSymbol };
           } catch {
@@ -159,14 +144,12 @@ export const TradingActivityBanner = () => {
       setTransactions(transactionsWithSymbols);
       setIsLoading(false);
     } catch (error) {
-      // Error fetching trading transactions
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchRecentTransactions();
-    // Refresh every 60 seconds to avoid rate limiting
     const interval = setInterval(fetchRecentTransactions, 60000);
     return () => clearInterval(interval);
   }, [fetchRecentTransactions]);
@@ -175,7 +158,6 @@ export const TradingActivityBanner = () => {
     return null;
   }
 
-  // Duplicate transactions for seamless infinite scroll
   const duplicatedTransactions = [...transactions, ...transactions];
 
   if (transactions.length === 0) {

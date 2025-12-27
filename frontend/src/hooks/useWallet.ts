@@ -152,12 +152,8 @@ export const useWallet = () => {
         isCorrectNetwork: true,
       }));
 
-      // Update balance
       await updateBalance(address);
-
-      console.log('✅ Wallet connected:', address);
     } catch (error: unknown) {
-      console.error('❌ Error connecting wallet:', error);
       setError(error instanceof Error ? error.message : 'Failed to connect wallet');
     } finally {
       setIsConnecting(false);
@@ -174,7 +170,6 @@ export const useWallet = () => {
       isCorrectNetwork: false,
     });
     setError(null);
-    console.log('🔌 Wallet disconnected');
   }, []);
 
   // Handle account changes

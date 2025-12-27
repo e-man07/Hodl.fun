@@ -65,7 +65,6 @@ export function getCached<T>(
 
     return entry.data;
   } catch (error) {
-    console.warn('Cache read error:', error);
     return null;
   }
 }
@@ -91,9 +90,7 @@ export function setCached<T>(
     localStorage.setItem(key, JSON.stringify(entry));
     return true;
   } catch (error) {
-    // Handle quota exceeded
     if (error instanceof Error && error.name === 'QuotaExceededError') {
-      console.warn('localStorage quota exceeded, clearing old cache');
       clearOldCache();
       try {
         const entry: CacheEntry<T> = {
@@ -107,7 +104,6 @@ export function setCached<T>(
         return false;
       }
     }
-    console.warn('Cache write error:', error);
     return false;
   }
 }
@@ -121,7 +117,7 @@ export function removeCached(key: string): void {
       localStorage.removeItem(key);
     }
   } catch (error) {
-    console.warn('Cache remove error:', error);
+    // Silent fail
   }
 }
 
@@ -161,10 +157,9 @@ function clearOldCache(): void {
       }
     }
 
-    // Remove old entries
     keysToRemove.forEach(key => localStorage.removeItem(key));
   } catch (error) {
-    console.warn('Cache cleanup error:', error);
+    // Silent fail
   }
 }
 
@@ -185,7 +180,7 @@ export function clearAllCache(): void {
       keysToRemove.forEach(key => localStorage.removeItem(key));
     }
   } catch (error) {
-    console.warn('Cache clear error:', error);
+    // Silent fail
   }
 }
 
@@ -230,7 +225,7 @@ export function getCacheStats(): {
       }
     }
   } catch (error) {
-    console.warn('Cache stats error:', error);
+    // Silent fail
   }
 
   return stats;

@@ -72,7 +72,6 @@ export const useUserPortfolio = (userAddress: string | null) => {
     const normalizedAddress = userAddress?.toLowerCase() || null;
 
     if (!normalizedAddress) {
-      console.log('⚠️ No user address provided, clearing portfolio');
       setTokens([]);
       setStats({
         totalValue: 0,
@@ -85,7 +84,6 @@ export const useUserPortfolio = (userAddress: string | null) => {
       return;
     }
 
-    console.log('🔄 Fetching user portfolio for:', normalizedAddress);
     setIsLoading(true);
     setError(null);
 
@@ -103,8 +101,6 @@ export const useUserPortfolio = (userAddress: string | null) => {
         provider
       );
 
-      // Strategy 1: Fetch token balances using Push Chain REST API (fast and efficient)
-      console.log('📋 Fetching token balances from Push Chain API...');
       interface TokenBalanceFromAPI {
         token: {
           address_hash: string;
@@ -151,40 +147,27 @@ export const useUserPortfolio = (userAddress: string | null) => {
             }
           });
         } else {
-          console.warn('⚠️ Unexpected API response format:', apiData);
           tokenBalances = [];
         }
-
-        console.log(`✅ Found ${tokenBalances.length} tokens with balance > 0 from API`);
       } catch (apiError) {
-        console.warn('⚠️ Failed to fetch token balances from API:', apiError);
-        // Fallback: continue with empty array and fetch created tokens only
         tokenBalances = [];
       }
 
-      // Check if request was aborted
       if (abortController.signal.aborted) {
-        console.log('🛑 Request aborted');
         return;
       }
 
-      // Strategy 2: Get tokens created by the user (to mark them as creator)
       let createdTokenAddresses: string[] = [];
       try {
-        console.log('📋 Fetching tokens created by user...');
         createdTokenAddresses = await withTimeout(
           factory.getTokensByCreator(normalizedAddress),
-          10000 // 10 second timeout
+          10000
         );
-        console.log(`✅ Found ${createdTokenAddresses.length} tokens created by user`);
       } catch (getCreatedError) {
-        console.warn('⚠️ Failed to get created tokens:', getCreatedError);
         createdTokenAddresses = [];
       }
 
-      // Check if request was aborted
       if (abortController.signal.aborted) {
-        console.log('🛑 Request aborted');
         return;
       }
 
@@ -197,7 +180,6 @@ export const useUserPortfolio = (userAddress: string | null) => {
       const userTokens: UserToken[] = [];
       
       if (tokenBalances.length === 0) {
-        console.log('ℹ️ No tokens with balance found');
         setTokens([]);
         setStats({
           totalValue: 0,
@@ -210,14 +192,10 @@ export const useUserPortfolio = (userAddress: string | null) => {
         return;
       }
 
-      console.log(`🔍 Fetching details for ${tokenBalances.length} tokens...`);
-
       // Process tokens in batches to avoid overwhelming the RPC
       const batchSize = 10;
       for (let i = 0; i < tokenBalances.length; i += batchSize) {
-        // Check if request was aborted
         if (abortController.signal.aborted) {
-          console.log('🛑 Request aborted during token processing');
           return;
         }
 
@@ -229,15 +207,12 @@ export const useUserPortfolio = (userAddress: string | null) => {
               const tokenAddressHash = tokenBalance.token?.address_hash;
               
               if (!tokenAddressHash) {
-                console.warn('⚠️ Missing token address_hash in API response:', tokenBalance);
                 return;
               }
               
               let tokenAddress = tokenAddressHash.toLowerCase().trim();
               
-              // Validate address
               if (!ethers.isAddress(tokenAddress)) {
-                console.warn('⚠️ Invalid token address:', tokenAddressHash);
                 return;
               }
               
@@ -279,10 +254,10 @@ export const useUserPortfolio = (userAddress: string | null) => {
                 }
                 
                 createdAt = new Date(Number(marketplaceTokenInfo.launchTimestamp) * 1000).toISOString();
-                reserveRatio = Number(marketplaceTokenInfo.reserveRatio) / 100; // Convert from basis points
+                reserveRatio = Number(marketplaceTokenInfo.reserveRatio) / 100;
                 reserveBalance = parseFloat(ethers.formatEther(marketplaceTokenInfo.reserveBalance || BigInt(0)));
               } catch (infoError) {
-                console.warn(`⚠️ Failed to get marketplace info for ${symbol || tokenAddress}:`, infoError);
+                // Continue without marketplace info
               }
 
               const balanceFormatted = ethers.formatUnits(balanceBigInt, decimals);
@@ -308,19 +283,15 @@ export const useUserPortfolio = (userAddress: string | null) => {
 
               userTokens.push(userToken);
             } catch (tokenError) {
-              console.warn(`⚠️ Error processing token ${tokenBalance.token}:`, tokenError);
+              // Skip failed tokens
             }
           })
         );
       }
 
-      // Check if request was aborted before setting state
       if (abortController.signal.aborted) {
-        console.log('🛑 Request aborted before updating state');
         return;
       }
-
-      console.log(`✅ Found ${userTokens.length} tokens with balance > 0`);
 
       setTokens(userTokens);
 
@@ -342,13 +313,9 @@ export const useUserPortfolio = (userAddress: string | null) => {
       });
 
     } catch (err) {
-      // Don't set error if request was aborted
       if (abortController.signal.aborted) {
-        console.log('🛑 Request was aborted');
         return;
       }
-
-      console.error('❌ Failed to fetch user portfolio:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch portfolio data';
       setError(errorMessage);
     } finally {
@@ -372,7 +339,6 @@ export const useUserPortfolio = (userAddress: string | null) => {
   }, [fetchUserTokens]);
 
   const refreshPortfolio = useCallback(() => {
-    console.log('🔄 Manual refresh triggered');
     fetchUserTokens();
   }, [fetchUserTokens]);
 

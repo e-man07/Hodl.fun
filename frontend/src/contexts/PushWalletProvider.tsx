@@ -77,7 +77,7 @@ const clearWalletConnectionState = () => {
     try {
       localStorage.removeItem(key);
     } catch (error) {
-      console.warn(`Failed to remove localStorage key: ${key}`, error);
+      // Silent fail
     }
   });
   
@@ -102,7 +102,7 @@ const clearWalletConnectionState = () => {
         try {
           sessionStorage.removeItem(key);
         } catch (error) {
-          console.warn(`Failed to remove sessionStorage key: ${key}`, error);
+          // Silent fail
         }
       }
     }

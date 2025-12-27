@@ -10,42 +10,18 @@ interface TokenParams {
 }
 
 export const debugTokenParams = (params: TokenParams) => {
-  console.log('🔍 DEBUGGING TOKEN PARAMETERS:');
-  
-  // Check name
   const nameLength = params.name?.length || 0;
-  console.log(`📝 Name: "${params.name}" (length: ${nameLength})`);
-  console.log(`   ✅ Valid length (3-50): ${nameLength >= 3 && nameLength <= 50}`);
-  
-  // Check symbol  
   const symbolLength = params.symbol?.length || 0;
-  console.log(`🏷️  Symbol: "${params.symbol}" (length: ${symbolLength})`);
-  console.log(`   ✅ Valid length (2-10): ${symbolLength >= 2 && symbolLength <= 10}`);
   
-  // Check total supply
   let totalSupply: bigint;
   if (typeof params.totalSupply === 'bigint') {
     totalSupply = params.totalSupply;
   } else {
     totalSupply = BigInt(params.totalSupply || 0);
   }
-  const minSupply = BigInt('1000000000000000000000000'); // 1M * 10^18
-  const maxSupply = BigInt('100000000000000000000000000'); // 100M * 10^18
-  console.log(`💰 Total Supply: ${totalSupply.toString()}`);
-  console.log(`   ✅ Valid range (1M-100M): ${totalSupply >= minSupply && totalSupply <= maxSupply}`);
-  
-  // Check reserve ratio
+  const minSupply = BigInt('1000000000000000000000000');
+  const maxSupply = BigInt('100000000000000000000000000');
   const reserveRatio = Number(params.reserveRatio || 0);
-  console.log(`📊 Reserve Ratio: ${reserveRatio}`);
-  console.log(`   ✅ Valid range (1000-9000): ${reserveRatio >= 1000 && reserveRatio <= 9000}`);
-  
-  // Check creator
-  console.log(`👤 Creator: ${params.creator}`);
-  console.log(`   ✅ Valid address: ${params.creator !== '0x0000000000000000000000000000000000000000'}`);
-  
-  // Check metadata URI
-  console.log(`🔗 Metadata URI: ${params.metadataURI}`);
-  console.log(`   ✅ Not empty: ${!!params.metadataURI}`);
   
   return {
     nameValid: nameLength >= 3 && nameLength <= 50,

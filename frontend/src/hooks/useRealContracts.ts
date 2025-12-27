@@ -42,19 +42,13 @@ export const useRealContracts = () => {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       
-      // Get user address
       const userAddress = await signer.getAddress();
-      console.log('User address:', userAddress);
-
-      // Create contract instance
       const tokenFactory = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenFactory,
         TOKEN_FACTORY_ABI,
         signer
       );
 
-      // Create and upload metadata to IPFS
-      console.log('📤 Creating metadata for IPFS upload...');
       const metadata = await createTokenMetadata(
         params.name,
         params.description,
@@ -62,16 +56,8 @@ export const useRealContracts = () => {
         params.logoFile
       );
 
-      console.log('📤 Uploading metadata to IPFS...');
       const metadataURI = await uploadMetadataToIPFS(metadata);
-      console.log('✅ Metadata uploaded to IPFS:', metadataURI);
-
-      // Get creation fee from contract
       const creationFee = await tokenFactory.creationFee();
-      console.log('Creation fee:', ethers.formatEther(creationFee), 'ETH');
-
-      // Prepare contract parameters as a struct (TokenParams)
-      // Note: totalSupply should be in wei (smallest unit)
       const totalSupplyWei = ethers.parseUnits(params.totalSupply, 18);
       
       const tokenParams = {
@@ -83,73 +69,35 @@ export const useRealContracts = () => {
         creator: userAddress
       };
 
-      // Debug parameters thoroughly
-      const validation = debugTokenParams(tokenParams);
-      const suggestion = suggestFix(validation);
-      console.log('💡 Suggestion:', suggestion);
+      debugTokenParams(tokenParams);
       
-      // Try to estimate gas first to catch revert reasons
       let gasEstimate: bigint;
       try {
-        console.log('🔍 Estimating gas...');
         gasEstimate = await tokenFactory.createToken.estimateGas(
           tokenParams,
           { value: creationFee }
         );
-        console.log('✅ Gas estimate successful:', gasEstimate.toString());
       } catch (gasError) {
-        console.error('❌ Gas estimation failed:', gasError);
         throw new Error(`Contract will revert: ${gasError instanceof Error ? gasError.message : 'Unknown error'}`);
       }
 
-      // Debug: Check if the function exists
-      console.log('🔍 Contract has createToken function:', tokenFactory.interface.hasFunction('createToken'));
-      
-      // Check marketplace configuration
-      try {
-        const marketplaceAddress = await tokenFactory.marketplace();
-        console.log('🏪 Marketplace address from factory:', marketplaceAddress);
-        console.log('🏪 Expected marketplace address:', CONTRACT_ADDRESSES.TokenMarketplace);
-        console.log('🔍 Marketplace addresses match:', marketplaceAddress.toLowerCase() === CONTRACT_ADDRESSES.TokenMarketplace.toLowerCase());
-      } catch (err) {
-        console.error('❌ Failed to get marketplace address:', err);
-      }
-
-      // Call the smart contract with the struct
       const tx = await tokenFactory.createToken(
-        tokenParams, // Pass the entire struct
+        tokenParams,
         {
-          value: creationFee, // Pay the creation fee
-          gasLimit: gasEstimate + BigInt(100000) // Use estimated gas + buffer
+          value: creationFee,
+          gasLimit: gasEstimate + BigInt(100000)
         }
       );
 
-      console.log('Transaction submitted:', tx.hash);
-      
-      // Wait for transaction confirmation
-      console.log('Waiting for confirmation...');
       const receipt = await tx.wait();
       
       if (receipt.status === 1) {
-        console.log('✅ Token created successfully!');
-        console.log('Transaction receipt:', receipt);
-        
-        // Extract token address from logs if needed
-        const tokenCreatedEvent = receipt.logs.find((log: ethers.Log) => 
-          log.topics && log.topics[0] === ethers.id('TokenCreated(address,address,string,string,uint256)')
-        );
-        
-        if (tokenCreatedEvent) {
-          console.log('New token address:', tokenCreatedEvent.address);
-        }
-        
         return tx.hash;
       } else {
         throw new Error('Transaction failed');
       }
 
     } catch (err) {
-      console.error('❌ Token creation failed:', err);
       
       let errorMessage = 'Token creation failed';
       
@@ -191,4 +139,3 @@ export const useRealContracts = () => {
   };
 };
 
-// Note: window.ethereum type is already declared in useWallet.ts
