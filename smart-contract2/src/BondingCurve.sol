@@ -9,18 +9,20 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IBondingCurve.sol";
 import "./interfaces/IToken.sol";
-import "./interfaces/IUniswapV2Factory.sol";
-import "./interfaces/IUniswapV2Pair.sol";
-import "./interfaces/IUniswapV2ERC20.sol";
+import "./interfaces/IUniswapV3Factory.sol";
+import "./interfaces/IUniswapV3Pool.sol";
+import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IBondingCurveFactory.sol";
 import "./interfaces/ICore.sol";
+import "./utils/TickMath.sol";
+import "./utils/LiquidityAmounts.sol";
 
 /**
  * @title BondingCurve
  * @notice Upgradeable bonding curve contract implementing constant product AMM
  * @dev One bonding curve per token, uses UUPS upgradeable pattern
  */
-contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable {
+contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, UUPSUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Role for core contract
@@ -38,8 +40,8 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     /// @notice Token address
     address public token;
     
-    /// @notice Uniswap pair address (set after listing)
-    address public pair;
+    /// @notice Uniswap V3 pool address (set after listing)
+    address public pool;
     
     /// @notice Virtual reserves for price calculation
     uint256 private virtualNative;
@@ -86,6 +88,7 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     error InsufficientNativeReserves();
     error InvalidAddress();
     error InvalidToken();
+    error InvalidFeeVault();
 
     /// @notice Disable initializers in implementation
     constructor(address _core, address _wNative) {
@@ -178,6 +181,7 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
      * @param to Recipient address
      * @param amountOut Amount of tokens to buy (before fee deduction)
      * @dev Follows CEI pattern: Checks → Effects → Interactions
+     * @dev Validates amountOut matches constant product formula to prevent manipulation
      */
     function buy(address to, uint256 amountOut) external override nonReentrant onlyRole(CORE_ROLE) {
         // Checks
@@ -187,28 +191,58 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         if (amountOut == 0) {
             revert InvalidAmountOut();
         }
-        if (to == wNative || to == token) {
+        if (to == address(0) || to == wNative || to == token) {
             revert InvalidTo();
         }
 
         address _wNative = wNative;
         address _token = token;
 
-        (uint256 _realNativeReserves, uint256 _realTokenReserves) = getReserves();
+        // Get fresh reserves
+        uint256 _virtualNative = virtualNative;
+        uint256 _virtualToken = virtualToken;
+        uint256 _k = k;
+
+        // Get balance of native tokens (should be increased by amount sent from Core)
+        uint256 balanceNative = IERC20(_wNative).balanceOf(address(this));
+        uint256 _realNativeReserves = realNativeReserves;
+        uint256 amountNativeIn = balanceNative - _realNativeReserves;
+        
+        if (amountNativeIn == 0) {
+            revert InvalidAmountIn();
+        }
+
+        // CRITICAL SECURITY FIX: Validate amountOut matches constant product formula
+        // Calculate expected output: newReserveOut = k / (virtualNative + amountNativeIn)
+        // amountOut = virtualToken - newReserveOut
+        uint256 newReserveIn = _virtualNative + amountNativeIn;
+        if (newReserveIn == 0) {
+            revert InvalidReserves();
+        }
+        uint256 newReserveOut = _k / newReserveIn;
+        if (newReserveOut >= _virtualToken) {
+            revert InsufficientVirtualTokenReserves();
+        }
+        uint256 expectedAmountOut = _virtualToken - newReserveOut;
+        
+        // CRITICAL SECURITY FIX: Validate provided amountOut matches expected output
+        // Both Core and BondingCurve use the same formula (BondingCurveLibrary.getAmountOut),
+        // so they should match exactly. Any mismatch indicates manipulation.
+        // Note: Integer division rounding is deterministic, so exact match is required
+        if (amountOut != expectedAmountOut) {
+            revert InvalidAmountOut();
+        }
 
         // Calculate fee: deduct fee from token output
         Fee memory fee = feeConfig;
         uint256 feeAmount = (amountOut * fee.numerator) / fee.denominator;
         uint256 tokensToUser = amountOut - feeAmount;
 
-        // Get balance of native tokens (should be increased by amount sent from Core)
-        uint256 balanceNative = IERC20(_wNative).balanceOf(address(this));
-        uint256 amountNativeIn = balanceNative - _realNativeReserves;
-        
         // Effects: Update state FIRST (CEI pattern)
         _update(amountNativeIn, amountOut, true);
         
-        if (virtualNative * virtualToken < k) {
+        // Validate k invariant maintained
+        if (virtualNative * virtualToken < _k) {
             revert InvalidK();
         }
         
@@ -228,6 +262,7 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
      * @param to Recipient address
      * @param amountOut Amount of native to receive (before fee deduction)
      * @dev Follows CEI pattern: Checks → Effects → Interactions
+     * @dev Validates amountOut matches constant product formula to prevent manipulation
      */
     function sell(address to, uint256 amountOut) external override nonReentrant onlyRole(CORE_ROLE) {
         // Checks
@@ -237,15 +272,49 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         if (amountOut == 0) {
             revert InvalidAmountOut();
         }
-        if (to == wNative || to == token) {
+        if (to == address(0) || to == wNative || to == token) {
             revert InvalidTo();
         }
 
         address _wNative = wNative;
         address _token = token;
         
-        (uint256 _realNativeReserves, uint256 _realTokenReserves) = getReserves();
+        // Get fresh reserves
+        uint256 _virtualNative = virtualNative;
+        uint256 _virtualToken = virtualToken;
+        uint256 _k = k;
+        uint256 _realNativeReserves = realNativeReserves;
+        
         if (amountOut > _realNativeReserves) {
+            revert InvalidAmountOut();
+        }
+
+        // Get balance of tokens (should be increased by amount sent from Core)
+        uint256 balanceToken = IERC20(_token).balanceOf(address(this));
+        uint256 _realTokenReserves = realTokenReserves;
+        uint256 amountTokenIn = balanceToken - _realTokenReserves;
+        if (amountTokenIn == 0) {
+            revert InvalidAmountIn();
+        }
+
+        // CRITICAL SECURITY FIX: Validate amountOut matches constant product formula
+        // Calculate expected output: newReserveIn = k / (virtualToken + amountTokenIn)
+        // amountOut = virtualNative - newReserveIn
+        uint256 newReserveOut = _virtualToken + amountTokenIn;
+        if (newReserveOut == 0) {
+            revert InvalidReserves();
+        }
+        uint256 newReserveIn = _k / newReserveOut;
+        if (newReserveIn >= _virtualNative) {
+            revert InsufficientVirtualNativeReserves();
+        }
+        uint256 expectedAmountOut = _virtualNative - newReserveIn;
+        
+        // CRITICAL SECURITY FIX: Validate provided amountOut matches expected output
+        // Both Core and BondingCurve use the same formula (BondingCurveLibrary.getAmountOut),
+        // so they should match exactly. Any mismatch indicates manipulation.
+        // Note: Integer division rounding is deterministic, so exact match is required
+        if (amountOut != expectedAmountOut) {
             revert InvalidAmountOut();
         }
 
@@ -254,19 +323,16 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         uint256 feeAmount = (amountOut * fee.numerator) / fee.denominator;
         uint256 nativeToUser = amountOut - feeAmount;
 
-        // Get balance of tokens (should be increased by amount sent from Core)
-        uint256 balanceToken = IERC20(_token).balanceOf(address(this));
-        uint256 amountTokenIn = balanceToken - _realTokenReserves;
-        if (amountTokenIn == 0) {
-            revert InvalidAmountIn();
-        }
-
         address feeVault = ICore(core).getFeeVault();
+        if (feeVault == address(0)) {
+            revert InvalidAddress();
+        }
 
         // Effects: Update state FIRST (CEI pattern)
         _update(amountTokenIn, amountOut, false);
         
-        if (virtualNative * virtualToken < k) {
+        // Validate k invariant maintained
+        if (virtualNative * virtualToken < _k) {
             revert InvalidK();
         }
         
@@ -286,11 +352,12 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     }
 
     /**
-     * @notice List token on Uniswap after reaching target
-     * @return pair_ Address of the created pair
+     * @notice List token on Uniswap V3 after reaching target
+     * @return pool_ Address of the created pool
      * @dev Protected by nonReentrant and checks listingFee <= realNativeReserves
+     * @dev Uses concentrated liquidity with price range around graduation price
      */
-    function listing() external override nonReentrant returns (address pair_) {
+    function listing() external override nonReentrant returns (address pool_) {
         if (!lock) {
             revert OnlyLock();
         }
@@ -300,8 +367,7 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
 
         IBondingCurveFactory _factory = IBondingCurveFactory(factory);
         address dexFactory = _factory.getDexFactory();
-        pair_ = IUniswapV2Factory(dexFactory).createPair(wNative, token);
-        pair = pair_;
+        uint24 fee = _factory.getDexFee(); // Get V3 fee tier (500, 3000, or 10000)
 
         uint256 listingFee = _factory.getListingFee();
 
@@ -313,6 +379,11 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
         // Calculate and burn excess tokens (with underflow protection)
         uint256 burnTokenAmount;
         {
+            // SECURITY FIX: Prevent division by zero
+            if (virtualNative == 0) {
+                revert InvalidReserves();
+            }
+            
             // Calculate expected token amount based on native reserves after listing fee
             // Safe to subtract now since we've checked listingFee <= realNativeReserves
             uint256 expectedTokenAmount = ((realNativeReserves - listingFee) * virtualToken) / virtualNative;
@@ -326,29 +397,167 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
             }
             // Transfer listing fee to vault
             if (listingFee > 0) {
-                IERC20(wNative).safeTransfer(ICore(_factory.getCore()).getFeeVault(), listingFee);
+                address feeVault = ICore(_factory.getCore()).getFeeVault();
+                if (feeVault == address(0)) {
+                    revert InvalidAddress();
+                }
+                IERC20(wNative).safeTransfer(feeVault, listingFee);
             }
         }
 
         uint256 listingNativeAmount = IERC20(wNative).balanceOf(address(this));
         uint256 listingTokenAmount = IERC20(token).balanceOf(address(this));
-        
-        // Use safeTransfer instead of transfer for safety
-        IERC20(wNative).safeTransfer(pair_, listingNativeAmount);
-        IERC20(token).safeTransfer(pair_, listingTokenAmount);
 
-        // Reset reserves and provide liquidity
+        // Determine token order (V3 requires sorted order)
+        (address token0, address token1) = wNative < token ? (wNative, token) : (token, wNative);
+        bool token0IsNative = (token0 == wNative);
+
+        // Get or create pool
+        IUniswapV3Factory v3Factory = IUniswapV3Factory(dexFactory);
+        pool_ = v3Factory.getPool(token0, token1, fee);
+        
+        if (pool_ == address(0)) {
+            pool_ = v3Factory.createPool(token0, token1, fee);
+        }
+
+        IUniswapV3Pool poolContract = IUniswapV3Pool(pool_);
+        pool = pool_;
+
+        // Calculate sqrtPriceX96 from current reserves
+        // V3 uses Q64.96 format: sqrtPriceX96 = sqrt(amount1/amount0) * 2^96
+        // Both tokens have 18 decimals, so we can use amounts directly
+        
+        // SECURITY FIX: Validate reserves before division
+        if (listingNativeAmount == 0 || listingTokenAmount == 0) {
+            revert InvalidReserves();
+        }
+        
+        uint160 sqrtPriceX96;
+        if (token0IsNative) {
+            // token0 = native, token1 = token
+            // priceRatio = token1/token0 = listingTokenAmount / listingNativeAmount
+            // sqrtPriceX96 = sqrt(listingTokenAmount / listingNativeAmount) * 2^96
+            // Multiply by 2^192 to maintain precision, then divide by 1e9 after sqrt
+            uint256 priceRatioX192 = (listingTokenAmount << 192) / listingNativeAmount;
+            uint256 sqrtPriceRatio = _sqrt(priceRatioX192);
+            sqrtPriceX96 = uint160(sqrtPriceRatio / 1e9);
+        } else {
+            // token0 = token, token1 = native
+            // priceRatio = token1/token0 = listingNativeAmount / listingTokenAmount
+            // sqrtPriceX96 = sqrt(listingNativeAmount / listingTokenAmount) * 2^96
+            uint256 priceRatioX192 = (listingNativeAmount << 192) / listingTokenAmount;
+            uint256 sqrtPriceRatio = _sqrt(priceRatioX192);
+            sqrtPriceX96 = uint160(sqrtPriceRatio / 1e9);
+        }
+        
+        // Ensure sqrtPriceX96 is within valid range
+        if (sqrtPriceX96 < TickMath.MIN_SQRT_RATIO) {
+            sqrtPriceX96 = TickMath.MIN_SQRT_RATIO;
+        }
+        if (sqrtPriceX96 >= TickMath.MAX_SQRT_RATIO) {
+            sqrtPriceX96 = TickMath.MAX_SQRT_RATIO - 1;
+        }
+
+        // Initialize pool if needed
+        if (poolContract.liquidity() == 0) {
+            poolContract.initialize(sqrtPriceX96);
+        }
+
+        // Calculate price range (ticks)
+        // Default: ±100% from current price (±10 ticks for 0.30% fee tier)
+        int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+        int24 tickSpacing = _getTickSpacing(fee);
+        
+        // Calculate tick range (±100% = ±10 ticks for 0.30% tier)
+        // For wider range, use more ticks
+        int24 tickRange = tickSpacing * 10; // ±100% range
+        int24 tickLower = ((tick / tickSpacing) * tickSpacing) - tickRange;
+        int24 tickUpper = ((tick / tickSpacing) * tickSpacing) + tickRange;
+        
+        // Ensure ticks are within valid range
+        if (tickLower < TickMath.MIN_TICK) tickLower = TickMath.MIN_TICK;
+        if (tickUpper > TickMath.MAX_TICK) tickUpper = TickMath.MAX_TICK;
+
+        // Get sqrt prices for range
+        uint160 sqrtPriceAX96 = TickMath.getSqrtRatioAtTick(tickLower);
+        uint160 sqrtPriceBX96 = TickMath.getSqrtRatioAtTick(tickUpper);
+
+        // Calculate liquidity amount
+        uint128 liquidity;
+        if (token0IsNative) {
+            liquidity = LiquidityAmounts.getLiquidityForAmounts(
+                sqrtPriceX96,
+                sqrtPriceAX96,
+                sqrtPriceBX96,
+                listingNativeAmount,
+                listingTokenAmount
+            );
+        } else {
+            liquidity = LiquidityAmounts.getLiquidityForAmounts(
+                sqrtPriceX96,
+                sqrtPriceAX96,
+                sqrtPriceBX96,
+                listingTokenAmount,
+                listingNativeAmount
+            );
+        }
+
+        // Mint liquidity position
+        // V3 will call back to uniswapV3MintCallback to get the tokens
+        (uint256 amount0, uint256 amount1) = poolContract.mint(
+            address(this),
+            tickLower,
+            tickUpper,
+            liquidity,
+            abi.encode(token0, token1)
+        );
+
+        // Reset reserves
         realNativeReserves = 0;
         realTokenReserves = 0;
-        uint256 liquidity = IUniswapV2Pair(pair_).mint(address(this));
-
-        // Burn LP tokens using safeTransfer for consistency
-        IERC20(pair_).safeTransfer(address(0), liquidity);
         
         isListing = true;
-        emit Listing(address(this), token, pair_, listingNativeAmount, listingTokenAmount, liquidity);
+        emit Listing(address(this), token, pool_, amount0, amount1, uint256(uint128(liquidity)));
         
-        return pair_;
+        return pool_;
+    }
+
+    /**
+     * @notice Get tick spacing for a given fee tier
+     * @param fee Fee tier (500, 3000, or 10000)
+     * @return tickSpacing Tick spacing for the fee tier
+     */
+    function _getTickSpacing(uint24 fee) private pure returns (int24 tickSpacing) {
+        if (fee == 500) {
+            tickSpacing = 10; // 0.05% fee tier
+        } else if (fee == 3000) {
+            tickSpacing = 60; // 0.30% fee tier
+        } else if (fee == 10000) {
+            tickSpacing = 200; // 1.00% fee tier
+        } else {
+            revert("Invalid fee tier");
+        }
+    }
+
+    /**
+     * @notice Calculate square root using Babylonian method
+     * @param x Input value (Q192.64 format)
+     * @return y Square root of x
+     */
+    function _sqrt(uint256 x) private pure returns (uint256 y) {
+        if (x == 0) return 0;
+        
+        // Use a more precise method for large numbers
+        uint256 z = (x + 1) / 2;
+        y = x;
+        
+        // Iterate until convergence (max 256 iterations for safety)
+        for (uint256 i = 0; i < 256 && z < y; i++) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
+        
+        return y;
     }
 
     /**
@@ -358,6 +567,7 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
      * @param isBuy Whether this is a buy order
      */
     function _update(uint256 amountIn, uint256 amountOut, bool isBuy) private {
+        // Update real reserves from actual balances
         realNativeReserves = IERC20(wNative).balanceOf(address(this));
         realTokenReserves = IERC20(token).balanceOf(address(this));
 
@@ -377,8 +587,12 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
             virtualToken += amountIn;
         }
 
+        // SECURITY FIX: Prevent division by zero
+        if (virtualToken == 0) {
+            revert InvalidReserves();
+        }
+
         // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
-        // virtualToken is guaranteed to be > 0 at this point (checked in initialize and maintained by logic)
         uint256 price = (virtualNative * 1e18) / virtualToken;
 
         emit Sync(token, realNativeReserves, realTokenReserves, virtualNative, virtualToken, price, block.timestamp);
@@ -482,12 +696,15 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
      * @notice Get current token price
      * @return price Current price per token in native currency (scaled by 1e18)
      * @dev Price is calculated from virtual reserves: price = virtualNative / virtualToken
+     * @dev SECURITY: Returns 0 if virtualToken is 0 to prevent division by zero
      */
     function getCurrentPrice() public view override returns (uint256 price) {
-        if (virtualToken == 0) {
+        uint256 _virtualToken = virtualToken;
+        if (_virtualToken == 0) {
             return 0;
         }
-        price = (virtualNative * 1e18) / virtualToken;
+        uint256 _virtualNative = virtualNative;
+        price = (_virtualNative * 1e18) / _virtualToken;
     }
 
     /**
@@ -519,6 +736,58 @@ contract BondingCurve is IBondingCurve, Initializable, UUPSUpgradeable, AccessCo
     function getATHMarketCap() public view override returns (uint256 marketCap_, uint256 timestamp_) {
         marketCap_ = athMarketCap;
         timestamp_ = athMarketCapTimestamp;
+    }
+
+    /**
+     * @notice Callback for Uniswap V3 Pool#mint
+     * @param amount0Owed The amount of token0 due to the pool
+     * @param amount1Owed The amount of token1 due to the pool
+     * @param data Encoded token addresses
+     * @dev SECURITY: Only callable during listing transaction (isListing set or lock set)
+     */
+    function uniswapV3MintCallback(
+        uint256 amount0Owed,
+        uint256 amount1Owed,
+        bytes calldata data
+    ) external override {
+        // SECURITY FIX: Verify we're in a listing state
+        // This callback should only be called during listing() execution
+        if (!lock) {
+            revert OnlyLock();
+        }
+        
+        // Verify caller is a valid pool
+        address token0;
+        address token1;
+        (token0, token1) = abi.decode(data, (address, address));
+        
+        if (token0 == address(0) || token1 == address(0)) {
+            revert InvalidAddress();
+        }
+        
+        address dexFactory = IBondingCurveFactory(factory).getDexFactory();
+        if (dexFactory == address(0)) {
+            revert InvalidAddress();
+        }
+        
+        address expectedPool = IUniswapV3Factory(dexFactory)
+            .getPool(token0, token1, IBondingCurveFactory(factory).getDexFee());
+        
+        require(msg.sender == expectedPool, "Invalid caller");
+        
+        // Verify pool address matches our stored pool (if listing completed)
+        // During listing, pool may not be set yet, so we check expectedPool
+        if (pool != address(0) && msg.sender != pool) {
+            revert InvalidAddress();
+        }
+        
+        // Transfer tokens to pool
+        if (amount0Owed > 0) {
+            IERC20(token0).safeTransfer(msg.sender, amount0Owed);
+        }
+        if (amount1Owed > 0) {
+            IERC20(token1).safeTransfer(msg.sender, amount1Owed);
+        }
     }
 
     /**

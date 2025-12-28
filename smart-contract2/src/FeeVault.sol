@@ -5,8 +5,8 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgrad
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "./interfaces/IFeeVault.sol";
 
 /**
@@ -15,8 +15,6 @@ import "./interfaces/IFeeVault.sol";
  * @dev Uses UUPS upgradeable pattern
  */
 contract FeeVault is IFeeVault, Initializable, ERC4626Upgradeable, UUPSUpgradeable, AccessControlUpgradeable {
-    using SafeERC20 for IERC20;
-
     /// @notice Role for core contract
     bytes32 public constant CORE_ROLE = keccak256("CORE_ROLE");
 
@@ -51,7 +49,7 @@ contract FeeVault is IFeeVault, Initializable, ERC4626Upgradeable, UUPSUpgradeab
             revert InvalidAddress();
         }
 
-        __ERC4626_init(IERC20Metadata(asset_));
+        __ERC4626_init(IERC20Upgradeable(asset_));
         __ERC20_init(name_, symbol_);
         __UUPSUpgradeable_init();
         __AccessControl_init();
@@ -66,8 +64,8 @@ contract FeeVault is IFeeVault, Initializable, ERC4626Upgradeable, UUPSUpgradeab
      * @param amount Amount to deposit
      */
     function depositFees(uint256 amount) external override onlyRole(CORE_ROLE) {
-        IERC20 asset = IERC20(asset());
-        asset.safeTransferFrom(msg.sender, address(this), amount);
+        IERC20Upgradeable assetToken = IERC20Upgradeable(asset());
+        SafeERC20Upgradeable.safeTransferFrom(assetToken, msg.sender, address(this), amount);
         // Fees are now in vault and can generate yield via ERC4626
     }
 

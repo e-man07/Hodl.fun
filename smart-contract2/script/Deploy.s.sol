@@ -82,6 +82,8 @@ contract DeployScript is Script {
         // 6. Deploy BondingCurveFactory proxy
         console.log("\n6. Deploying BondingCurveFactory proxy...");
         IBondingCurveFactory.InitializeParams memory initParams = IBondingCurveFactory.InitializeParams({
+            owner: deployer,
+            core: address(core),
             deployFee: DEPLOY_FEE,
             listingFee: LISTING_FEE,
             virtualNative: VIRTUAL_NATIVE,
@@ -89,12 +91,11 @@ contract DeployScript is Script {
             graduationMarketCap: GRADUATION_MARKET_CAP,
             feeDenominator: FEE_DENOMINATOR,
             feeNumerator: FEE_NUMERATOR,
-            dexFactory: DEX_FACTORY
+            dexFactory: DEX_FACTORY, // Uniswap V3 Factory address
+            dexFee: 3000 // 0.30% fee tier (500 = 0.05%, 3000 = 0.30%, 10000 = 1.00%)
         });
         bytes memory factoryInitData = abi.encodeWithSelector(
             BondingCurveFactory.initialize.selector,
-            deployer,
-            address(core),
             initParams
         );
         ERC1967Proxy factoryProxy = new ERC1967Proxy(address(factoryImpl), factoryInitData);

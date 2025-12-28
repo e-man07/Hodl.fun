@@ -125,6 +125,11 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             revert NotInitialized();
         }
 
+        // SECURITY FIX: Validate creator address
+        if (creator == address(0)) {
+            revert InvalidAddress();
+        }
+
         IBondingCurveFactory factoryContract = IBondingCurveFactory(factory);
         
         // Validate fee
@@ -200,6 +205,11 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             revert NotInitialized();
         }
 
+        // SECURITY FIX: Validate addresses
+        if (token == address(0) || to == address(0)) {
+            revert InvalidAddress();
+        }
+
         // Wrap native token if sent
         if (msg.value > 0) {
             IWNative(wNative).deposit{value: msg.value}();
@@ -261,6 +271,11 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
     ) external payable override ensure(deadline) {
         if (!isInitialized) {
             revert NotInitialized();
+        }
+
+        // SECURITY FIX: Validate addresses
+        if (token == address(0) || to == address(0)) {
+            revert InvalidAddress();
         }
 
         // Wrap native token if sent
@@ -328,6 +343,11 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             revert NotInitialized();
         }
 
+        // SECURITY FIX: Validate addresses
+        if (token == address(0) || from == address(0) || to == address(0)) {
+            revert InvalidAddress();
+        }
+
         // Get curve
         address curve = IBondingCurveFactory(factory).getCurve(token);
         if (curve == address(0)) {
@@ -386,6 +406,11 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
     ) external override ensure(deadline) {
         if (!isInitialized) {
             revert NotInitialized();
+        }
+
+        // SECURITY FIX: Validate addresses
+        if (token == address(0) || from == address(0) || to == address(0)) {
+            revert InvalidAddress();
         }
 
         // Get curve

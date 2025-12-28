@@ -49,7 +49,7 @@ contract DeployPushChainScript is Script {
         // 1. Deploy FeeVault implementation
         console.log("\n[1/8] Deploying FeeVault implementation...");
         FeeVault feeVaultImpl = new FeeVault();
-        console.log("✅ FeeVault implementation:", address(feeVaultImpl));
+        console.log("[OK] FeeVault implementation:", address(feeVaultImpl));
 
         // 2. Deploy FeeVault proxy (core will be set later)
         console.log("\n[2/8] Deploying FeeVault proxy...");
@@ -63,12 +63,12 @@ contract DeployPushChainScript is Script {
         );
         ERC1967Proxy feeVaultProxy = new ERC1967Proxy(address(feeVaultImpl), feeVaultInitData);
         FeeVault feeVault = FeeVault(payable(address(feeVaultProxy)));
-        console.log("✅ FeeVault proxy:", address(feeVault));
+        console.log("[OK] FeeVault proxy:", address(feeVault));
 
         // 3. Deploy Core implementation
         console.log("\n[3/8] Deploying Core implementation...");
         Core coreImpl = new Core(WPUSH, address(feeVault));
-        console.log("✅ Core implementation:", address(coreImpl));
+        console.log("[OK] Core implementation:", address(coreImpl));
 
         // 4. Deploy Core proxy (factory will be set later)
         console.log("\n[4/8] Deploying Core proxy...");
@@ -79,16 +79,18 @@ contract DeployPushChainScript is Script {
         );
         ERC1967Proxy coreProxy = new ERC1967Proxy(address(coreImpl), coreInitData);
         Core core = Core(payable(address(coreProxy)));
-        console.log("✅ Core proxy:", address(core));
+        console.log("[OK] Core proxy:", address(core));
 
         // 5. Deploy BondingCurveFactory implementation
         console.log("\n[5/8] Deploying BondingCurveFactory implementation...");
         BondingCurveFactory factoryImpl = new BondingCurveFactory(WPUSH);
-        console.log("✅ Factory implementation:", address(factoryImpl));
+        console.log("[OK] Factory implementation:", address(factoryImpl));
 
         // 6. Deploy BondingCurveFactory proxy
         console.log("\n[6/8] Deploying BondingCurveFactory proxy...");
         IBondingCurveFactory.InitializeParams memory initParams = IBondingCurveFactory.InitializeParams({
+            owner: deployer,
+            core: address(core),
             deployFee: DEPLOY_FEE,
             listingFee: LISTING_FEE,
             virtualNative: VIRTUAL_NATIVE,
@@ -96,34 +98,33 @@ contract DeployPushChainScript is Script {
             graduationMarketCap: GRADUATION_MARKET_CAP,
             feeDenominator: FEE_DENOMINATOR,
             feeNumerator: FEE_NUMERATOR,
-            dexFactory: DEX_FACTORY // May be zero if DEX not deployed yet
+            dexFactory: DEX_FACTORY, // Uniswap V3 Factory address
+            dexFee: 3000 // 0.30% fee tier (500 = 0.05%, 3000 = 0.30%, 10000 = 1.00%)
         });
         bytes memory factoryInitData = abi.encodeWithSelector(
             BondingCurveFactory.initialize.selector,
-            deployer,
-            address(core),
             initParams
         );
         ERC1967Proxy factoryProxy = new ERC1967Proxy(address(factoryImpl), factoryInitData);
         BondingCurveFactory factory = BondingCurveFactory(payable(address(factoryProxy)));
-        console.log("✅ Factory proxy:", address(factory));
+        console.log("[OK] Factory proxy:", address(factory));
 
         // 7. Update Core with factory address
         console.log("\n[7/8] Linking Core to Factory...");
         core.setFactory(address(factory));
-        console.log("✅ Factory set in Core");
+        console.log("[OK] Factory set in Core");
 
         // 8. Update FeeVault with Core address
         console.log("\n[8/8] Linking FeeVault to Core...");
         feeVault.setCore(address(core));
-        console.log("✅ Core set in FeeVault");
+        console.log("[OK] Core set in FeeVault");
 
         vm.stopBroadcast();
 
         console.log("\n========================================");
         console.log("Deployment Complete!");
         console.log("========================================");
-        console.log("\n📋 Contract Addresses:");
+        console.log("\n[Contract Addresses]:");
         console.log("FeeVault Implementation:", address(feeVaultImpl));
         console.log("FeeVault Proxy:        ", address(feeVault));
         console.log("Core Implementation:    ", address(coreImpl));
@@ -131,7 +132,7 @@ contract DeployPushChainScript is Script {
         console.log("Factory Implementation: ", address(factoryImpl));
         console.log("Factory Proxy:         ", address(factory));
         
-        console.log("\n📝 Next Steps:");
+        console.log("\n[Next Steps]:");
         console.log("1. Verify contracts on BlockScout:");
         console.log("   https://donut.push.network");
         console.log("\n2. Update WPUSH address if different:");
@@ -146,7 +147,7 @@ contract DeployPushChainScript is Script {
         console.log("   - Test fee collection");
         console.log("\n5. Monitor gas usage and optimize if needed");
         
-        console.log("\n🔗 BlockScout Links:");
+        console.log("\n[BlockScout Links]:");
         console.log("FeeVault: https://donut.push.network/address/", address(feeVault));
         console.log("Core:     https://donut.push.network/address/", address(core));
         console.log("Factory:  https://donut.push.network/address/", address(factory));

@@ -53,16 +53,10 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
 
     /**
      * @notice Initialize the factory
-     * @param _owner Owner address
-     * @param _core Core contract address
      * @param params Initialization parameters
      */
-    function initialize(
-        address _owner,
-        address _core,
-        InitializeParams memory params
-    ) external initializer {
-        if (_owner == address(0) || _core == address(0)) {
+    function initialize(InitializeParams memory params) external initializer {
+        if (params.owner == address(0) || params.core == address(0)) {
             revert InvalidAddress();
         }
 
@@ -82,9 +76,14 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             revert InvalidFeeConfig(); // Fee must be < 100%
         }
 
-        owner = _owner;
-        core = _core;
+        owner = params.owner;
+        core = params.core;
         dexFactory = params.dexFactory;
+
+        // Validate DEX fee tier
+        if (params.dexFee != 500 && params.dexFee != 3000 && params.dexFee != 10000) {
+            revert InvalidFeeConfig(); // Must be valid V3 fee tier
+        }
 
         uint256 k = params.virtualNative * params.virtualToken;
         config = Config(
@@ -95,11 +94,12 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             k,
             params.graduationMarketCap,
             params.feeDenominator,
-            params.feeNumerator
+            params.feeNumerator,
+            params.dexFee
         );
 
-        _grantRole(DEFAULT_ADMIN_ROLE, _owner);
-        _grantRole(CORE_ROLE, _core);
+        _grantRole(DEFAULT_ADMIN_ROLE, params.owner);
+        _grantRole(CORE_ROLE, params.core);
 
         emit SetInitialize(
             params.deployFee,
@@ -136,6 +136,11 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
         uint256 virtualNative,
         uint256 virtualToken
     ) {
+        // SECURITY FIX: Validate creator address
+        if (creator == address(0)) {
+            revert InvalidAddress();
+        }
+        
         Config memory _config = getConfig();
         if (_config.virtualNative == 0) {
             revert NotInitialized();
@@ -269,6 +274,14 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
      */
     function getListingFee() external view override returns (uint256 listingFee) {
         listingFee = config.listingFee;
+    }
+
+    /**
+     * @notice Get DEX fee tier (Uniswap V3)
+     * @return dexFee_ Fee tier (500 = 0.05%, 3000 = 0.30%, 10000 = 1.00%)
+     */
+    function getDexFee() external view override returns (uint24 dexFee_) {
+        dexFee_ = config.dexFee;
     }
 
     /**

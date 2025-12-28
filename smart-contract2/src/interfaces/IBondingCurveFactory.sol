@@ -16,10 +16,13 @@ interface IBondingCurveFactory {
         uint256 graduationMarketCap;
         uint8 feeDenominator;
         uint16 feeNumerator;
+        uint24 dexFee; // Uniswap V3 fee tier (500, 3000, or 10000)
     }
 
     /// @notice Initialization parameters
     struct InitializeParams {
+        address owner;
+        address core;
         uint256 deployFee;
         uint256 listingFee;
         uint256 virtualNative;
@@ -28,6 +31,7 @@ interface IBondingCurveFactory {
         uint8 feeDenominator;
         uint16 feeNumerator;
         address dexFactory;
+        uint24 dexFee; // Uniswap V3 fee tier (500 = 0.05%, 3000 = 0.30%, 10000 = 1.00%)
     }
 
     /// @notice Emitted when factory is initialized
@@ -38,7 +42,7 @@ interface IBondingCurveFactory {
         uint256 virtualToken,
         uint256 k,
         uint256 graduationMarketCap,
-        uint8 feeNumerator,
+        uint16 feeNumerator,
         uint8 feeDenominator,
         address dexFactory
     );
@@ -124,6 +128,12 @@ interface IBondingCurveFactory {
      * @return listingFee Listing fee amount
      */
     function getListingFee() external view returns (uint256 listingFee);
+
+    /**
+     * @notice Get DEX fee tier (Uniswap V3)
+     * @return dexFee Fee tier (500 = 0.05%, 3000 = 0.30%, 10000 = 1.00%)
+     */
+    function getDexFee() external view returns (uint24 dexFee);
 
     /**
      * @notice Update graduation market cap threshold

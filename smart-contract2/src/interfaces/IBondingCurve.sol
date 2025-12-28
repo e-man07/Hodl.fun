@@ -30,7 +30,7 @@ interface IBondingCurve {
     event Lock(address indexed token);
     
     /// @notice Emitted when token is listed on DEX
-    event Listing(address indexed curve, address indexed token, address indexed pair, uint256 nativeAmount, uint256 tokenAmount, uint256 liquidity);
+    event Listing(address indexed curve, address indexed token, address indexed pool, uint256 amount0, uint256 amount1, uint256 liquidity);
     
     /// @notice Emitted when new ATH price is reached
     event NewATHPrice(address indexed token, uint256 newPrice, uint256 timestamp);
@@ -85,9 +85,9 @@ interface IBondingCurve {
 
     /**
      * @notice List token on DEX
-     * @return pair Address of the created pair
+     * @return pool Address of the created pool
      */
-    function listing() external returns (address pair);
+    function listing() external returns (address pool);
 
     /**
      * @notice Get real reserves
