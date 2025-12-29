@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../dist/apps/api",
+    "baseUrl": "../../",
+    "paths": {
+      "@core/*": ["libs/core/src/*"],
+      "@core": ["libs/core/src/index"],
+      "@domain/*": ["libs/domain/src/*"],
+      "@domain": ["libs/domain/src/index"],
+      "@application/*": ["libs/application/src/*"],
+      "@application": ["libs/application/src/index"],
+      "@infrastructure/*": ["libs/infrastructure/src/*"],
+      "@infrastructure": ["libs/infrastructure/src/index"],
+      "@presentation/*": ["libs/presentation/src/*"],
+      "@presentation": ["libs/presentation/src/index"],
+      "@shared/*": ["libs/shared/src/*"],
+      "@shared": ["libs/shared/src/index"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/**/*.spec.ts", "src/**/__tests__/**"]
+}

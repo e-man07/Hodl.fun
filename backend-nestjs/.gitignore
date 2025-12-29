@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.iml
+.sublime-workspace
+
+# Testing
+coverage/
+.nyc_output/
+.jest-results.json
+
+# Misc
+.turbo/
+.cache/
