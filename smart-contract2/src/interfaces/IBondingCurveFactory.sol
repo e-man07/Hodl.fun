@@ -17,6 +17,7 @@ interface IBondingCurveFactory {
         uint8 feeDenominator;
         uint16 feeNumerator;
         uint24 dexFee; // Uniswap V3 fee tier (500, 3000, or 10000)
+        uint16 creatorFeeShare; // Creator fee share in basis points (e.g., 1000 = 10%)
     }
 
     /// @notice Initialization parameters
@@ -67,6 +68,15 @@ interface IBondingCurveFactory {
 
     /// @notice Emitted when graduation market cap is updated
     event SetGraduationMarketCap(uint256 oldMarketCap, uint256 newMarketCap);
+
+    /// @notice Emitted when creator fee share is updated
+    event SetCreatorFeeShare(uint16 oldShare, uint16 newShare);
+
+    /// @notice Emitted when creator fees are accumulated
+    event CreatorFeesAccumulated(address indexed creator, uint256 amount, uint256 totalAccumulated);
+
+    /// @notice Emitted when creator fees are claimed
+    event CreatorFeesClaimed(address indexed creator, uint256 amount);
 
     /**
      * @notice Initialize factory with configuration
@@ -134,6 +144,27 @@ interface IBondingCurveFactory {
      * @return dexFee Fee tier (500 = 0.05%, 3000 = 0.30%, 10000 = 1.00%)
      */
     function getDexFee() external view returns (uint24 dexFee);
+
+    /**
+     * @notice Get creator address for a token
+     * @param token Token address
+     * @return creator Creator address
+     */
+    function getCreator(address token) external view returns (address creator);
+    
+    /**
+     * @notice Get creator fee share (percentage of trading fees that go to creator)
+     * @return creatorFeeShare Creator fee share in basis points (e.g., 1000 = 10%)
+     */
+    function getCreatorFeeShare() external view returns (uint16 creatorFeeShare);
+
+    /**
+     * @notice Accumulate fees for a creator
+     * @param creator Creator address
+     * @param amount Fee amount to accumulate (must be approved by caller)
+     * @dev Transfers tokens from caller and accumulates them for the creator
+     */
+    function accumulateCreatorFees(address creator, uint256 amount) external;
 
     /**
      * @notice Update graduation market cap threshold

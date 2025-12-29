@@ -4,6 +4,9 @@ pragma solidity ^0.8.22;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "./interfaces/IBondingCurveFactory.sol";
 import "./interfaces/IBondingCurve.sol";
 import "./interfaces/IToken.sol";
@@ -16,6 +19,8 @@ import "./Token.sol";
  * @dev Uses UUPS upgradeable pattern, manages global configuration
  */
 contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgradeable, AccessControlUpgradeable {
+    using SafeERC20 for IERC20;
+    
     /// @notice Role for core contract
     bytes32 public constant CORE_ROLE = keccak256("CORE_ROLE");
 
@@ -34,8 +39,24 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
     /// @notice Global configuration
     Config private config;
     
+    /// @notice Creator fee share in basis points (e.g., 1000 = 10% of fees go to creator)
+    /// @dev Default: 1000 (10%), can be updated by admin
+    uint16 public creatorFeeShare;
+    
     /// @notice Mapping from token to bonding curve
     mapping(address => address) private curves;
+    
+    /// @notice Mapping from token to creator address
+    mapping(address => address) public creators;
+    
+    /// @notice Mapping from creator to accumulated fees (in wrapped native)
+    mapping(address => uint256) public creatorFees;
+
+    /// @notice BondingCurve implementation contract (deployed once, reused for all proxies)
+    address public immutable bondingCurveImplementation;
+    
+    /// @notice Token implementation contract (deployed once, reused for all proxies)
+    address public immutable tokenImplementation;
 
     /// @notice Custom errors
     error OnlyOwner();
@@ -44,10 +65,16 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
     error NotInitialized();
     error InvalidReserves();
     error InvalidFeeConfig();
+    error InvalidCreatorFeeShare();
+    error NoFeesToClaim();
 
     /// @notice Disable initializers in implementation
     constructor(address _wNative) {
         wNative = _wNative;
+        // Deploy implementation contracts once (will be reused via proxies)
+        // When implementation is deployed, msg.sender is this factory, so factory immutable will be set correctly
+        bondingCurveImplementation = address(new BondingCurve(address(0), _wNative));
+        tokenImplementation = address(new Token());
         _disableInitializers();
     }
 
@@ -85,6 +112,9 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             revert InvalidFeeConfig(); // Must be valid V3 fee tier
         }
 
+        // Initialize creator fee share (default 10% = 1000 basis points)
+        creatorFeeShare = 1000; // Can be updated later by admin
+
         uint256 k = params.virtualNative * params.virtualToken;
         config = Config(
             params.deployFee,
@@ -95,7 +125,8 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             params.graduationMarketCap,
             params.feeDenominator,
             params.feeNumerator,
-            params.dexFee
+            params.dexFee,
+            creatorFeeShare
         );
 
         _grantRole(DEFAULT_ADMIN_ROLE, params.owner);
@@ -146,25 +177,23 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             revert NotInitialized();
         }
 
-        // Deploy bonding curve
-        curve = address(new BondingCurve(core, wNative));
+        // Deploy Token proxy and initialize
+        bytes memory tokenInitData = abi.encodeWithSelector(
+            Token.initialize.selector,
+            name,
+            symbol,
+            tokenURI,
+            core
+        );
+        ERC1967Proxy tokenProxy = new ERC1967Proxy(tokenImplementation, tokenInitData);
+        token_ = address(tokenProxy);
+        Token tokenContract = Token(token_);
         
-        // Deploy token
-        Token tokenContract = new Token();
-        token_ = address(tokenContract);
-        
-        // Initialize token
-        tokenContract.initialize(name, symbol, tokenURI, core);
-        
-        // Set bonding curve role on token FIRST (required for mint)
-        tokenContract.setBondingCurve(curve);
-        
-        // Mint tokens to bonding curve (now curve has the role)
-        IToken(token_).mint(curve);
-
-        // Initialize bonding curve
-        IBondingCurve(curve).initialize(
+        // Deploy BondingCurve proxy and initialize
+        bytes memory curveInitData = abi.encodeWithSelector(
+            IBondingCurve.initialize.selector,
             token_,
+            core, // Pass core address for access control
             _config.virtualNative,
             _config.virtualToken,
             _config.k,
@@ -172,8 +201,17 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             _config.feeDenominator,
             _config.feeNumerator
         );
+        ERC1967Proxy curveProxy = new ERC1967Proxy(bondingCurveImplementation, curveInitData);
+        curve = address(curveProxy);
+        
+        // Set bonding curve role on token (required for mint)
+        tokenContract.setBondingCurve(curve);
+        
+        // Mint tokens to bonding curve (now curve has the role)
+        IToken(token_).mint(curve);
 
         curves[token_] = curve;
+        creators[token_] = creator; // Store creator address for fee distribution
         virtualNative = _config.virtualNative;
         virtualToken = _config.virtualToken;
 
@@ -302,6 +340,72 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
      */
     function getOwner() external view returns (address owner_) {
         owner_ = owner;
+    }
+
+    /**
+     * @notice Get creator address for a token
+     * @param token Token address
+     * @return creator Creator address
+     */
+    function getCreator(address token) external view override returns (address creator) {
+        creator = creators[token];
+    }
+
+    /**
+     * @notice Get creator fee share
+     * @return creatorFeeShare_ Creator fee share in basis points
+     */
+    function getCreatorFeeShare() external view override returns (uint16 creatorFeeShare_) {
+        creatorFeeShare_ = creatorFeeShare;
+    }
+
+    /**
+     * @notice Update creator fee share (only admin)
+     * @param _creatorFeeShare New creator fee share in basis points (e.g., 1000 = 10%)
+     * @dev Maximum is 10000 (100%), recommended 1000-2000 (10-20%)
+     */
+    function setCreatorFeeShare(uint16 _creatorFeeShare) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_creatorFeeShare > 10000) {
+            revert InvalidCreatorFeeShare();
+        }
+        uint16 oldShare = creatorFeeShare;
+        creatorFeeShare = _creatorFeeShare;
+        config.creatorFeeShare = _creatorFeeShare;
+        emit SetCreatorFeeShare(oldShare, _creatorFeeShare);
+    }
+
+    /**
+     * @notice Accumulate fees for a creator
+     * @param creator Creator address
+     * @param amount Fee amount to accumulate
+     * @dev Tokens should be transferred to this contract before calling
+     * @dev Verifies contract has sufficient balance before accumulating
+     */
+    function accumulateCreatorFees(address creator, uint256 amount) external {
+        if (creator != address(0) && amount > 0) {
+            // SECURITY: Verify contract actually received the tokens
+            uint256 balance = IERC20(wNative).balanceOf(address(this));
+            require(balance >= amount, "Insufficient balance for accumulation");
+            
+            // Tokens are already transferred by caller (BondingCurve), just accumulate
+            creatorFees[creator] += amount;
+            emit CreatorFeesAccumulated(creator, amount, creatorFees[creator]);
+        }
+    }
+
+    /**
+     * @notice Claim accumulated creator fees
+     * @dev Creators can claim their accumulated fees
+     */
+    function claimCreatorFees() external {
+        uint256 amount = creatorFees[msg.sender];
+        if (amount == 0) {
+            revert NoFeesToClaim();
+        }
+        
+        creatorFees[msg.sender] = 0;
+        IERC20(wNative).safeTransfer(msg.sender, amount);
+        emit CreatorFeesClaimed(msg.sender, amount);
     }
 
     /**

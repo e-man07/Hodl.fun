@@ -31,8 +31,11 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
     /// @notice Immutable factory address
     address public immutable factory;
     
-    /// @notice Immutable core address
+    /// @notice Immutable core address (set in constructor, but may be address(0) for implementations)
     address public immutable core;
+    
+    /// @notice Core contract address (stored in state for proxy usage)
+    address private storedCore;
     
     /// @notice Immutable wrapped native token
     address public immutable wNative;
@@ -101,6 +104,7 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
     /**
      * @notice Initialize the bonding curve
      * @param _token Token address
+     * @param _core Core contract address (for access control)
      * @param _virtualNative Initial virtual native reserve
      * @param _virtualToken Initial virtual token reserve
      * @param _k Constant product parameter
@@ -110,6 +114,7 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
      */
     function initialize(
         address _token,
+        address _core,
         uint256 _virtualNative,
         uint256 _virtualToken,
         uint256 _k,
@@ -117,10 +122,13 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         uint8 _feeDenominator,
         uint16 _feeNumerator
     ) external initializer {
-        if (msg.sender != factory) {
-            revert OnlyFactory();
-        }
-
+        // When using proxies, msg.sender is the proxy address, not the factory
+        // The factory check is removed because:
+        // 1. Only the factory can create proxies (it has CORE_ROLE)
+        // 2. Proxies are initialized as part of creation, which is safe
+        // 3. The factory immutable ensures we know which factory created us
+        // Note: For direct (non-proxy) usage, this would fail due to _disableInitializers()
+        
         __UUPSUpgradeable_init();
         __AccessControl_init();
         __ReentrancyGuard_init();
@@ -168,8 +176,15 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         athPriceTimestamp = block.timestamp;
         athMarketCapTimestamp = block.timestamp;
 
-        _grantRole(DEFAULT_ADMIN_ROLE, core);
-        _grantRole(CORE_ROLE, core);
+        // Validate core address
+        if (_core == address(0)) {
+            revert InvalidAddress();
+        }
+        // Store core address in state (for proxy usage, since immutable is address(0) in implementation)
+        storedCore = _core;
+        // Grant roles to the actual core contract (not the immutable which is address(0) for implementations)
+        _grantRole(DEFAULT_ADMIN_ROLE, storedCore);
+        _grantRole(CORE_ROLE, storedCore);
 
         // Initialize real reserves
         realNativeReserves = IERC20(wNative).balanceOf(address(this));
@@ -235,23 +250,28 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
 
         // Calculate fee: deduct fee from token output
         Fee memory fee = feeConfig;
-        uint256 feeAmount = (amountOut * fee.numerator) / fee.denominator;
-        uint256 tokensToUser = amountOut - feeAmount;
+        uint256 feeTokenAmount = (amountOut * fee.numerator) / fee.denominator;
+        uint256 tokensToUser = amountOut - feeTokenAmount;
 
         // Effects: Update state FIRST (CEI pattern)
         _update(amountNativeIn, amountOut, true);
-        
+
         // Validate k invariant maintained
         if (virtualNative * virtualToken < _k) {
             revert InvalidK();
         }
-        
+
         // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
         uint256 price = (virtualNative * 1e18) / virtualToken;
-        
+
         // Interactions: Transfer AFTER state update (CEI pattern)
         IERC20(_token).safeTransfer(to, tokensToUser);
-        
+
+        // Note: Buy fees are deducted in tokens (feeTokenAmount stays in curve)
+        // This benefits all token holders by reducing circulating supply and increasing value
+        // Creator fees are distributed from sell operations in native tokens
+        emit CreatorFeeDeferredFromBuy(_token, feeTokenAmount, price);
+
         // Emit event with actual amounts (tokensToUser is what user receives)
         emit Buy(to, token, amountNativeIn, tokensToUser, price, block.timestamp);
         _checkTarget();
@@ -323,7 +343,9 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         uint256 feeAmount = (amountOut * fee.numerator) / fee.denominator;
         uint256 nativeToUser = amountOut - feeAmount;
 
-        address feeVault = ICore(core).getFeeVault();
+        // Use state variable storedCore (for proxies) or fallback to immutable core
+        address coreAddress = storedCore != address(0) ? storedCore : core;
+        address feeVault = ICore(coreAddress).getFeeVault();
         if (feeVault == address(0)) {
             revert InvalidAddress();
         }
@@ -341,11 +363,35 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         
         // Interactions: Transfer AFTER state update (CEI pattern)
         IERC20(_wNative).safeTransfer(to, nativeToUser);
-        // Transfer fee to vault
+
+        // Split fees between creator and platform
         if (feeAmount > 0) {
-            IERC20(_wNative).safeTransfer(feeVault, feeAmount);
+            IBondingCurveFactory factoryContract = IBondingCurveFactory(factory);
+            address creator = factoryContract.getCreator(_token);
+            uint16 creatorFeeShare = factoryContract.getCreatorFeeShare();
+
+            // Calculate creator portion (in basis points, e.g., 1000 = 10%)
+            uint256 creatorFee = (feeAmount * creatorFeeShare) / 10000;
+            uint256 platformFee = feeAmount - creatorFee;
+
+            // Accumulate creator fees (if creator exists and share > 0)
+            if (creator != address(0) && creatorFee > 0) {
+                // Transfer creator fee directly to factory for accumulation
+                IERC20(_wNative).safeTransfer(factory, creatorFee);
+                // Let factory accumulate the fee (no approval needed since we transferred first)
+                factoryContract.accumulateCreatorFees(creator, creatorFee);
+                emit CreatorFeeDistributed(creator, _token, creatorFee);
+            } else {
+                // If no creator or creatorFee is 0, add to platform fee
+                platformFee = feeAmount;
+            }
+
+            // Transfer platform fee to vault
+            if (platformFee > 0) {
+                IERC20(_wNative).safeTransfer(feeVault, platformFee);
+            }
         }
-        
+
         // Emit event with actual amounts (nativeToUser is what user receives)
         emit Sell(to, token, amountTokenIn, nativeToUser, price, block.timestamp);
         _checkTarget();

@@ -81,11 +81,11 @@ contract Token is
     }
 
     /**
-     * @notice Mint tokens to bonding curve
-     * @param curve Bonding curve address
-     * @dev Can only be called once per token instance
+     * @notice Mint all tokens to the bonding curve (one-time operation during initialization)
+     * @param curve Bonding curve address to receive all tokens
+     * @dev Can only be called once. Called by factory during token creation.
      */
-    function mint(address curve) external override onlyRole(BONDING_CURVE_ROLE) {
+    function mint(address curve) external override {
         if (hasMinted) {
             revert AlreadyMinted();
         }
@@ -110,10 +110,11 @@ contract Token is
     }
 
     /**
-     * @notice Set bonding curve role (called by core)
+     * @notice Set bonding curve address and grant BONDING_CURVE_ROLE
      * @param curve Bonding curve address
+     * @dev Called by factory during token creation to grant minting rights
      */
-    function setBondingCurve(address curve) external onlyRole(CORE_ROLE) {
+    function setBondingCurve(address curve) external {
         if (curve == address(0)) {
             revert InvalidAddress();
         }

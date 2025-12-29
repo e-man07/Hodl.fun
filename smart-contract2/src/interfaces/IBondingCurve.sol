@@ -40,18 +40,25 @@ interface IBondingCurve {
     
     /// @notice Emitted when reserves are synced
     event Sync(
-        address indexed token, 
-        uint256 realNative, 
-        uint256 realToken, 
-        uint256 virtualNative, 
+        address indexed token,
+        uint256 realNative,
+        uint256 realToken,
+        uint256 virtualNative,
         uint256 virtualToken,
         uint256 price,
         uint256 timestamp
     );
 
+    /// @notice Emitted when creator fee is distributed from sell
+    event CreatorFeeDistributed(address indexed creator, address indexed token, uint256 amount);
+
+    /// @notice Emitted when buy fee is deferred (kept in curve)
+    event CreatorFeeDeferredFromBuy(address indexed token, uint256 feeTokenAmount, uint256 price);
+
     /**
      * @notice Initialize the bonding curve
      * @param _token Token address
+     * @param _core Core contract address (for access control)
      * @param _virtualNative Initial virtual native reserve
      * @param _virtualToken Initial virtual token reserve
      * @param _k Constant product parameter
@@ -61,6 +68,7 @@ interface IBondingCurve {
      */
     function initialize(
         address _token,
+        address _core,
         uint256 _virtualNative,
         uint256 _virtualToken,
         uint256 _k,
