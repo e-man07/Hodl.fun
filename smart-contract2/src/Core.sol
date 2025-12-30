@@ -131,7 +131,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         }
 
         IBondingCurveFactory factoryContract = IBondingCurveFactory(factory);
-        
+
         // Validate fee
         uint256 deployFee = factoryContract.getDeployFee();
         if (fee < deployFee) {
@@ -143,6 +143,12 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             IWNative(wNative).deposit{value: msg.value}();
         }
 
+        // Pull wNative tokens from caller if amountIn or fee is provided
+        uint256 totalNeeded = amountIn + fee;
+        if (totalNeeded > 0) {
+            IERC20(wNative).safeTransferFrom(msg.sender, address(this), totalNeeded);
+        }
+
         // Create curve and token
         (curve_, token_, , ) = factoryContract.create(creator, name, symbol, tokenURI);
 
@@ -152,7 +158,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             IBondingCurve curve = IBondingCurve(curve_);
             (uint256 virtualNative, uint256 virtualToken) = curve.getVirtualReserves();
             uint256 k = curve.getK();
-            
+
             uint256 tokensOut = BondingCurveLibrary.getAmountOut(
                 amountIn,
                 k,
@@ -162,16 +168,16 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
 
             // Transfer wrapped native to curve
             IERC20(wNative).safeTransfer(curve_, amountIn);
-            
+
             // Get balance before buy to calculate actual tokens received (after fee)
             uint256 balanceBefore = IERC20(token_).balanceOf(address(this));
-            
+
             // Execute buy - tokens will be transferred to Core (address(this))
             curve.buy(address(this), tokensOut);
-            
+
             // Get actual tokens received (after fee deduction)
             uint256 tokensReceived = IERC20(token_).balanceOf(address(this)) - balanceBefore;
-            
+
             // Transfer tokens to creator (actual amount received after fees)
             if (tokensReceived > 0) {
                 IERC20(token_).safeTransfer(creator, tokensReceived);
@@ -242,15 +248,15 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         // Validate fee
         _checkFee(curve, amountIn);
 
-        // Transfer wrapped native to curve
-        IERC20(wNative).safeTransfer(curve, amountIn);
-        
+        // Pull wrapped native from caller and transfer to curve
+        IERC20(wNative).safeTransferFrom(msg.sender, curve, amountIn);
+
         // Execute buy
         curveContract.buy(to, amountOut);
 
         // Calculate price: price per token = amountIn / amountOut (scaled by 1e18)
         uint256 price = (amountIn * 1e18) / amountOut;
-        
+
         emit Buy(token, to, amountIn, amountOut, price, block.timestamp);
     }
 
@@ -310,15 +316,15 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         // Validate fee
         _checkFee(curve, amountIn);
 
-        // Transfer wrapped native to curve
-        IERC20(wNative).safeTransfer(curve, amountIn);
-        
+        // Pull wrapped native from caller and transfer to curve
+        IERC20(wNative).safeTransferFrom(msg.sender, curve, amountIn);
+
         // Execute buy
         curveContract.buy(to, amountOut);
 
         // Calculate price: price per token = amountIn / amountOut (scaled by 1e18)
         uint256 price = (amountIn * 1e18) / amountOut;
-        
+
         emit Buy(token, to, amountIn, amountOut, price, block.timestamp);
     }
 

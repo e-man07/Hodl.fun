@@ -70,7 +70,10 @@ contract BondingCurveTest is Test {
     uint256 listingFee = 1 ether;
     uint256 virtualNative = 1 ether;
     uint256 virtualToken = 1_000_000 * 1e18;
-    uint256 graduationMarketCap = 100 ether;
+    // Market cap threshold must be > initial market cap to allow trading before graduation
+    // Initial market cap = 100_000_000 tokens * (1e18 wei / 1e24 tokens) = 100 ether
+    // Set to 10,000 ether so we can test multiple trades before locking
+    uint256 graduationMarketCap = 10_000 ether;
     uint8 feeDenominator = 200;
     uint16 feeNumerator = 1; // 0.5% fee
     uint24 dexFee = 3000; // 0.30%
@@ -90,14 +93,15 @@ contract BondingCurveTest is Test {
 
         // Deploy implementation contracts
         FeeVault feeVaultImpl = new FeeVault();
-        Core coreImpl = new Core(address(wNative), address(0));
+        // Deploy FeeVault proxy first
+        feeVault = FeeVault(address(new ERC1967Proxy(address(feeVaultImpl), "")));
+
+        // Now deploy Core with the actual FeeVault address
+        Core coreImpl = new Core(address(wNative), address(feeVault));
         BondingCurveFactory factoryImpl = new BondingCurveFactory(address(wNative));
 
         // Deploy via ERC1967Proxy to work around _disableInitializers()
         bytes memory initData;
-
-        // Deploy FeeVault proxy (will initialize later after core is ready)
-        feeVault = FeeVault(address(new ERC1967Proxy(address(feeVaultImpl), "")));
 
         // Deploy Core proxy
         initData = abi.encodeWithSelector(
