@@ -72,6 +72,9 @@ interface IBondingCurveFactory {
     /// @notice Emitted when creator fee share is updated
     event SetCreatorFeeShare(uint16 oldShare, uint16 newShare);
 
+    /// @notice Emitted when owner is updated
+    event SetOwner(address indexed newOwner);
+
     /// @notice Emitted when creator fees are accumulated
     event CreatorFeesAccumulated(address indexed creator, uint256 amount, uint256 totalAccumulated);
 

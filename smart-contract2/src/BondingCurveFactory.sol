@@ -45,10 +45,13 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
     
     /// @notice Mapping from token to bonding curve
     mapping(address => address) private curves;
-    
+
+    /// @notice SECURITY: Mapping from bonding curve to token (for validation)
+    mapping(address => address) private curveToToken;
+
     /// @notice Mapping from token to creator address
     mapping(address => address) public creators;
-    
+
     /// @notice Mapping from creator to accumulated fees (in wrapped native)
     mapping(address => uint256) public creatorFees;
 
@@ -155,18 +158,27 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
      * @return token_ Token address
      * @return virtualNative Initial virtual native reserve
      * @return virtualToken Initial virtual token reserve
+     * @dev Authorization is handled at the Core level; this function can be called by Core only
      */
     function create(
         address creator,
         string memory name,
         string memory symbol,
         string memory tokenURI
-    ) external override onlyRole(CORE_ROLE) returns (
+    ) external override returns (
         address curve,
         address token_,
         uint256 virtualNative,
         uint256 virtualToken
     ) {
+        // Ensure core is set for calling contract to be authorized
+        if (core == address(0)) {
+            revert NotInitialized();
+        }
+        // Only allow calls from the configured Core contract
+        if (msg.sender != core) {
+            revert OnlyCore();
+        }
         // SECURITY FIX: Validate creator address
         if (creator == address(0)) {
             revert InvalidAddress();
@@ -211,6 +223,7 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
         IToken(token_).mint(curve);
 
         curves[token_] = curve;
+        curveToToken[curve] = token_; // SECURITY: Store reverse mapping for validation
         creators[token_] = creator; // Store creator address for fee distribution
         virtualNative = _config.virtualNative;
         virtualToken = _config.virtualToken;
@@ -227,6 +240,7 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             revert InvalidAddress();
         }
         owner = _owner;
+        emit SetOwner(_owner);
     }
 
     /**
@@ -378,19 +392,32 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
      * @notice Accumulate fees for a creator
      * @param creator Creator address
      * @param amount Fee amount to accumulate
-     * @dev Tokens should be transferred to this contract before calling
+     * @dev SECURITY: This function is called by bonding curves after transferring fees to factory
+     * @dev Validates that caller is an authorized bonding curve for a known token
      * @dev Verifies contract has sufficient balance before accumulating
      */
     function accumulateCreatorFees(address creator, uint256 amount) external {
-        if (creator != address(0) && amount > 0) {
-            // SECURITY: Verify contract actually received the tokens
-            uint256 balance = IERC20(wNative).balanceOf(address(this));
-            require(balance >= amount, "Insufficient balance for accumulation");
-            
-            // Tokens are already transferred by caller (BondingCurve), just accumulate
-            creatorFees[creator] += amount;
-            emit CreatorFeesAccumulated(creator, amount, creatorFees[creator]);
+        if (creator == address(0) || amount == 0) {
+            revert InvalidAddress();
         }
+
+        // SECURITY FIX: Verify that the caller is an authorized bonding curve
+        // Only curves created by this factory should be able to accumulate fees
+        address token = curveToToken[msg.sender];
+        if (token == address(0)) {
+            revert InvalidAddress(); // Caller is not a known bonding curve
+        }
+
+        // SECURITY: Verify contract actually has the tokens being accumulated
+        uint256 balance = IERC20(wNative).balanceOf(address(this));
+        if (balance < amount) {
+            revert InvalidReserves();
+        }
+
+        // Tokens should already be transferred to this contract by the bonding curve
+        // We just accumulate the fees for the creator
+        creatorFees[creator] += amount;
+        emit CreatorFeesAccumulated(creator, amount, creatorFees[creator]);
     }
 
     /**

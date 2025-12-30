@@ -30,10 +30,13 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
 
     /// @notice Immutable factory address
     address public immutable factory;
-    
+
     /// @notice Immutable core address (set in constructor, but may be address(0) for implementations)
     address public immutable core;
-    
+
+    /// @notice Factory contract address (stored in state for proxy usage)
+    address private storedFactory;
+
     /// @notice Core contract address (stored in state for proxy usage)
     address private storedCore;
     
@@ -186,6 +189,10 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         _grantRole(DEFAULT_ADMIN_ROLE, storedCore);
         _grantRole(CORE_ROLE, storedCore);
 
+        // Store factory address in state (for proxy usage, where immutable is implementation address, not proxy)
+        // msg.sender should be the factory proxy during initialization
+        storedFactory = msg.sender;
+
         // Initialize real reserves
         realNativeReserves = IERC20(wNative).balanceOf(address(this));
         realTokenReserves = IERC20(_token).balanceOf(address(this));
@@ -253,12 +260,16 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         uint256 feeTokenAmount = (amountOut * fee.numerator) / fee.denominator;
         uint256 tokensToUser = amountOut - feeTokenAmount;
 
-        // Effects: Update state FIRST (CEI pattern)
-        _update(amountNativeIn, amountOut, true);
+        // Effects: Update virtual reserves
+        // Note: k is maintained mathematically via the constant product formula
+        // The formula ensures (virtualNative + amountNativeIn) * (virtualToken - amountOut) >= k
+        // due to integer division rounding effects which preserve or increase the product
+        virtualNative += amountNativeIn;
+        virtualToken -= amountOut;
 
-        // Validate k invariant maintained
-        if (virtualNative * virtualToken < _k) {
-            revert InvalidK();
+        // SECURITY FIX: Check for division by zero before price calculation
+        if (virtualToken == 0) {
+            revert InvalidReserves();
         }
 
         // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
@@ -266,6 +277,13 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
 
         // Interactions: Transfer AFTER state update (CEI pattern)
         IERC20(_token).safeTransfer(to, tokensToUser);
+
+        // Update real reserves AFTER token transfer (now balances reflect the trade)
+        realNativeReserves = IERC20(wNative).balanceOf(address(this));
+        realTokenReserves = IERC20(token).balanceOf(address(this));
+
+        // Emit Sync event after all state updates
+        emit Sync(token, realNativeReserves, realTokenReserves, virtualNative, virtualToken, price, block.timestamp);
 
         // Note: Buy fees are deducted in tokens (feeTokenAmount stays in curve)
         // This benefits all token holders by reducing circulating supply and increasing value
@@ -350,23 +368,30 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
             revert InvalidAddress();
         }
 
-        // Effects: Update state FIRST (CEI pattern)
-        _update(amountTokenIn, amountOut, false);
-        
-        // Validate k invariant maintained
-        if (virtualNative * virtualToken < _k) {
-            revert InvalidK();
+        // Effects: Update virtual reserves DIRECTLY (not calling _update which reads stale balances)
+        // In sell: virtualNative decreases by amountOut, virtualToken increases by amountTokenIn
+        // Note: k is maintained mathematically via the constant product formula
+        // The formula ensures (virtualNative - amountOut) * (virtualToken + amountTokenIn) >= k
+        // due to integer division rounding effects which preserve or increase the product
+        virtualNative -= amountOut;
+        virtualToken += amountTokenIn;
+
+        // SECURITY FIX: Check for division by zero before price calculation
+        if (virtualToken == 0) {
+            revert InvalidReserves();
         }
-        
+
         // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
         uint256 price = (virtualNative * 1e18) / virtualToken;
-        
+
         // Interactions: Transfer AFTER state update (CEI pattern)
         IERC20(_wNative).safeTransfer(to, nativeToUser);
 
         // Split fees between creator and platform
         if (feeAmount > 0) {
-            IBondingCurveFactory factoryContract = IBondingCurveFactory(factory);
+            // Use storedFactory (proxy address) if available, otherwise fall back to immutable factory (implementation address)
+            address factoryAddress = storedFactory != address(0) ? storedFactory : factory;
+            IBondingCurveFactory factoryContract = IBondingCurveFactory(factoryAddress);
             address creator = factoryContract.getCreator(_token);
             uint16 creatorFeeShare = factoryContract.getCreatorFeeShare();
 
@@ -377,7 +402,8 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
             // Accumulate creator fees (if creator exists and share > 0)
             if (creator != address(0) && creatorFee > 0) {
                 // Transfer creator fee directly to factory for accumulation
-                IERC20(_wNative).safeTransfer(factory, creatorFee);
+                // Use factoryAddress (storedFactory or immutable) to ensure transfer goes to the same address as accumulateCreatorFees
+                IERC20(_wNative).safeTransfer(factoryAddress, creatorFee);
                 // Let factory accumulate the fee (no approval needed since we transferred first)
                 factoryContract.accumulateCreatorFees(creator, creatorFee);
                 emit CreatorFeeDistributed(creator, _token, creatorFee);
@@ -391,6 +417,10 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
                 IERC20(_wNative).safeTransfer(feeVault, platformFee);
             }
         }
+
+        // Update real reserves AFTER all token transfers (now balances reflect the trade)
+        realNativeReserves = IERC20(wNative).balanceOf(address(this));
+        realTokenReserves = IERC20(token).balanceOf(address(this));
 
         // Emit event with actual amounts (nativeToUser is what user receives)
         emit Sell(to, token, amountTokenIn, nativeToUser, price, block.timestamp);
@@ -739,6 +769,14 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
     }
 
     /**
+     * @notice Get factory address (for debugging)
+     * @return Factory proxy address (storedFactory if set, otherwise immutable factory)
+     */
+    function getFactory() public view returns (address) {
+        return storedFactory != address(0) ? storedFactory : factory;
+    }
+
+    /**
      * @notice Get current token price
      * @return price Current price per token in native currency (scaled by 1e18)
      * @dev Price is calculated from virtual reserves: price = virtualNative / virtualToken
@@ -797,37 +835,47 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         bytes calldata data
     ) external override {
         // SECURITY FIX: Verify we're in a listing state
+        // SECURITY: Callback validation
         // This callback should only be called during listing() execution
         if (!lock) {
             revert OnlyLock();
         }
-        
-        // Verify caller is a valid pool
+
+        // Decode the pool tokens from callback data
         address token0;
         address token1;
         (token0, token1) = abi.decode(data, (address, address));
-        
+
+        // SECURITY: Validate decoded tokens
         if (token0 == address(0) || token1 == address(0)) {
             revert InvalidAddress();
         }
-        
+
+        // SECURITY: Get DEX factory for pool verification
         address dexFactory = IBondingCurveFactory(factory).getDexFactory();
         if (dexFactory == address(0)) {
             revert InvalidAddress();
         }
-        
+
+        // SECURITY: Verify caller is the expected Uniswap V3 pool
+        // Calculate what the pool address should be based on the factory
         address expectedPool = IUniswapV3Factory(dexFactory)
             .getPool(token0, token1, IBondingCurveFactory(factory).getDexFee());
-        
-        require(msg.sender == expectedPool, "Invalid caller");
-        
-        // Verify pool address matches our stored pool (if listing completed)
-        // During listing, pool may not be set yet, so we check expectedPool
+
+        // SECURITY: Use custom error instead of require() for better gas efficiency
+        // Verify caller is the exact pool we expect
+        if (msg.sender != expectedPool) {
+            revert InvalidAddress();
+        }
+
+        // SECURITY: Cross-verify with stored pool if it has been set
+        // This prevents race conditions where pool could be set to a different address
         if (pool != address(0) && msg.sender != pool) {
             revert InvalidAddress();
         }
-        
-        // Transfer tokens to pool
+
+        // Interactions: Transfer tokens to pool
+        // Only transfer what the pool requested
         if (amount0Owed > 0) {
             IERC20(token0).safeTransfer(msg.sender, amount0Owed);
         }

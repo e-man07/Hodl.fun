@@ -76,8 +76,16 @@ contract Token is
         core = core_;
 
         // Grant roles
+        // DEFAULT_ADMIN_ROLE to core contract (for administrative functions)
         _grantRole(DEFAULT_ADMIN_ROLE, core_);
         _grantRole(CORE_ROLE, core_);
+
+        // SECURITY: Grant DEFAULT_ADMIN_ROLE to msg.sender (factory) temporarily so it can set bonding curve
+        // After setBondingCurve() is called, the factory can renounce this role if needed
+        // This is necessary because the factory creates the token via proxy and needs to call setBondingCurve()
+        if (msg.sender != core_) {
+            _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        }
     }
 
     /**
@@ -113,8 +121,9 @@ contract Token is
      * @notice Set bonding curve address and grant BONDING_CURVE_ROLE
      * @param curve Bonding curve address
      * @dev Called by factory during token creation to grant minting rights
+     * @dev SECURITY: Restricted to DEFAULT_ADMIN_ROLE (core contract) to prevent unauthorized role grants
      */
-    function setBondingCurve(address curve) external {
+    function setBondingCurve(address curve) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (curve == address(0)) {
             revert InvalidAddress();
         }
