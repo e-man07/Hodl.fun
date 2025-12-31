@@ -10,6 +10,7 @@ export class CreateTokenCommand {
   constructor(
     readonly tokenId: string,
     readonly tokenAddress: string,
+    readonly curveAddress: string, // Bonding curve contract address
     readonly name: string,
     readonly symbol: string,
     readonly creator: string,

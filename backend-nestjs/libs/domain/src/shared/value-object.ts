@@ -22,7 +22,7 @@ export abstract class ValueObject {
    * Check equality with another value object
    * Subclasses must implement this method
    */
-  abstract equals(other: any): boolean;
+  abstract equals(other: ValueObject): boolean;
 
   /**
    * Get unique identifier for this value object
@@ -35,11 +35,16 @@ export abstract class ValueObject {
   /**
    * Convert value object to JSON-serializable object
    */
-  toJSON(): any {
-    return Object.getOwnPropertyNames(this).reduce((acc: any, prop: string) => {
-      const value = (this as any)[prop];
-      acc[prop] = value instanceof ValueObject ? value.toJSON() : value;
-      return acc;
-    }, {});
+  toJSON(): Record<string, string | number | boolean | null | object> {
+    type JsonValue = string | number | boolean | null | object;
+    const result: Record<string, JsonValue> = {};
+    for (const prop of Object.getOwnPropertyNames(this)) {
+      const descriptor = Object.getOwnPropertyDescriptor(this, prop);
+      if (descriptor) {
+        const value = descriptor.value as JsonValue;
+        result[prop] = value instanceof ValueObject ? value.toJSON() : value;
+      }
+    }
+    return result;
   }
 }

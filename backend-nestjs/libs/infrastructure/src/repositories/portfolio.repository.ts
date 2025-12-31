@@ -1,6 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@core';
 import { Portfolio, IPortfolioRepository } from '@domain';
+import { UserPortfolio } from '@prisma/client';
+
+/**
+ * Interface for parsed holding JSON data
+ */
+interface ParsedHolding {
+  tokenAddress: string;
+  tokenSymbol: string;
+  balance: string;
+  avgBuyPrice: string;
+  totalSpent: string;
+  totalSold: string;
+  realizedPNL: string;
+}
 
 /**
  * Portfolio Repository (Adapter)
@@ -250,9 +264,9 @@ export class PortfolioRepository implements IPortfolioRepository {
       const normalizedAddress = tokenAddress.toLowerCase();
       const holders = allPortfolios.filter((p) => {
         try {
-          const holdings = JSON.parse(p.holdings || '[]');
+          const holdings = JSON.parse(p.holdings || '[]') as ParsedHolding[];
           return holdings.some(
-            (h: any) =>
+            (h: ParsedHolding) =>
               h.tokenAddress.toLowerCase() === normalizedAddress &&
               BigInt(h.balance) > 0n,
           );
@@ -273,7 +287,7 @@ export class PortfolioRepository implements IPortfolioRepository {
   /**
    * Map Prisma portfolio data to Portfolio domain aggregate
    */
-  private mapPrismaToPortfolio(prismaPortfolioData: any): Portfolio {
+  private mapPrismaToPortfolio(prismaPortfolioData: UserPortfolio): Portfolio {
     let holdings: Array<{
       tokenAddress: string;
       tokenSymbol: string;
@@ -285,8 +299,8 @@ export class PortfolioRepository implements IPortfolioRepository {
     }> = [];
 
     try {
-      const parsed = JSON.parse(prismaPortfolioData.holdings || '[]');
-      holdings = parsed.map((h: any) => ({
+      const parsed = JSON.parse(prismaPortfolioData.holdings || '[]') as ParsedHolding[];
+      holdings = parsed.map((h: ParsedHolding) => ({
         tokenAddress: h.tokenAddress,
         tokenSymbol: h.tokenSymbol,
         balance: BigInt(h.balance),
@@ -295,9 +309,10 @@ export class PortfolioRepository implements IPortfolioRepository {
         totalSold: BigInt(h.totalSold),
         realizedPNL: BigInt(h.realizedPNL),
       }));
-    } catch (error) {
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       this.logger.warn(
-        `Failed to parse holdings for portfolio ${prismaPortfolioData.id}: ${error.message}`,
+        `Failed to parse holdings for portfolio ${prismaPortfolioData.id}: ${errorMessage}`,
       );
     }
 

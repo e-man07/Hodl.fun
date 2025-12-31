@@ -33,16 +33,20 @@ export abstract class DomainEvent {
   /**
    * Convert event to JSON
    */
-  toJSON(): any {
-    return {
+  toJSON(): Record<string, string | number | boolean | null | object> {
+    type JsonValue = string | number | boolean | null | object;
+    const result: Record<string, JsonValue> = {
       eventName: this.getEventName(),
       occurredAt: this.occurredAt.toISOString(),
-      ...Object.getOwnPropertyNames(this)
-        .filter((prop) => prop !== 'occurredAt')
-        .reduce((acc: any, prop: string) => {
-          acc[prop] = (this as any)[prop];
-          return acc;
-        }, {}),
     };
+    for (const prop of Object.getOwnPropertyNames(this)) {
+      if (prop !== 'occurredAt') {
+        const descriptor = Object.getOwnPropertyDescriptor(this, prop);
+        if (descriptor) {
+          result[prop] = descriptor.value as JsonValue;
+        }
+      }
+    }
+    return result;
   }
 }

@@ -8,19 +8,21 @@ import {
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 
+type ClassConstructor = new (...args: unknown[]) => object;
+
 /**
  * Validation Pipe
  *
  * Validates and transforms incoming request data using class-validator
  */
 @Injectable()
-export class CustomValidationPipe implements PipeTransform<any> {
-  async transform(value: any, { metatype }: ArgumentMetadata): Promise<any> {
+export class CustomValidationPipe<T = object> implements PipeTransform<unknown, Promise<T>> {
+  async transform(value: unknown, { metatype }: ArgumentMetadata): Promise<T> {
     if (!metatype || !this.toValidate(metatype)) {
-      return value;
+      return value as T;
     }
 
-    const object = plainToInstance(metatype, value);
+    const object = plainToInstance(metatype, value as object);
     const errors = await validate(object);
 
     if (errors.length > 0) {
@@ -31,11 +33,11 @@ export class CustomValidationPipe implements PipeTransform<any> {
       });
     }
 
-    return object;
+    return object as T;
   }
 
-  private toValidate(metatype: Function): boolean {
-    const types: Function[] = [String, Boolean, Number, Array, Object];
+  private toValidate(metatype: ClassConstructor): boolean {
+    const types: ClassConstructor[] = [String, Boolean, Number, Array, Object];
     return !types.includes(metatype);
   }
 

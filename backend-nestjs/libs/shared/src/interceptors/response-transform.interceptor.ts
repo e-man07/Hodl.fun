@@ -6,6 +6,15 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { Request, Response } from 'express';
+
+interface StandardResponse<T> {
+  success: boolean;
+  statusCode: number;
+  timestamp: string;
+  path: string;
+  data: T;
+}
 
 /**
  * Response Transformation Interceptor
@@ -13,12 +22,17 @@ import { map } from 'rxjs/operators';
  * Wraps all successful responses in a standard format
  */
 @Injectable()
-export class ResponseTransformInterceptor implements NestInterceptor {
-  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+export class ResponseTransformInterceptor<T>
+  implements NestInterceptor<T, StandardResponse<T>>
+{
+  intercept(
+    context: ExecutionContext,
+    next: CallHandler<T>,
+  ): Observable<StandardResponse<T>> {
     return next.handle().pipe(
       map((data) => {
-        const request = context.switchToHttp().getRequest();
-        const response = context.switchToHttp().getResponse();
+        const request = context.switchToHttp().getRequest<Request>();
+        const response = context.switchToHttp().getResponse<Response>();
 
         return {
           success: true,

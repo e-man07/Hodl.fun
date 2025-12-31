@@ -7,6 +7,12 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 
+interface AuthenticatedRequest extends Request {
+  user?: {
+    address: string;
+  };
+}
+
 /**
  * Rate Limiting Guard
  *
@@ -19,7 +25,7 @@ export class RateLimitGuard implements CanActivate {
   private readonly windowMs = 60 * 1000; // 1 minute
 
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest<Request>();
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const clientId = this.getClientId(request);
     const now = Date.now();
 
@@ -51,11 +57,10 @@ export class RateLimitGuard implements CanActivate {
     return true;
   }
 
-  private getClientId(request: Request): string {
+  private getClientId(request: AuthenticatedRequest): string {
     // Use user address if authenticated, otherwise use IP
-    const user = (request as any).user;
-    if (user?.address) {
-      return user.address;
+    if (request.user?.address) {
+      return request.user.address;
     }
 
     return (

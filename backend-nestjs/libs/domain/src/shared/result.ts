@@ -54,6 +54,6 @@ export function isSuccess<T>(result: Result<T>): result is Success<T> {
 /**
  * Helper to check if result is failure with type guard
  */
-export function isFailure(result: any): result is Failure {
+export function isFailure<T>(result: Result<T>): result is Failure {
   return result.isFailure;
 }

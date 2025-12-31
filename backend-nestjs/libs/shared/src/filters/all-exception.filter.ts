@@ -3,6 +3,7 @@ import {
   Catch,
   ArgumentsHost,
   HttpStatus,
+  HttpException,
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
@@ -10,7 +11,8 @@ import { Request, Response } from 'express';
 /**
  * All Exceptions Filter
  *
- * Global exception handler for all unhandled exceptions
+ * Global exception handler for all unhandled exceptions.
+ * Handles both HttpExceptions (with proper status codes) and unexpected errors.
  */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -21,6 +23,35 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
+    // Check if this is an HttpException (including NotFoundException, BadRequestException, etc.)
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
+
+      let message: string;
+      if (typeof exceptionResponse === 'string') {
+        message = exceptionResponse;
+      } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+        message = (exceptionResponse as Record<string, unknown>).message as string || exception.message;
+      } else {
+        message = exception.message;
+      }
+
+      this.logger.warn(
+        `HTTP ${status} - ${request.method} ${request.url} - ${message}`,
+      );
+
+      response.status(status).json({
+        success: false,
+        statusCode: status,
+        timestamp: new Date().toISOString(),
+        path: request.url,
+        message,
+      });
+      return;
+    }
+
+    // For unexpected errors, return 500
     const message =
       exception instanceof Error ? exception.message : 'Internal server error';
 

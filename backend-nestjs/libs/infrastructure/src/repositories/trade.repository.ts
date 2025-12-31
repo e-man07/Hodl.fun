@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@core';
 import { Trade, ITradeRepository } from '@domain';
+import { Transaction as PrismaTransaction, Prisma } from '@prisma/client';
+
+/**
+ * Order by type for transaction queries
+ */
+type TransactionOrderBy = Prisma.TransactionOrderByWithRelationInput;
 
 /**
  * Trade Repository (Adapter)
@@ -52,8 +58,9 @@ export class TradeRepository implements ITradeRepository {
       const sortBy = options?.orderBy === 'pricePerToken' ? 'price' : 'timestamp';
       const sortDirection = options?.orderDirection || 'desc';
 
-      const orderBy: any = {};
-      orderBy[sortBy] = sortDirection;
+      const orderBy: TransactionOrderBy = sortBy === 'timestamp'
+        ? { timestamp: sortDirection }
+        : { price: sortDirection };
 
       const [tradeDataList, total] = await Promise.all([
         this.prisma.transaction.findMany({
@@ -97,8 +104,9 @@ export class TradeRepository implements ITradeRepository {
       const sortBy = options?.orderBy || 'timestamp';
       const sortDirection = options?.orderDirection || 'desc';
 
-      const orderBy: any = {};
-      orderBy[sortBy === 'totalValue' ? 'price' : sortBy] = sortDirection;
+      const orderBy: TransactionOrderBy = sortBy === 'totalValue'
+        ? { price: sortDirection }
+        : { timestamp: sortDirection };
 
       const [tradeDataList, total] = await Promise.all([
         this.prisma.transaction.findMany({
@@ -282,18 +290,18 @@ export class TradeRepository implements ITradeRepository {
       const uniqueTraders = new Set(allTrades.map((t) => t.userAddress)).size;
 
       const totalBuyVolume = buyTrades.reduce(
-        (sum: bigint, t: any) => sum + BigInt(t.amountIn),
+        (sum: bigint, t: PrismaTransaction) => sum + BigInt(t.amountIn),
         0n,
       );
       const totalSellVolume = sellTrades.reduce(
-        (sum: bigint, t: any) => sum + BigInt(t.amountOut),
+        (sum: bigint, t: PrismaTransaction) => sum + BigInt(t.amountOut),
         0n,
       );
 
       const avgBuyPrice =
         buyTrades.length > 0
           ? buyTrades.reduce(
-              (sum: bigint, t: any) => sum + BigInt(Math.floor(t.price * 1e18)),
+              (sum: bigint, t: PrismaTransaction) => sum + BigInt(Math.floor(t.price * 1e18)),
               0n,
             ) / BigInt(buyTrades.length)
           : 0n;
@@ -301,7 +309,7 @@ export class TradeRepository implements ITradeRepository {
       const avgSellPrice =
         sellTrades.length > 0
           ? sellTrades.reduce(
-              (sum: bigint, t: any) => sum + BigInt(Math.floor(t.price * 1e18)),
+              (sum: bigint, t: PrismaTransaction) => sum + BigInt(Math.floor(t.price * 1e18)),
               0n,
             ) / BigInt(sellTrades.length)
           : 0n;
@@ -340,20 +348,20 @@ export class TradeRepository implements ITradeRepository {
       });
 
       const totalBuyVolume = buyTrades.reduce(
-        (sum: bigint, t: any) => sum + BigInt(t.amountIn),
+        (sum: bigint, t: PrismaTransaction) => sum + BigInt(t.amountIn),
         0n,
       );
       const totalSellVolume = sellTrades.reduce(
-        (sum: bigint, t: any) => sum + BigInt(t.amountOut),
+        (sum: bigint, t: PrismaTransaction) => sum + BigInt(t.amountOut),
         0n,
       );
 
       const totalTokensBought = buyTrades.reduce(
-        (sum: bigint, t: any) => sum + BigInt(t.amountOut),
+        (sum: bigint, t: PrismaTransaction) => sum + BigInt(t.amountOut),
         0n,
       );
       const totalTokensSold = sellTrades.reduce(
-        (sum: bigint, t: any) => sum + BigInt(t.amountIn),
+        (sum: bigint, t: PrismaTransaction) => sum + BigInt(t.amountIn),
         0n,
       );
 
@@ -379,7 +387,7 @@ export class TradeRepository implements ITradeRepository {
   /**
    * Map Prisma transaction data to Trade domain entity
    */
-  private mapPrismaToTrade(prismaTradeData: any): Trade {
+  private mapPrismaToTrade(prismaTradeData: PrismaTransaction): Trade {
     return Trade.reconstruct({
       id: prismaTradeData.hash,
       tokenId: prismaTradeData.tokenAddress,

@@ -3,6 +3,20 @@ import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 
 /**
+ * Interface for IPFS token metadata
+ */
+export interface IpfsMetadata {
+  name?: string;
+  description?: string;
+  logo?: string;
+  website?: string;
+  twitter?: string;
+  telegram?: string;
+  discord?: string;
+  [key: string]: string | undefined;
+}
+
+/**
  * IPFS Service
  *
  * Handles metadata uploads and retrieval from Pinata IPFS gateway
@@ -101,7 +115,7 @@ export class IpfsService {
   /**
    * Retrieve metadata from IPFS
    */
-  async getMetadata(ipfsHash: string): Promise<any> {
+  async getMetadata(ipfsHash: string): Promise<IpfsMetadata> {
     try {
       const url = `${this.gatewayUrl}/${ipfsHash}`;
       const response = await axios.get(url, { timeout: 10000 });
@@ -179,7 +193,7 @@ export class IpfsService {
       const url = `${this.gatewayUrl}/${ipfsHash}`;
       const response = await axios.head(url, { timeout: 5000 });
       return response.status === 200;
-    } catch (error) {
+    } catch {
       this.logger.debug(`Content not found on IPFS: ${ipfsHash}`);
       return false;
     }

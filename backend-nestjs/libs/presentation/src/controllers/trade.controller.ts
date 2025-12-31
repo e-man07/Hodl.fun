@@ -15,6 +15,21 @@ import {
   TradeExecutionResponseDto,
 } from '../dtos/responses/trade.response';
 import { BuyTokenDto, SellTokenDto } from '../dtos/requests/trade.dto';
+import {
+  GetTradesByTokenQuery,
+  GetTradesByUserQuery,
+  GetTradeStatsQuery,
+  TradeStatsResult,
+} from '@application/trade';
+import { Trade } from '@domain';
+
+/**
+ * Interface for trade list query results from CQRS bus
+ */
+interface TradeListQueryResult {
+  items: Trade[];
+  total: number;
+}
 
 /**
  * Trade Controller
@@ -110,25 +125,27 @@ export class TradeController {
     const offsetNum = parseInt(offset) || 0;
 
     // Execute GetTradesByTokenQuery via CQRS bus
-    const result = await this.queryBus.execute({
-      tokenId,
-      limit: limitNum,
-      offset: offsetNum,
-      orderBy,
-      orderDirection,
-    });
+    const result = (await this.queryBus.execute(
+      new GetTradesByTokenQuery(
+        tokenId,
+        limitNum,
+        offsetNum,
+        orderBy,
+        orderDirection,
+      ),
+    )) as TradeListQueryResult;
 
     return {
-      items: result.items.map((trade: any) => ({
-        id: trade.id.value,
-        tokenId: trade.tokenId.value,
-        type: trade.type as 'buy' | 'sell',
-        user: trade.user.value,
+      items: result.items.map((trade: Trade) => ({
+        id: trade.id,
+        tokenId: trade.tokenId,
+        type: trade.type,
+        user: trade.user,
         amountIn: trade.amountIn.toString(),
         amountOut: trade.amountOut.toString(),
         pricePerToken: trade.pricePerToken.toString(),
         totalValue: trade.totalValue.toString(),
-        transactionHash: trade.transactionHash.value,
+        transactionHash: trade.transactionHash,
         blockNumber: trade.blockNumber,
         timestamp: trade.timestamp,
       })),
@@ -161,25 +178,27 @@ export class TradeController {
     const offsetNum = parseInt(offset) || 0;
 
     // Execute GetTradesByUserQuery via CQRS bus
-    const result = await this.queryBus.execute({
-      user: userAddress,
-      limit: limitNum,
-      offset: offsetNum,
-      orderBy,
-      orderDirection,
-    });
+    const result = (await this.queryBus.execute(
+      new GetTradesByUserQuery(
+        userAddress,
+        limitNum,
+        offsetNum,
+        orderBy,
+        orderDirection,
+      ),
+    )) as TradeListQueryResult;
 
     return {
-      items: result.items.map((trade: any) => ({
-        id: trade.id.value,
-        tokenId: trade.tokenId.value,
-        type: trade.type as 'buy' | 'sell',
-        user: trade.user.value,
+      items: result.items.map((trade: Trade) => ({
+        id: trade.id,
+        tokenId: trade.tokenId,
+        type: trade.type,
+        user: trade.user,
         amountIn: trade.amountIn.toString(),
         amountOut: trade.amountOut.toString(),
         pricePerToken: trade.pricePerToken.toString(),
         totalValue: trade.totalValue.toString(),
-        transactionHash: trade.transactionHash.value,
+        transactionHash: trade.transactionHash,
         blockNumber: trade.blockNumber,
         timestamp: trade.timestamp,
       })),
@@ -203,10 +222,9 @@ export class TradeController {
     @Query('user') user?: string,
   ): Promise<TradeStatsResponseDto> {
     // Execute GetTradeStatsQuery via CQRS bus
-    const stats = await this.queryBus.execute({
-      tokenId,
-      user,
-    });
+    const stats = (await this.queryBus.execute(
+      new GetTradeStatsQuery(tokenId, user),
+    )) as TradeStatsResult;
 
     return {
       tokenId: stats.tokenId,

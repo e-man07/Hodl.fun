@@ -15,6 +15,9 @@ import { PortfolioBalanceUpdatedEvent } from '../events/portfolio-balance-update
  * - Realized gains/losses from sells
  * - Unrealized gains/losses based on current price
  */
+// Standard ERC20 decimal precision
+const DECIMALS = BigInt(10 ** 18);
+
 export class Portfolio extends AggregateRoot {
   private id: string;
   private userId: string;
@@ -114,7 +117,7 @@ export class Portfolio extends AggregateRoot {
     this.totalInvestedPUSH += amountInPUSH;
     this.updatedAt = new Date();
 
-    (this as any).addDomainEvent(
+    this.apply(
       new PortfolioBalanceUpdatedEvent(
         this.id,
         this.userId,
@@ -146,7 +149,8 @@ export class Portfolio extends AggregateRoot {
       throw new Error('Insufficient balance for sell');
     }
 
-    const costBasis = holding.avgBuyPrice * amountInTokens;
+    // Cost basis = (price per token * tokens) / decimals
+    const costBasis = (holding.avgBuyPrice * amountInTokens) / DECIMALS;
     const pnl = amountOutPUSH - costBasis;
 
     holding.balance -= amountInTokens;
@@ -160,7 +164,7 @@ export class Portfolio extends AggregateRoot {
 
     this.updatedAt = new Date();
 
-    (this as any).addDomainEvent(
+    this.apply(
       new PortfolioBalanceUpdatedEvent(
         this.id,
         this.userId,
@@ -212,8 +216,8 @@ export class Portfolio extends AggregateRoot {
       return 0n;
     }
 
-    const currentValue = holding.balance * currentPrice;
-    const costBasis = holding.balance * holding.avgBuyPrice;
+    const currentValue = (holding.balance * currentPrice) / DECIMALS;
+    const costBasis = (holding.balance * holding.avgBuyPrice) / DECIMALS;
     return currentValue - costBasis;
   }
 
@@ -225,7 +229,7 @@ export class Portfolio extends AggregateRoot {
 
     for (const holding of this.holdings.values()) {
       const currentPrice = tokenPrices.get(holding.tokenAddress) ?? 0n;
-      totalValue += holding.balance * currentPrice;
+      totalValue += (holding.balance * currentPrice) / DECIMALS;
     }
 
     return totalValue;
@@ -247,7 +251,7 @@ export class Portfolio extends AggregateRoot {
 
     for (const holding of this.holdings.values()) {
       const currentPrice = tokenPrices.get(holding.tokenAddress) ?? 0n;
-      totalValue += holding.balance * currentPrice;
+      totalValue += (holding.balance * currentPrice) / DECIMALS;
       totalUnrealizedPNL += this.getUnrealizedPNL(holding.tokenAddress, currentPrice);
       totalRealizedPNL += holding.realizedPNL;
     }

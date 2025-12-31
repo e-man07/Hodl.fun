@@ -13,6 +13,7 @@ export enum QueueName {
   PRICE_UPDATE = 'price-update',
   PORTFOLIO_SYNC = 'portfolio-sync',
   TRADE_INDEXING = 'trade-indexing',
+  FEE_VAULT_TRACKING = 'fee-vault-tracking',
 }
 
 /**
@@ -74,6 +75,17 @@ export const getQueueConfigs = () => {
           delay: 3000,
         },
         removeOnComplete: false, // Keep for audit trail
+      },
+    },
+    {
+      name: QueueName.FEE_VAULT_TRACKING,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 5000,
+        },
+        removeOnComplete: true,
       },
     },
   );

@@ -5,6 +5,12 @@ import {
   TokenAddress,
   ITokenRepository,
 } from '@domain';
+import { Token as PrismaToken, Prisma } from '@prisma/client';
+
+/**
+ * Order by type for token queries
+ */
+type TokenOrderBy = Prisma.TokenOrderByWithRelationInput;
 
 /**
  * Token Repository (Adapter)
@@ -81,7 +87,7 @@ export class TokenRepository implements ITokenRepository {
     total: number;
   }> {
     try {
-      const where: any = {};
+      const where: Prisma.TokenWhereInput = {};
 
       if (filter?.creator) {
         where.creator = filter.creator;
@@ -93,26 +99,60 @@ export class TokenRepository implements ITokenRepository {
         where.isListed = filter.isListed;
       }
 
-      const sortBy = options?.orderBy || 'createdAt';
+      // Validate and sanitize sortBy - only allow known fields
+      const validSortFields = ['createdAt', 'marketCap', 'currentPrice'] as const;
+      type ValidSortField = (typeof validSortFields)[number];
+      const requestedSort = options?.orderBy || 'createdAt';
+      const sortBy: ValidSortField = validSortFields.includes(requestedSort as ValidSortField)
+        ? (requestedSort as ValidSortField)
+        : 'createdAt';
       const sortDirection = options?.orderDirection || 'desc';
-      const orderBy = {
-        [sortBy]: sortDirection === 'asc' ? 'asc' : 'desc',
-      };
-
       const limit = options?.limit || 20;
       const offset = options?.offset || 0;
+
+      // For numeric string fields (marketCap, currentPrice), we need to sort in memory
+      // because Prisma sorts strings lexicographically, not numerically
+      const needsMemorySort = sortBy === 'marketCap' || sortBy === 'currentPrice';
+
+      const orderBy = needsMemorySort
+        ? { createdAt: 'desc' as const } // Default order, will re-sort in memory
+        : { [sortBy as string]: sortDirection === 'asc' ? 'asc' : 'desc' };
 
       const [tokenDataList, total] = await Promise.all([
         this.prisma.token.findMany({
           where,
           orderBy,
-          take: limit,
-          skip: offset,
+          // For memory sort, fetch all matching records then paginate in memory
+          ...(needsMemorySort ? {} : { take: limit, skip: offset }),
         }),
         this.prisma.token.count({ where }),
       ]);
 
-      const tokens = tokenDataList.map((data) => this.mapPrismaToToken(data));
+      let tokens = tokenDataList.map((data) => this.mapPrismaToToken(data));
+
+      // Sort in memory for numeric string fields
+      if (needsMemorySort) {
+        tokens.sort((a, b) => {
+          // Value objects have a .value property containing the actual bigint
+          const aValue =
+            sortBy === 'marketCap'
+              ? a.getMarketCap().value
+              : a.getCurrentPrice().value;
+          const bValue =
+            sortBy === 'marketCap'
+              ? b.getMarketCap().value
+              : b.getCurrentPrice().value;
+
+          if (sortDirection === 'desc') {
+            return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+          } else {
+            return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+          }
+        });
+
+        // Apply pagination after sorting
+        tokens = tokens.slice(offset, offset + limit);
+      }
 
       return {
         tokens,
@@ -169,6 +209,7 @@ export class TokenRepository implements ITokenRepository {
         data: {
           id: token.getId(),
           address: token.getAddress().toString(),
+          curveAddress: token.getCurveAddress(),
           name: token.getName(),
           symbol: token.getSymbol(),
           creator: token.getCreator(),
@@ -212,6 +253,7 @@ export class TokenRepository implements ITokenRepository {
       const tokenData = await this.prisma.token.update({
         where: { id: token.getId() },
         data: {
+          curveAddress: token.getCurveAddress(),
           realNativeReserve: reserveBalance.realNativeReserve.toString(),
           realTokenReserve: reserveBalance.realTokenReserve.toString(),
           virtualNativeReserve: reserveBalance.virtualNativeReserve.toString(),
@@ -395,7 +437,7 @@ export class TokenRepository implements ITokenRepository {
     try {
       // For now, return top tokens by current metric
       // Full implementation would require time-series data
-      let orderBy: any;
+      let orderBy: TokenOrderBy;
       if (metric === 'price') {
         orderBy = { currentPrice: 'desc' as const };
       } else if (metric === 'marketCap') {
@@ -423,10 +465,11 @@ export class TokenRepository implements ITokenRepository {
    * Map Prisma token data to Token domain entity
    * This is where we hydrate the domain object from the database
    */
-  private mapPrismaToToken(prismaToken: any): Token {
+  private mapPrismaToToken(prismaToken: PrismaToken): Token {
     return Token.reconstruct({
       id: prismaToken.id,
       address: prismaToken.address,
+      curveAddress: prismaToken.curveAddress,
       name: prismaToken.name,
       symbol: prismaToken.symbol,
       creator: prismaToken.creator,
@@ -440,8 +483,8 @@ export class TokenRepository implements ITokenRepository {
       marketCap: BigInt(prismaToken.marketCap),
       athPrice: BigInt(prismaToken.athPrice),
       athMarketCap: BigInt(prismaToken.athMarketCap),
-      athPriceTimestamp: prismaToken.athPriceTimestamp,
-      athMarketCapTimestamp: prismaToken.athMarketCapTimestamp,
+      athPriceTimestamp: prismaToken.athPriceTimestamp || prismaToken.createdAt,
+      athMarketCapTimestamp: prismaToken.athMarketCapTimestamp || prismaToken.createdAt,
       isLocked: prismaToken.isLocked,
       isListed: prismaToken.isListed,
       uniswapV3Pool: prismaToken.uniswapV3Pool,

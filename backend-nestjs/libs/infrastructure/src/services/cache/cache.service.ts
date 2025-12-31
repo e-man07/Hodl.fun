@@ -3,6 +3,48 @@ import { ConfigService } from '@nestjs/config';
 import { Redis, RedisOptions } from 'ioredis';
 
 /**
+ * Interface for serialized token data in cache
+ */
+interface CachedToken {
+  id: string;
+  address: string;
+  name: string;
+  symbol: string;
+  creator: string;
+  decimals: number;
+  totalSupply: string;
+  currentPrice: string;
+  marketCap: string;
+  isLocked: boolean;
+  isListed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Interface for serialized portfolio data in cache
+ */
+interface CachedPortfolio {
+  id: string;
+  userId: string;
+  holdings: string; // JSON string
+  totalInvestedPUSH: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Interface for market statistics in cache
+ */
+interface CachedMarketStats {
+  totalTokens: number;
+  totalVolume: string;
+  totalTrades: number;
+  activeUsers: number;
+  timestamp: string;
+}
+
+/**
  * Cache Service
  *
  * Manages distributed caching with Redis
@@ -91,7 +133,7 @@ export class CacheService {
   /**
    * Get value from cache
    */
-  async get<T = any>(key: string): Promise<T | null> {
+  async get<T>(key: string): Promise<T | null> {
     if (!this.isConnected || !this.redis) {
       return null;
     }
@@ -112,7 +154,7 @@ export class CacheService {
   /**
    * Set value in cache with TTL
    */
-  async set<T = any>(key: string, value: T, ttlSeconds?: number): Promise<void> {
+  async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
     if (!this.isConnected || !this.redis) {
       return;
     }
@@ -215,7 +257,7 @@ export class CacheService {
   /**
    * Cache token list
    */
-  async setTokenList(tokens: any[], limit: number, offset: number): Promise<void> {
+  async setTokenList(tokens: CachedToken[], limit: number, offset: number): Promise<void> {
     const key = `${this.PREFIX.TOKEN}list:${limit}:${offset}`;
     await this.set(key, tokens, this.DEFAULT_TTL.TOKEN_LIST);
   }
@@ -223,9 +265,9 @@ export class CacheService {
   /**
    * Get cached token list
    */
-  async getTokenList(limit: number, offset: number): Promise<any[] | null> {
+  async getTokenList(limit: number, offset: number): Promise<CachedToken[] | null> {
     const key = `${this.PREFIX.TOKEN}list:${limit}:${offset}`;
-    return this.get<any[]>(key);
+    return this.get<CachedToken[]>(key);
   }
 
   /**
@@ -239,7 +281,7 @@ export class CacheService {
   /**
    * Cache token detail
    */
-  async setToken(tokenId: string, token: any): Promise<void> {
+  async setToken(tokenId: string, token: CachedToken): Promise<void> {
     const key = `${this.PREFIX.TOKEN}${tokenId}`;
     await this.set(key, token, this.DEFAULT_TTL.TOKEN_DETAIL);
   }
@@ -247,9 +289,9 @@ export class CacheService {
   /**
    * Get cached token detail
    */
-  async getToken(tokenId: string): Promise<any | null> {
+  async getToken(tokenId: string): Promise<CachedToken | null> {
     const key = `${this.PREFIX.TOKEN}${tokenId}`;
-    return this.get<any>(key);
+    return this.get<CachedToken>(key);
   }
 
   /**
@@ -263,7 +305,7 @@ export class CacheService {
   /**
    * Cache portfolio
    */
-  async setPortfolio(userId: string, portfolio: any): Promise<void> {
+  async setPortfolio(userId: string, portfolio: CachedPortfolio): Promise<void> {
     const key = `${this.PREFIX.PORTFOLIO}${userId}`;
     await this.set(key, portfolio, this.DEFAULT_TTL.PORTFOLIO);
   }
@@ -271,9 +313,9 @@ export class CacheService {
   /**
    * Get cached portfolio
    */
-  async getPortfolio(userId: string): Promise<any | null> {
+  async getPortfolio(userId: string): Promise<CachedPortfolio | null> {
     const key = `${this.PREFIX.PORTFOLIO}${userId}`;
-    return this.get<any>(key);
+    return this.get<CachedPortfolio>(key);
   }
 
   /**
@@ -304,7 +346,7 @@ export class CacheService {
   /**
    * Cache market statistics
    */
-  async setMarketStats(stats: any): Promise<void> {
+  async setMarketStats(stats: CachedMarketStats): Promise<void> {
     const key = `${this.PREFIX.MARKET}stats`;
     await this.set(key, stats, this.DEFAULT_TTL.MARKET_STATS);
   }
@@ -312,9 +354,9 @@ export class CacheService {
   /**
    * Get cached market statistics
    */
-  async getMarketStats(): Promise<any | null> {
+  async getMarketStats(): Promise<CachedMarketStats | null> {
     const key = `${this.PREFIX.MARKET}stats`;
-    return this.get<any>(key);
+    return this.get<CachedMarketStats>(key);
   }
 
   /**

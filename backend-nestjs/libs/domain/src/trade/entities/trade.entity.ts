@@ -133,7 +133,7 @@ export class Trade extends Entity<{
    * For sell: expected price vs actual price received
    */
   getSlippage(expectedPrice: bigint): number {
-    if (this.pricePerToken === 0n) {
+    if (this.pricePerToken === 0n || expectedPrice === 0n) {
       return 0;
     }
 

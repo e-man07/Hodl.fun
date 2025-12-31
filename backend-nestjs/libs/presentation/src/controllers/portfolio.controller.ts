@@ -1,10 +1,12 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, NotFoundException } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import {
   PortfolioResponseDto,
   PortfolioSummaryResponseDto,
   TopPortfoliosResponseDto,
 } from '../dtos/responses/portfolio.response';
+import { GetUserPortfolioQuery } from '@application/portfolio/queries';
+import { Portfolio } from '@domain';
 
 /**
  * Portfolio Controller
@@ -16,6 +18,27 @@ export class PortfolioController {
   constructor(private readonly queryBus: QueryBus) {}
 
   /**
+   * Get leaderboard of top portfolios
+   * NOTE: This route must be defined BEFORE the :userId route
+   *
+   * @param limit Number of top portfolios to return (default: 100, max: 1000)
+   * @param metric Sorting metric (default: portfolioValue)
+   * @returns Top portfolios with ranking
+   */
+  @Get('leaderboard/top')
+  async getTopPortfolios(
+    @Query('limit') _limit: string = '100',
+    @Query('metric') _metric: 'portfolioValue' | 'totalPNL' = 'portfolioValue',
+  ): Promise<TopPortfoliosResponseDto> {
+    // TODO: Implement GetTopPortfoliosQuery handler
+    // For now, return empty leaderboard
+    return {
+      portfolios: [],
+      timestamp: new Date(),
+    };
+  }
+
+  /**
    * Get user's complete portfolio with all holdings
    *
    * @param userId User wallet address
@@ -24,34 +47,36 @@ export class PortfolioController {
   @Get(':userId')
   async getPortfolio(@Param('userId') userId: string): Promise<PortfolioResponseDto> {
     // Execute GetUserPortfolioQuery via CQRS bus
-    const portfolio = await this.queryBus.execute({
-      userId,
-    });
+    const portfolio = (await this.queryBus.execute(
+      new GetUserPortfolioQuery(userId),
+    )) as Portfolio | null;
 
     if (!portfolio) {
-      throw new Error(`Portfolio not found for user: ${userId}`);
+      throw new NotFoundException(`Portfolio not found for user: ${userId}`);
     }
 
+    const holdings = portfolio.getHoldings();
+
     return {
-      id: portfolio.id.value,
-      userId: portfolio.userId.value,
-      holdings: portfolio.holdings.map((holding: any) => ({
-        tokenAddress: holding.tokenAddress.value,
+      id: portfolio.getId(),
+      userId: portfolio.getUserId(),
+      holdings: holdings.map((holding) => ({
+        tokenAddress: holding.tokenAddress,
         tokenSymbol: holding.tokenSymbol,
         balance: holding.balance.toString(),
         avgBuyPrice: holding.avgBuyPrice.toString(),
         totalSpent: holding.totalSpent.toString(),
         totalSold: holding.totalSold.toString(),
         realizedPNL: holding.realizedPNL.toString(),
-        unrealizedPNL: holding.unrealizedPNL?.toString(),
+        unrealizedPNL: undefined, // Computed field needs current prices
       })),
-      totalInvestedPUSH: portfolio.totalInvestedPUSH.toString(),
-      portfolioValue: portfolio.portfolioValue?.toString(),
-      totalPNL: portfolio.totalPNL?.toString(),
-      realizedPNL: portfolio.realizedPNL?.toString(),
-      unrealizedPNL: portfolio.unrealizedPNL?.toString(),
-      createdAt: portfolio.createdAt,
-      updatedAt: portfolio.updatedAt,
+      totalInvestedPUSH: portfolio.getTotalInvestedPUSH().toString(),
+      portfolioValue: undefined, // Computed field needs current prices
+      totalPNL: undefined,
+      realizedPNL: undefined,
+      unrealizedPNL: undefined,
+      createdAt: portfolio.getCreatedAt(),
+      updatedAt: portfolio.getUpdatedAt(),
     };
   }
 
@@ -65,62 +90,33 @@ export class PortfolioController {
   async getPortfolioSummary(
     @Param('userId') userId: string,
   ): Promise<PortfolioSummaryResponseDto> {
-    // Execute GetPortfolioSummaryQuery via CQRS bus
-    const summary = await this.queryBus.execute({
-      userId,
-    });
+    // Reuse the portfolio query
+    const portfolio = (await this.queryBus.execute(
+      new GetUserPortfolioQuery(userId),
+    )) as Portfolio | null;
 
-    if (!summary) {
-      throw new Error(`Portfolio summary not found for user: ${userId}`);
+    if (!portfolio) {
+      throw new NotFoundException(`Portfolio not found for user: ${userId}`);
     }
 
+    const holdings = portfolio.getHoldings();
+    const totalRealizedPNL = holdings.reduce((sum, h) => sum + h.realizedPNL, 0n);
+
     return {
-      userId: summary.userId.value,
-      holdingsCount: summary.holdingsCount,
-      totalInvestedPUSH: summary.totalInvestedPUSH.toString(),
-      portfolioValue: summary.portfolioValue.toString(),
-      totalPNL: summary.totalPNL.toString(),
-      realizedPNL: summary.realizedPNL.toString(),
-      unrealizedPNL: summary.unrealizedPNL.toString(),
-      topHolding: summary.topHolding
+      userId: portfolio.getUserId(),
+      holdingsCount: holdings.length,
+      totalInvestedPUSH: portfolio.getTotalInvestedPUSH().toString(),
+      portfolioValue: '0', // Would need current prices
+      totalPNL: totalRealizedPNL.toString(), // Only realized, need prices for unrealized
+      realizedPNL: totalRealizedPNL.toString(),
+      unrealizedPNL: '0', // Would need current prices
+      topHolding: holdings.length > 0
         ? {
-            tokenSymbol: summary.topHolding.tokenSymbol,
-            value: summary.topHolding.value.toString(),
-            percentage: summary.topHolding.percentage,
+            tokenSymbol: holdings[0].tokenSymbol,
+            value: holdings[0].balance.toString(),
+            percentage: 100 / holdings.length,
           }
         : undefined,
-    };
-  }
-
-  /**
-   * Get leaderboard of top portfolios
-   *
-   * @param limit Number of top portfolios to return (default: 100, max: 1000)
-   * @param metric Sorting metric (default: portfolioValue)
-   * @returns Top portfolios with ranking
-   */
-  @Get('leaderboard/top')
-  async getTopPortfolios(
-    @Query('limit') limit: string = '100',
-    @Query('metric') metric: 'portfolioValue' | 'totalPNL' = 'portfolioValue',
-  ): Promise<TopPortfoliosResponseDto> {
-    const limitNum = Math.min(parseInt(limit) || 100, 1000);
-
-    // Execute GetTopPortfoliosQuery via CQRS bus
-    const portfolios = await this.queryBus.execute({
-      limit: limitNum,
-      metric,
-    });
-
-    return {
-      portfolios: portfolios.map((portfolio: any, index: number) => ({
-        rank: index + 1,
-        userId: portfolio.userId.value,
-        portfolioValue: portfolio.portfolioValue.toString(),
-        holdingsCount: portfolio.holdingsCount,
-        totalPNL: portfolio.totalPNL.toString(),
-      })),
-      timestamp: new Date(),
     };
   }
 }

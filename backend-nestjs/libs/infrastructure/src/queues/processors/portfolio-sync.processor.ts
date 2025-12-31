@@ -6,6 +6,25 @@ import { CacheService } from '../../services/cache/cache.service';
 import { PrismaService } from '@core';
 
 /**
+ * Interface for portfolio holding data
+ */
+interface PortfolioHolding {
+  tokenAddress: string;
+  balance: string;
+  unrealizedPnL?: string;
+}
+
+/**
+ * Interface for portfolio sync result
+ */
+interface PortfolioSyncResult {
+  userId: string;
+  success: boolean;
+  message?: string;
+  holdingsCount?: number;
+}
+
+/**
  * Portfolio Sync Processor
  *
  * Synchronizes user portfolios with latest token prices
@@ -30,7 +49,7 @@ export class PortfolioSyncProcessor {
       userId: string;
       force?: boolean;
     }>,
-  ): Promise<any> {
+  ): Promise<PortfolioSyncResult> {
     try {
       const { userId } = job.data;
 
@@ -47,10 +66,10 @@ export class PortfolioSyncProcessor {
       }
 
       // Parse holdings
-      let holdings: any[] = [];
+      let holdings: PortfolioHolding[] = [];
       try {
-        holdings = JSON.parse(portfolio.holdings || '[]');
-      } catch (error) {
+        holdings = JSON.parse(portfolio.holdings || '[]') as PortfolioHolding[];
+      } catch {
         this.logger.error(`Failed to parse holdings for user ${userId}`);
         return { userId, success: false, message: 'Invalid holdings format' };
       }

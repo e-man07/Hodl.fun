@@ -10,3 +10,6 @@ export * from './token/event-handlers';
 export * from './portfolio/commands';
 export * from './portfolio/queries';
 export * from './portfolio/event-handlers';
+
+// Export trade queries
+export * from './trade';

@@ -7,6 +7,7 @@ export * from './processors/token-graduation.processor';
 export * from './processors/price-update.processor';
 export * from './processors/portfolio-sync.processor';
 export * from './processors/trade-indexing.processor';
+export * from './processors/fee-vault-tracking.processor';
 
 // Export queue service
 export * from './queue.service';

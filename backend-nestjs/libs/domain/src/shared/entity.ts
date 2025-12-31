@@ -17,7 +17,7 @@
  * }
  * ```
  */
-export abstract class Entity<T = any> {
+export abstract class Entity<T = Record<string, unknown>> {
   protected readonly props: T;
   protected readonly _id: string;
 
@@ -50,10 +50,10 @@ export abstract class Entity<T = any> {
   /**
    * Convert entity to JSON-serializable object
    */
-  toJSON(): any {
+  toJSON(): { id: string } & T {
     return {
       id: this._id,
       ...this.props,
-    };
+    } as { id: string } & T;
   }
 }

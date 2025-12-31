@@ -43,7 +43,7 @@ export class MarketCap extends ValueObject {
         throw new Error('Market cap cannot be negative');
       }
       return new MarketCap(bigint);
-    } catch (error) {
+    } catch {
       throw new Error(`Invalid market cap format: ${marketCap}`);
     }
   }

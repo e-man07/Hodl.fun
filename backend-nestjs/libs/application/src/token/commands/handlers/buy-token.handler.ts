@@ -6,27 +6,28 @@ import {
   ITokenRepository,
   TOKEN_REPOSITORY,
   Trade,
+  TokenPrice,
+  ReserveBalance,
 } from '@domain';
 import { ITradeRepository, TRADE_REPOSITORY } from '@domain';
+import { CoreContractService } from '@infrastructure/contracts/services/core-contract.service';
+import { BondingCurveContractService } from '@infrastructure/contracts/services/bonding-curve-contract.service';
+import { FactoryContractService } from '@infrastructure/contracts/services/factory-contract.service';
 
 /**
  * Buy Token Command Handler
  *
  * Executes a buy operation:
  * 1. Load token aggregate from repository
- * 2. Execute buy logic (bonding curve formula: x*y=k)
- * 3. Calculate new price and market cap
- * 4. Update token metrics
- * 5. Record trade
- * 6. Save state
- * 7. Publish domain events (TokenMetricsUpdatedEvent, NewATHPriceEvent, etc.)
+ * 2. Read current on-chain state from contracts
+ * 3. Verify trade parameters
+ * 4. Calculate expected output using bonding curve formula
+ * 5. Record trade (after on-chain execution via indexer)
+ * 6. Update token metrics with on-chain data
+ * 7. Publish domain events
  *
- * Result: {
- *   amountOut: tokens received,
- *   newPrice: updated price per token,
- *   newMarketCap: updated market cap,
- *   graduationReady: whether token reached graduation threshold
- * }
+ * Note: With v2 architecture, actual buy transactions happen on-chain.
+ * This handler processes confirmed trades from the indexer.
  */
 @Injectable()
 @CommandHandler(BuyTokenCommand)
@@ -38,6 +39,9 @@ export class BuyTokenHandler implements ICommandHandler<BuyTokenCommand> {
     private readonly tokenRepository: ITokenRepository,
     @Inject(TRADE_REPOSITORY)
     private readonly tradeRepository: ITradeRepository,
+    private readonly coreContract: CoreContractService,
+    private readonly bondingCurveContract: BondingCurveContractService,
+    private readonly factoryContract: FactoryContractService,
   ) {}
 
   async execute(
@@ -53,32 +57,75 @@ export class BuyTokenHandler implements ICommandHandler<BuyTokenCommand> {
     );
 
     try {
-      // Load token
+      // Load token from repository
       const token = await this.tokenRepository.findById(command.tokenId);
       if (!token) {
         throw new BadRequestException(`Token not found: ${command.tokenId}`);
       }
 
-      if (token.getIsLocked()) {
+      const tokenAddress = token.getAddress().toString();
+
+      // Get curve address for this token
+      const curveAddress = await this.factoryContract.getCurve(tokenAddress);
+      if (!curveAddress) {
+        throw new BadRequestException(
+          `No bonding curve found for token: ${tokenAddress}`,
+        );
+      }
+
+      // Check if token is locked on-chain
+      const isLocked = await this.bondingCurveContract.getLock(curveAddress);
+      if (isLocked) {
         throw new BadRequestException(
           'Token is locked and cannot be traded on bonding curve',
         );
       }
 
-      // Execute buy on bonding curve
-      const buyResult = token.executeBuy(command.amountInPUSH);
+      // Read current on-chain state
+      const curveData = await this.coreContract.getCurveData(curveAddress);
+      const virtualReserves =
+        await this.bondingCurveContract.getVirtualReserves(curveAddress);
+      const realReserves =
+        await this.bondingCurveContract.getReserves(curveAddress);
 
-      // Calculate new market cap
-      const newMarketCap = MarketCap.fromBigInt(
-        (token.getTotalSupply() / BigInt(10 ** token.getDecimals())) *
-          buyResult.newPrice.toBigInt(),
+      // Calculate expected output using bonding curve formula
+      // amountOut = getAmountOut(amountIn, k, reserveIn, reserveOut)
+      const totalNativeReserve =
+        virtualReserves.virtualNativeReserve + realReserves.nativeReserves;
+      const totalTokenReserve =
+        virtualReserves.virtualTokenReserve + realReserves.tokenReserves;
+
+      const amountOut = await this.coreContract.getAmountOut(
+        command.amountInPUSH,
+        curveData.k,
+        totalNativeReserve,
+        totalTokenReserve,
       );
 
-      // Update metrics
+      // Calculate new reserves after buy
+      const newNativeReserve = totalNativeReserve + command.amountInPUSH;
+      const newTokenReserve = totalTokenReserve - amountOut;
+
+      // Calculate new price after buy
+      const newPrice =
+        newTokenReserve > 0n ? newNativeReserve / newTokenReserve : 0n;
+
+      // Calculate new market cap
+      const newMarketCap =
+        (token.getTotalSupply() / BigInt(10 ** token.getDecimals())) * newPrice;
+
+      // Update token with on-chain data
+      const newReserveBalance = ReserveBalance.create(
+        realReserves.nativeReserves + command.amountInPUSH,
+        realReserves.tokenReserves - amountOut,
+        virtualReserves.virtualNativeReserve,
+        virtualReserves.virtualTokenReserve,
+      );
+
       token.updateMetrics(
-        buyResult.newPrice,
-        newMarketCap,
-        buyResult.newReserveBalance,
+        TokenPrice.fromBigInt(newPrice),
+        MarketCap.fromBigInt(newMarketCap),
+        newReserveBalance,
       );
 
       // Save updated token state
@@ -86,31 +133,36 @@ export class BuyTokenHandler implements ICommandHandler<BuyTokenCommand> {
 
       // Record trade as immutable history
       const tradeId = `${command.transactionHash}-buy`;
-      const trade = Trade.createBuy(
-        tradeId,
-        command.tokenId,
-        command.buyer,
-        command.amountInPUSH,
-        buyResult.amountOut,
-        buyResult.newPrice.toBigInt(),
-        command.transactionHash,
-        command.blockNumber,
-        new Date(),
-      );
 
-      await this.tradeRepository.save(trade);
+      // Check if trade already exists (idempotency)
+      const existingTrade = await this.tradeRepository.findById(tradeId);
+      if (!existingTrade) {
+        const trade = Trade.createBuy(
+          tradeId,
+          command.tokenId,
+          command.buyer,
+          command.amountInPUSH,
+          amountOut,
+          newPrice,
+          command.transactionHash,
+          command.blockNumber,
+          new Date(),
+        );
+
+        await this.tradeRepository.save(trade);
+      }
 
       // Check graduation threshold
       const graduationReady = token.isReadyForGraduation();
 
       this.logger.log(
-        `Buy executed: ${buyResult.amountOut} tokens at ${buyResult.newPrice.toBigInt()} PUSH/token`,
+        `Buy executed: ${amountOut} tokens at ${newPrice} PUSH/token`,
       );
 
       return {
-        amountOut: buyResult.amountOut,
-        newPrice: buyResult.newPrice.toBigInt(),
-        newMarketCap: newMarketCap.toBigInt(),
+        amountOut,
+        newPrice,
+        newMarketCap,
         graduationReady,
       };
     } catch (error) {

@@ -43,7 +43,7 @@ export class TokenPrice extends ValueObject {
         throw new Error('Price cannot be negative');
       }
       return new TokenPrice(bigint);
-    } catch (error) {
+    } catch {
       throw new Error(`Invalid price format: ${price}`);
     }
   }

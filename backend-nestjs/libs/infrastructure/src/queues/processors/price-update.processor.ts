@@ -7,6 +7,17 @@ import { CacheService } from '../../services/cache/cache.service';
 import { PrismaService } from '@core';
 
 /**
+ * Interface for price update result
+ */
+interface PriceUpdateResult {
+  success: boolean;
+  message?: string;
+  totalProcessed?: number;
+  successCount?: number;
+  results?: Array<{ address: string; price: number; success: boolean }>;
+}
+
+/**
  * Price Update Processor
  *
  * Fetches and updates token prices from external sources
@@ -33,7 +44,7 @@ export class PriceUpdateProcessor {
       tokenId?: string;
       chainId?: string;
     }>,
-  ): Promise<any> {
+  ): Promise<PriceUpdateResult> {
     try {
       const { tokenAddresses = [], tokenId, chainId = 'ethereum' } = job.data;
 

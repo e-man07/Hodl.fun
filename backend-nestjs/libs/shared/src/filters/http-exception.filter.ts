@@ -31,20 +31,31 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }`,
     );
 
-    let responseData: any = {
+    type JsonValue = string | number | boolean | null | object | undefined;
+    interface ErrorResponse extends Record<string, JsonValue> {
+      success: boolean;
+      statusCode: number;
+      timestamp: string;
+      path: string;
+      message?: string;
+      error?: string;
+    }
+
+    let responseData: ErrorResponse = {
       success: false,
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
     };
 
-    if (typeof exceptionResponse === 'object') {
+    if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+      const errorObj = exceptionResponse as Record<string, JsonValue>;
       responseData = {
         ...responseData,
-        ...(exceptionResponse as any),
+        ...errorObj,
       };
     } else {
-      responseData.message = exceptionResponse;
+      responseData.message = exceptionResponse as string;
     }
 
     response.status(status).json(responseData);

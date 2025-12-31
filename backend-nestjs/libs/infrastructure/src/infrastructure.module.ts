@@ -14,8 +14,11 @@ import {
   PriceUpdateProcessor,
   PortfolioSyncProcessor,
   TradeIndexingProcessor,
+  FeeVaultTrackingProcessor,
 } from './queues';
 import { QueueService } from './queues/queue.service';
+import { ContractsModule } from './contracts/contracts.module';
+import { IndexerModule } from './indexer/indexer.module';
 
 /**
  * Infrastructure Module
@@ -42,9 +45,15 @@ import { QueueService } from './queues/queue.service';
  * - PriceUpdateProcessor: Update prices from external feeds
  * - PortfolioSyncProcessor: Sync user portfolios with latest prices
  * - TradeIndexingProcessor: Index blockchain trades into database
+ * - FeeVaultTrackingProcessor: Poll and track FeeVault balance changes
  */
 @Module({
-  imports: [ConfigModule, getQueueConfigs()],
+  imports: [
+    ConfigModule,
+    getQueueConfigs(),
+    ContractsModule, // Smart contract services
+    IndexerModule, // Blockchain event indexing
+  ],
   providers: [
     // Repositories
     ...REPOSITORY_PROVIDERS,
@@ -59,6 +68,7 @@ import { QueueService } from './queues/queue.service';
     PriceUpdateProcessor,
     PortfolioSyncProcessor,
     TradeIndexingProcessor,
+    FeeVaultTrackingProcessor,
     // Queue Management
     QueueService,
   ],
@@ -72,6 +82,9 @@ import { QueueService } from './queues/queue.service';
     PriceFeedService,
     // Queue Management
     QueueService,
+    // Modules (ContractsModule is @Global, IndexerModule for explicit access)
+    ContractsModule,
+    IndexerModule,
   ],
 })
 export class InfrastructureModule {}

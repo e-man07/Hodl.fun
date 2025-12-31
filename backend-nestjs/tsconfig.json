@@ -37,5 +37,13 @@
       "@shared/*": ["libs/shared/src/*"],
       "@shared": ["libs/shared/src/index"]
     }
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "**/__tests__/**"
+  ]
 }

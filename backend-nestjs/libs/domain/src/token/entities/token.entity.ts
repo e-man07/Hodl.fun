@@ -24,6 +24,7 @@ import { NewATHMarketCapEvent } from '../events/new-ath-market-cap.event';
 export class Token extends AggregateRoot {
   private id: string;
   private address: TokenAddress;
+  private curveAddress: string | null; // Bonding curve contract address
   private name: string;
   private symbol: string;
   private creator: string;
@@ -47,6 +48,7 @@ export class Token extends AggregateRoot {
   private constructor(
     id: string,
     address: TokenAddress,
+    curveAddress: string | null,
     name: string,
     symbol: string,
     creator: string,
@@ -70,6 +72,7 @@ export class Token extends AggregateRoot {
     super();
     this.id = id;
     this.address = address;
+    this.curveAddress = curveAddress;
     this.name = name;
     this.symbol = symbol;
     this.creator = creator;
@@ -103,6 +106,7 @@ export class Token extends AggregateRoot {
   static create(
     id: string,
     address: TokenAddress,
+    curveAddress: string,
     name: string,
     symbol: string,
     creator: string,
@@ -128,14 +132,15 @@ export class Token extends AggregateRoot {
       (totalSupply / BigInt(10 ** decimals)) * (virtualNativeReserve / virtualTokenReserve),
     );
 
-    // Graduation threshold: 100 PUSH (scaled to 1e18)
-    const graduationThreshold = MarketCap.fromNumber(100);
+    // Graduation threshold: 1,000,000 PUSH (1M PUSH for Uniswap graduation)
+    const graduationThreshold = MarketCap.fromNumber(1_000_000);
 
     const now = new Date();
 
     const token = new Token(
       id,
       address,
+      curveAddress,
       name,
       symbol,
       creator,
@@ -157,7 +162,7 @@ export class Token extends AggregateRoot {
       graduationThreshold,
     );
 
-    (token as any).addDomainEvent(
+    token.apply(
       new TokenCreatedEvent(
         id,
         address.toString(),
@@ -301,7 +306,7 @@ export class Token extends AggregateRoot {
       this.athPrice = newPrice;
       this.athPriceTimestamp = now;
       athPriceUpdated = true;
-      (this as any).addDomainEvent(
+      this.apply(
         new NewATHPriceEvent(
           this.id,
           this.address.toString(),
@@ -316,7 +321,7 @@ export class Token extends AggregateRoot {
       this.athMarketCap = newMarketCap;
       this.athMarketCapTimestamp = now;
       athMarketCapUpdated = true;
-      (this as any).addDomainEvent(
+      this.apply(
         new NewATHMarketCapEvent(
           this.id,
           this.address.toString(),
@@ -327,7 +332,7 @@ export class Token extends AggregateRoot {
     }
 
     // Always publish metric update event
-    (this as any).addDomainEvent(
+    this.apply(
       new TokenMetricsUpdatedEvent(
         this.id,
         this.address.toString(),
@@ -356,7 +361,7 @@ export class Token extends AggregateRoot {
     this.isLocked = true;
     this.updatedAt = new Date();
 
-    (this as any).addDomainEvent(
+    this.apply(
       new TokenLockedEvent(
         this.id,
         this.address.toString(),
@@ -386,7 +391,7 @@ export class Token extends AggregateRoot {
     this.listingTimestamp = now;
     this.updatedAt = now;
 
-    (this as any).addDomainEvent(
+    this.apply(
       new TokenListedEvent(
         this.id,
         this.address.toString(),
@@ -433,6 +438,15 @@ export class Token extends AggregateRoot {
 
   getAddress(): TokenAddress {
     return this.address;
+  }
+
+  getCurveAddress(): string | null {
+    return this.curveAddress;
+  }
+
+  setCurveAddress(curveAddress: string): void {
+    this.curveAddress = curveAddress.toLowerCase();
+    this.updatedAt = new Date();
   }
 
   getName(): string {
@@ -519,6 +533,7 @@ export class Token extends AggregateRoot {
   static reconstruct(data: {
     id: string;
     address: string;
+    curveAddress: string | null;
     name: string;
     symbol: string;
     creator: string;
@@ -552,6 +567,7 @@ export class Token extends AggregateRoot {
     return new Token(
       data.id,
       TokenAddress.create(data.address),
+      data.curveAddress,
       data.name,
       data.symbol,
       data.creator,

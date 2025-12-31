@@ -40,6 +40,7 @@ export class CreateTokenHandler implements ICommandHandler<CreateTokenCommand> {
       const token = Token.create(
         command.tokenId,
         TokenAddress.create(command.tokenAddress),
+        command.curveAddress,
         command.name,
         command.symbol,
         command.creator,

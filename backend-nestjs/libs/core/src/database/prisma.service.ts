@@ -29,7 +29,7 @@ export class PrismaService
 
     // Log queries in development
     if (process.env.NODE_ENV === 'development') {
-      (this.$on as any)('query', (e: any) => {
+      this.$on('query' as never, (e: { query: string; duration: number }) => {
         this.logger.debug(
           `Query: ${e.query} - Duration: ${e.duration}ms`,
         );
@@ -37,7 +37,7 @@ export class PrismaService
     }
 
     // Log errors always
-    (this.$on as any)('error', (e: any) => {
+    this.$on('error' as never, (e: { message: string }) => {
       this.logger.error(`Database error: ${e.message}`);
     });
 

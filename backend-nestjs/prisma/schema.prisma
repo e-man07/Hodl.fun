@@ -16,6 +16,7 @@ datasource db {
 model Token {
   id              String   @id @default(cuid())
   address         String   @unique @db.VarChar(42)
+  curveAddress    String?  @db.VarChar(42) // Bonding curve contract address
   name            String   @db.VarChar(100)
   symbol          String   @db.VarChar(20)
   creator         String   @db.VarChar(42)
@@ -42,10 +43,13 @@ model Token {
   // Real-time metrics (updated by workers)
   currentPrice    String   @default("0") @db.VarChar(78) // Current token price in wei (as string for BigInt precision)
   marketCap       String   @default("0") @db.VarChar(78) // Current market cap in wei (as string for BigInt precision)
-  volume24h       Float    @default(0) // 24h trading volume in ETH
+  volume24h       String   @default("0") @db.VarChar(78) // 24h trading volume in native currency (BigInt as string)
+  volume7d        String   @default("0") @db.VarChar(78) // 7d trading volume in native currency (BigInt as string)
+  volumeTotal     String   @default("0") @db.VarChar(78) // Total trading volume in native currency (BigInt as string)
   priceChange24h  Float    @default(0) // 24h price change percentage
   currentSupply   String   @default("0") @db.VarChar(78) // Current circulating supply
   holderCount     Int      @default(0) // Cached holder count
+  tradeCount      Int      @default(0) // Total number of trades
   metricsUpdatedAt DateTime? // Last time metrics were updated
 
   // All-Time High (ATH) tracking
@@ -59,7 +63,7 @@ model Token {
   isListed        Boolean  @default(false) // Token listed on full DEX (Uniswap V3)
   uniswapV3Pool   String?  @db.VarChar(42) // Uniswap V3 pool address after graduation
   listingTimestamp DateTime? // When token was listed on DEX
-  graduationThreshold String @default("100000000000000000000") @db.VarChar(78) // 100 ETH in wei
+  graduationThreshold String @default("1000000000000000000000000") @db.VarChar(78) // 1,000,000 PUSH (1M) in wei
 
   // Relations
   holders      Holder[]
@@ -68,6 +72,7 @@ model Token {
 
   // Indexes
   @@index([address])
+  @@index([curveAddress])
   @@index([creator])
   @@index([createdAt(sort: Desc)])
   @@index([tradingEnabled])
@@ -216,6 +221,96 @@ model MarketStat {
 }
 
 // ============================================
+// PRICE HISTORY TABLE
+// Tracks token price over time for charts
+// ============================================
+model PriceHistory {
+  id              String   @id @default(cuid())
+  tokenAddress    String   @db.VarChar(42)
+  price           String   @db.VarChar(78) // Price in wei (BigInt as string)
+  marketCap       String   @db.VarChar(78) // Market cap in wei (BigInt as string)
+  volume          String   @default("0") @db.VarChar(78) // Volume for this period
+  timestamp       DateTime @default(now())
+  blockNumber     BigInt
+
+  // OHLCV data for candles (optional, populated by aggregation)
+  open            String?  @db.VarChar(78)
+  high            String?  @db.VarChar(78)
+  low             String?  @db.VarChar(78)
+  close           String?  @db.VarChar(78)
+  interval        String?  @db.VarChar(10) // '1m', '5m', '15m', '1h', '4h', '1d'
+
+  @@index([tokenAddress, timestamp(sort: Desc)])
+  @@index([tokenAddress, interval, timestamp(sort: Desc)])
+  @@index([blockNumber])
+  @@map("price_history")
+}
+
+// ============================================
+// CREATOR FEES TABLE
+// Tracks accumulated and claimed creator fees
+// ============================================
+model CreatorFee {
+  id                String   @id @default(cuid())
+  creatorAddress    String   @db.VarChar(42)
+  tokenAddress      String   @db.VarChar(42)
+  accumulatedAmount String   @default("0") @db.VarChar(78) // Total accumulated fees (BigInt as string)
+  claimedAmount     String   @default("0") @db.VarChar(78) // Total claimed fees (BigInt as string)
+  pendingAmount     String   @default("0") @db.VarChar(78) // Pending = accumulated - claimed
+  lastClaimAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([creatorAddress, tokenAddress])
+  @@index([creatorAddress])
+  @@index([tokenAddress])
+  @@index([creatorAddress, accumulatedAmount(sort: Desc)])
+  @@map("creator_fees")
+}
+
+// ============================================
+// BLOCKCHAIN EVENTS TABLE
+// Stores all indexed blockchain events for querying
+// ============================================
+model BlockchainEvent {
+  id              String   @id @default(cuid())
+  eventType       String   @db.VarChar(50) // CreateCurve, Buy, Sell, Sync, Lock, Listing, etc.
+  tokenAddress    String?  @db.VarChar(42)
+  userAddress     String?  @db.VarChar(42) // Creator, buyer, or seller
+  data            Json     // Event-specific data
+  transactionHash String   @db.VarChar(66)
+  blockNumber     BigInt
+  logIndex        Int
+  timestamp       DateTime @default(now())
+
+  @@unique([transactionHash, logIndex])
+  @@index([eventType, timestamp(sort: Desc)])
+  @@index([tokenAddress, eventType, timestamp(sort: Desc)])
+  @@index([userAddress, eventType, timestamp(sort: Desc)])
+  @@index([blockNumber])
+  @@map("blockchain_events")
+}
+
+// ============================================
+// INDEXER STATE TABLE
+// Tracks indexer checkpoint for recovery
+// ============================================
+model IndexerState {
+  id                  String   @id @default("main")
+  lastProcessedBlock  BigInt   @default(0)
+  lastProcessedAt     DateTime @default(now())
+  chainId             Int      @default(42101)
+  isRunning           Boolean  @default(false)
+  errorCount          Int      @default(0)
+  lastError           String?  @db.Text
+  lastErrorAt         DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("indexer_state")
+}
+
+// ============================================
 // ENUMS
 // ============================================
 
@@ -229,4 +324,25 @@ enum TransactionStatus {
   PENDING
   SUCCESS
   FAILED
+}
+
+// ============================================
+// FEE VAULT SNAPSHOTS TABLE
+// Tracks FeeVault balance changes over time
+// Since FeeVault doesn't emit events, we poll and store snapshots
+// ============================================
+model FeeVaultSnapshot {
+  id                String   @id @default(cuid())
+  totalAssets       String   @db.VarChar(78) // Total WPUSH assets in vault
+  totalSupply       String   @db.VarChar(78) // Total vault shares
+  pricePerShare     String   @db.VarChar(78) // Price per share (scaled by 1e18)
+  blockNumber       BigInt   // Block number when snapshot was taken
+  timestamp         DateTime @default(now())
+
+  // Calculated delta from previous snapshot
+  assetsDelta       String?  @db.VarChar(78) // Change in assets since last snapshot
+
+  @@index([timestamp(sort: Desc)])
+  @@index([blockNumber(sort: Desc)])
+  @@map("fee_vault_snapshots")
 }

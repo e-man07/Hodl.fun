@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { InfrastructureModule } from '@infrastructure';
 
 // Token handlers
 import {
@@ -23,6 +24,11 @@ import {
 import {
   PORTFOLIO_EVENT_HANDLERS,
 } from './portfolio/event-handlers';
+
+// Trade handlers
+import {
+  TRADE_QUERY_HANDLERS,
+} from './trade/queries';
 
 /**
  * Application Module
@@ -49,6 +55,7 @@ import {
       delimiter: '.',
       maxListeners: 20,
     }),
+    forwardRef(() => InfrastructureModule),
   ],
   providers: [
     // Commands (modify state)
@@ -57,6 +64,7 @@ import {
     // Queries (read state)
     ...TOKEN_QUERY_HANDLERS,
     ...PORTFOLIO_QUERY_HANDLERS,
+    ...TRADE_QUERY_HANDLERS,
     // Event Handlers (side effects from events)
     ...TOKEN_EVENT_HANDLERS,
     ...PORTFOLIO_EVENT_HANDLERS,

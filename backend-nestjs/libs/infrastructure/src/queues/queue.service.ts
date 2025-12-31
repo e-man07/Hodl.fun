@@ -1,7 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
+import { Queue, JobCounts } from 'bull';
 import { QueueName } from './config/queue-config';
+
+/**
+ * Interface for queue statistics
+ */
+interface QueueStats {
+  metadata: JobCounts;
+  graduation: JobCounts;
+  price: JobCounts;
+  portfolio: JobCounts;
+  trades: JobCounts;
+}
 
 /**
  * Queue Service
@@ -145,7 +156,7 @@ export class QueueService {
   /**
    * Get queue statistics
    */
-  async getQueueStats(): Promise<Record<string, any>> {
+  async getQueueStats(): Promise<QueueStats> {
     const stats = {
       metadata: await this.metadataQueue.getJobCounts(),
       graduation: await this.graduationQueue.getJobCounts(),

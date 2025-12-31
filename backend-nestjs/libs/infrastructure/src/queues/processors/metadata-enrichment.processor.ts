@@ -30,7 +30,7 @@ export class MetadataEnrichmentProcessor {
       tokenAddress: string;
       ipfsHash: string;
     }>,
-  ): Promise<any> {
+  ): Promise<{ tokenAddress: string; ipfsHash: string; success: boolean }> {
     try {
       const { tokenAddress, ipfsHash } = job.data;
 
