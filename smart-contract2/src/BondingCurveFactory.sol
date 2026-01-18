@@ -429,10 +429,80 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
         if (amount == 0) {
             revert NoFeesToClaim();
         }
-        
+
         creatorFees[msg.sender] = 0;
         IERC20(wNative).safeTransfer(msg.sender, amount);
         emit CreatorFeesClaimed(msg.sender, amount);
+    }
+
+    /**
+     * @notice Update listing fee
+     * @param _listingFee New listing fee amount
+     * @dev Only admin can call this.
+     */
+    function setListingFee(uint256 _listingFee) external override onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 oldFee = config.listingFee;
+        config.listingFee = _listingFee;
+        emit SetListingFee(oldFee, _listingFee);
+    }
+
+    /**
+     * @notice Update deploy fee
+     * @param _deployFee New deploy fee amount
+     * @dev Only admin can call this.
+     */
+    function setDeployFee(uint256 _deployFee) external override onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 oldFee = config.deployFee;
+        config.deployFee = _deployFee;
+        emit SetDeployFee(oldFee, _deployFee);
+    }
+
+    /**
+     * @notice Update virtual reserves for new curves
+     * @param _virtualNative New virtual native reserve
+     * @param _virtualToken New virtual token reserve
+     * @dev Only admin can call this. Only affects new curves created after update.
+     */
+    function setVirtualReserves(uint256 _virtualNative, uint256 _virtualToken) external override onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_virtualNative == 0 || _virtualToken == 0) {
+            revert InvalidReserves();
+        }
+        config.virtualNative = _virtualNative;
+        config.virtualToken = _virtualToken;
+        config.k = _virtualNative * _virtualToken;
+        emit SetVirtualReserves(_virtualNative, _virtualToken, config.k);
+    }
+
+    /**
+     * @notice Update fee configuration
+     * @param _feeDenominator New fee denominator
+     * @param _feeNumerator New fee numerator
+     * @dev Only admin can call this. Only affects new curves created after update.
+     */
+    function setFeeConfig(uint8 _feeDenominator, uint16 _feeNumerator) external override onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_feeDenominator == 0) {
+            revert InvalidFeeConfig();
+        }
+        if (_feeNumerator >= _feeDenominator) {
+            revert InvalidFeeConfig();
+        }
+        config.feeDenominator = _feeDenominator;
+        config.feeNumerator = _feeNumerator;
+        emit SetFeeConfig(_feeDenominator, _feeNumerator);
+    }
+
+    /**
+     * @notice Update DEX fee tier
+     * @param _dexFee New DEX fee tier (500, 3000, or 10000)
+     * @dev Only admin can call this. Only affects new curves created after update.
+     */
+    function setDexFee(uint24 _dexFee) external override onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_dexFee != 500 && _dexFee != 3000 && _dexFee != 10000) {
+            revert InvalidFeeConfig();
+        }
+        uint24 oldFee = config.dexFee;
+        config.dexFee = _dexFee;
+        emit SetDexFee(oldFee, _dexFee);
     }
 
     /**

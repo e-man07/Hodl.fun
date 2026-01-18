@@ -81,6 +81,21 @@ interface IBondingCurveFactory {
     /// @notice Emitted when creator fees are claimed
     event CreatorFeesClaimed(address indexed creator, uint256 amount);
 
+    /// @notice Emitted when listing fee is updated
+    event SetListingFee(uint256 oldFee, uint256 newFee);
+
+    /// @notice Emitted when deploy fee is updated
+    event SetDeployFee(uint256 oldFee, uint256 newFee);
+
+    /// @notice Emitted when virtual reserves are updated
+    event SetVirtualReserves(uint256 virtualNative, uint256 virtualToken, uint256 k);
+
+    /// @notice Emitted when fee configuration is updated
+    event SetFeeConfig(uint8 feeDenominator, uint16 feeNumerator);
+
+    /// @notice Emitted when DEX fee tier is updated
+    event SetDexFee(uint24 oldFee, uint24 newFee);
+
     /**
      * @notice Initialize factory with configuration
      * @param params Initialization parameters
@@ -175,5 +190,42 @@ interface IBondingCurveFactory {
      * @dev Only admin can call this. Only affects new curves created after update.
      */
     function setGraduationMarketCap(uint256 _graduationMarketCap) external;
+
+    /**
+     * @notice Update listing fee
+     * @param _listingFee New listing fee amount
+     * @dev Only admin can call this.
+     */
+    function setListingFee(uint256 _listingFee) external;
+
+    /**
+     * @notice Update deploy fee
+     * @param _deployFee New deploy fee amount
+     * @dev Only admin can call this.
+     */
+    function setDeployFee(uint256 _deployFee) external;
+
+    /**
+     * @notice Update virtual reserves for new curves
+     * @param _virtualNative New virtual native reserve
+     * @param _virtualToken New virtual token reserve
+     * @dev Only admin can call this. Only affects new curves created after update.
+     */
+    function setVirtualReserves(uint256 _virtualNative, uint256 _virtualToken) external;
+
+    /**
+     * @notice Update fee configuration
+     * @param _feeDenominator New fee denominator
+     * @param _feeNumerator New fee numerator
+     * @dev Only admin can call this. Only affects new curves created after update.
+     */
+    function setFeeConfig(uint8 _feeDenominator, uint16 _feeNumerator) external;
+
+    /**
+     * @notice Update DEX fee tier
+     * @param _dexFee New DEX fee tier (500, 3000, or 10000)
+     * @dev Only admin can call this. Only affects new curves created after update.
+     */
+    function setDexFee(uint24 _dexFee) external;
 }
 

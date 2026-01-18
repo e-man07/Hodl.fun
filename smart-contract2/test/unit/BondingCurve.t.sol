@@ -525,4 +525,280 @@ contract BondingCurveTest is Test {
 
         assertEq(marketCap, expectedMarketCap, "Market cap calculation mismatch");
     }
+
+    // ============ Test: Pause Functionality ============
+
+    function testPauseByAdmin() public {
+        (address curve_, ) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        // Admin (core) should be able to pause
+        // Note: Core has DEFAULT_ADMIN_ROLE on the bonding curve
+        vm.prank(address(core));
+        bc.pause();
+
+        assertTrue(bc.paused(), "Curve should be paused");
+    }
+
+    function testUnpauseByAdmin() public {
+        (address curve_, ) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        vm.startPrank(address(core));
+        bc.pause();
+        bc.unpause();
+        vm.stopPrank();
+
+        assertFalse(bc.paused(), "Curve should be unpaused");
+    }
+
+    function testPauseByNonAdminReverts() public {
+        (address curve_, ) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        vm.prank(user1);
+        vm.expectRevert();
+        bc.pause();
+    }
+
+    function testUnpauseByNonAdminReverts() public {
+        (address curve_, ) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        vm.prank(address(core));
+        bc.pause();
+
+        vm.prank(user1);
+        vm.expectRevert();
+        bc.unpause();
+    }
+
+    function testBuyWhenPausedReverts() public {
+        (address curve_, address token_) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        // Pause the curve
+        vm.prank(address(core));
+        bc.pause();
+
+        // Try to buy
+        uint256 amountNative = 1 ether;
+        vm.startPrank(user1);
+        wNative.deposit{value: amountNative}();
+        wNative.approve(address(core), amountNative);
+
+        vm.expectRevert();
+        core.exactInBuy(amountNative, 0, token_, user1, block.timestamp + 1000);
+        vm.stopPrank();
+    }
+
+    function testSellWhenPausedReverts() public {
+        (address curve_, address token_) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        // First buy some tokens
+        uint256 amountNative = 1 ether;
+        vm.startPrank(user1);
+        wNative.deposit{value: amountNative}();
+        wNative.approve(address(core), amountNative);
+        core.exactInBuy(amountNative, 0, token_, user1, block.timestamp + 1000);
+
+        uint256 tokensBalance = IERC20(token_).balanceOf(user1);
+        vm.stopPrank();
+
+        // Pause the curve
+        vm.prank(address(core));
+        bc.pause();
+
+        // Try to sell
+        vm.startPrank(user1);
+        IERC20(token_).approve(address(core), tokensBalance);
+
+        vm.expectRevert();
+        core.exactInSell(tokensBalance, 0, token_, user1, user1, block.timestamp + 1000);
+        vm.stopPrank();
+    }
+
+    function testBuyAfterUnpause() public {
+        (address curve_, address token_) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        // Pause and unpause
+        vm.startPrank(address(core));
+        bc.pause();
+        bc.unpause();
+        vm.stopPrank();
+
+        // Buy should work
+        uint256 amountNative = 1 ether;
+        vm.startPrank(user1);
+        wNative.deposit{value: amountNative}();
+        wNative.approve(address(core), amountNative);
+        core.exactInBuy(amountNative, 0, token_, user1, block.timestamp + 1000);
+        vm.stopPrank();
+
+        uint256 balance = IERC20(token_).balanceOf(user1);
+        assertGt(balance, 0, "Should have received tokens");
+    }
+
+    // ============ Test: Getters ============
+
+    function testGetLock() public {
+        (address curve_, ) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        assertFalse(bc.getLock(), "Should not be locked initially");
+    }
+
+    function testGetIsListing() public {
+        (address curve_, ) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        assertFalse(bc.getIsListing(), "Should not be listed initially");
+    }
+
+    function testGetFeeConfig() public {
+        (address curve_, ) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        (uint8 denom, uint16 num) = bc.getFeeConfig();
+        assertEq(denom, feeDenominator);
+        assertEq(num, feeNumerator);
+    }
+
+    function testGetFactory() public {
+        (address curve_, ) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        assertEq(bc.getFactory(), address(factory));
+    }
+
+    function testGetGraduationMarketCap() public {
+        (address curve_, ) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        assertEq(bc.getGraduationMarketCap(), graduationMarketCap);
+    }
+
+    function testGetReserves() public {
+        (address curve_, address token_) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        (uint256 nativeRes, uint256 tokenRes) = bc.getReserves();
+        assertEq(nativeRes, 0, "Native reserves should be 0 initially");
+        // Token reserves track actual reserves, not balances
+        // Initially, tokens are minted to the curve but reserves track traded amounts
+        assertTrue(tokenRes == 0 || tokenRes == IERC20(token_).balanceOf(curve_), "Token reserves should be 0 or match balance");
+    }
+
+    function testGetVirtualReservesAfterTrade() public {
+        (address curve_, address token_) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        (uint256 vNativeBefore, uint256 vTokenBefore) = bc.getVirtualReserves();
+
+        // Buy tokens
+        uint256 amountNative = 1 ether;
+        vm.startPrank(user1);
+        wNative.deposit{value: amountNative}();
+        wNative.approve(address(core), amountNative);
+        core.exactInBuy(amountNative, 0, token_, user1, block.timestamp + 1000);
+        vm.stopPrank();
+
+        (uint256 vNativeAfter, uint256 vTokenAfter) = bc.getVirtualReserves();
+
+        assertGt(vNativeAfter, vNativeBefore, "Virtual native should increase after buy");
+        assertLt(vTokenAfter, vTokenBefore, "Virtual token should decrease after buy");
+    }
+
+    // ============ Test: ATH Market Cap ============
+
+    function testATHMarketCapTracking() public {
+        (address curve_, address token_) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        (uint256 athMc1, uint256 timestamp1) = bc.getATHMarketCap();
+        // ATH market cap is initialized during curve creation
+
+        vm.warp(block.timestamp + 10);
+
+        // Buy to increase market cap
+        uint256 amountNative = 1 ether;
+        vm.startPrank(user1);
+        wNative.deposit{value: amountNative}();
+        wNative.approve(address(core), amountNative);
+        core.exactInBuy(amountNative, 0, token_, user1, block.timestamp + 1000);
+        vm.stopPrank();
+
+        (uint256 athMc2, uint256 timestamp2) = bc.getATHMarketCap();
+        assertGt(athMc2, athMc1, "ATH market cap should increase after buy");
+        assertGt(timestamp2, timestamp1, "ATH market cap timestamp should update");
+    }
+
+    // ============ Test: Edge Cases for Buy/Sell ============
+
+    function testBuyWhenLocked() public {
+        (address curve_, address token_) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        // Buy until locked
+        uint256 i = 0;
+        while (!bc.getLock() && i < 100) {
+            uint256 buyAmount = 0.5 ether;
+            vm.startPrank(user1);
+            wNative.deposit{value: buyAmount}();
+            wNative.approve(address(core), buyAmount);
+            core.exactInBuy(buyAmount, 0, token_, user1, block.timestamp + 1000);
+            vm.stopPrank();
+            i++;
+        }
+
+        assertTrue(bc.getLock(), "Should be locked");
+
+        // Try to buy more
+        uint256 amountNative = 0.1 ether;
+        vm.startPrank(user1);
+        wNative.deposit{value: amountNative}();
+        wNative.approve(address(core), amountNative);
+        vm.expectRevert();
+        core.exactInBuy(amountNative, 0, token_, user1, block.timestamp + 1000);
+        vm.stopPrank();
+    }
+
+    function testSellWhenLocked() public {
+        (address curve_, address token_) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        // Buy until locked
+        uint256 i = 0;
+        while (!bc.getLock() && i < 100) {
+            uint256 amountNative = 0.5 ether;
+            vm.startPrank(user1);
+            wNative.deposit{value: amountNative}();
+            wNative.approve(address(core), amountNative);
+            core.exactInBuy(amountNative, 0, token_, user1, block.timestamp + 1000);
+            vm.stopPrank();
+            i++;
+        }
+
+        assertTrue(bc.getLock(), "Should be locked");
+
+        // Try to sell
+        uint256 tokensBalance = IERC20(token_).balanceOf(user1);
+        vm.startPrank(user1);
+        IERC20(token_).approve(address(core), tokensBalance);
+        vm.expectRevert();
+        core.exactInSell(tokensBalance, 0, token_, user1, user1, block.timestamp + 1000);
+        vm.stopPrank();
+    }
+
+    // ============ Test: CORE_ROLE Constant ============
+
+    function testCoreRoleConstant() public {
+        (address curve_, ) = createTestToken(creator);
+        BondingCurve bc = BondingCurve(curve_);
+
+        bytes32 expectedRole = keccak256("CORE_ROLE");
+        assertEq(bc.CORE_ROLE(), expectedRole);
+    }
 }

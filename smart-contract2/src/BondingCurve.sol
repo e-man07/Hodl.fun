@@ -5,6 +5,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IBondingCurve.sol";
@@ -22,7 +23,7 @@ import "./utils/LiquidityAmounts.sol";
  * @notice Upgradeable bonding curve contract implementing constant product AMM
  * @dev One bonding curve per token, uses UUPS upgradeable pattern
  */
-contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, UUPSUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable {
+contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, UUPSUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Role for core contract
@@ -135,6 +136,7 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         __UUPSUpgradeable_init();
         __AccessControl_init();
         __ReentrancyGuard_init();
+        __Pausable_init();
 
         // Validate token address
         if (_token == address(0)) {
@@ -205,7 +207,7 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
      * @dev Follows CEI pattern: Checks → Effects → Interactions
      * @dev Validates amountOut matches constant product formula to prevent manipulation
      */
-    function buy(address to, uint256 amountOut) external override nonReentrant onlyRole(CORE_ROLE) {
+    function buy(address to, uint256 amountOut) external override nonReentrant whenNotPaused onlyRole(CORE_ROLE) {
         // Checks
         if (lock) {
             revert BondingCurveLocked();
@@ -302,7 +304,7 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
      * @dev Follows CEI pattern: Checks → Effects → Interactions
      * @dev Validates amountOut matches constant product formula to prevent manipulation
      */
-    function sell(address to, uint256 amountOut) external override nonReentrant onlyRole(CORE_ROLE) {
+    function sell(address to, uint256 amountOut) external override nonReentrant whenNotPaused onlyRole(CORE_ROLE) {
         // Checks
         if (lock) {
             revert BondingCurveLocked();
@@ -441,7 +443,7 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
             revert AlreadyListed();
         }
 
-        IBondingCurveFactory _factory = IBondingCurveFactory(factory);
+        IBondingCurveFactory _factory = IBondingCurveFactory(getFactory());
         address dexFactory = _factory.getDexFactory();
         uint24 fee = _factory.getDexFee(); // Get V3 fee tier (500, 3000, or 10000)
 
@@ -852,7 +854,7 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         }
 
         // SECURITY: Get DEX factory for pool verification
-        address dexFactory = IBondingCurveFactory(factory).getDexFactory();
+        address dexFactory = IBondingCurveFactory(getFactory()).getDexFactory();
         if (dexFactory == address(0)) {
             revert InvalidAddress();
         }
@@ -860,7 +862,7 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         // SECURITY: Verify caller is the expected Uniswap V3 pool
         // Calculate what the pool address should be based on the factory
         address expectedPool = IUniswapV3Factory(dexFactory)
-            .getPool(token0, token1, IBondingCurveFactory(factory).getDexFee());
+            .getPool(token0, token1, IBondingCurveFactory(getFactory()).getDexFee());
 
         // SECURITY: Use custom error instead of require() for better gas efficiency
         // Verify caller is the exact pool we expect
@@ -882,6 +884,22 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         if (amount1Owed > 0) {
             IERC20(token1).safeTransfer(msg.sender, amount1Owed);
         }
+    }
+
+    /**
+     * @notice Pause the bonding curve (emergency stop)
+     * @dev Only admin can call this. Prevents buy/sell operations.
+     */
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    /**
+     * @notice Unpause the bonding curve
+     * @dev Only admin can call this. Re-enables buy/sell operations.
+     */
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
     }
 
     /**

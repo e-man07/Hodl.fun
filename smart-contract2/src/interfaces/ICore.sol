@@ -37,6 +37,12 @@ interface ICore {
         uint256 timestamp
     );
 
+    /// @notice Emitted when wrapped native token address is changed
+    event SetWNative(address indexed oldWNative, address indexed newWNative);
+
+    /// @notice Emitted when fee vault address is changed
+    event SetVault(address indexed oldVault, address indexed newVault);
+
     /**
      * @notice Create a new curve with initial liquidity
      * @param creator Creator address

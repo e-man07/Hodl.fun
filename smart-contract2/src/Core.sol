@@ -4,6 +4,7 @@ pragma solidity ^0.8.22;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/ICore.sol";
@@ -19,7 +20,7 @@ import "./utils/BondingCurveLibrary.sol";
  * @notice Upgradeable core orchestrator contract for bonding curve operations
  * @dev Handles all buy/sell operations, fee validation, and wrapped token management
  */
-contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable {
+contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Role for factory
@@ -27,13 +28,19 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
 
     /// @notice Factory address
     address public factory;
-    
-    /// @notice Wrapped native token
-    address public immutable wNative;
-    
-    /// @notice Fee vault
-    address public immutable vault;
-    
+
+    /// @notice Wrapped native token (immutable for gas efficiency, stored copy for proxy)
+    address public immutable wNativeImmutable;
+
+    /// @notice Fee vault (immutable for gas efficiency, stored copy for proxy)
+    address public immutable vaultImmutable;
+
+    /// @notice Stored wrapped native token (for proxy usage and upgradeability)
+    address private storedWNative;
+
+    /// @notice Stored fee vault (for proxy usage and upgradeability)
+    address private storedVault;
+
     /// @notice Initialization flag
     bool private isInitialized;
 
@@ -48,8 +55,8 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
 
     /// @notice Disable initializers in implementation
     constructor(address _wNative, address _vault) {
-        wNative = _wNative;
-        vault = _vault;
+        wNativeImmutable = _wNative;
+        vaultImmutable = _vault;
         _disableInitializers();
     }
 
@@ -65,9 +72,15 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
 
         __UUPSUpgradeable_init();
         __AccessControl_init();
+        __Pausable_init();
 
         factory = _factory;
         isInitialized = true;
+
+        // Store the immutable values in state for proxy usage
+        // Use immutable values if set (direct deployment), otherwise use msg.sender context
+        storedWNative = wNativeImmutable;
+        storedVault = vaultImmutable;
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         if (_factory != address(0)) {
@@ -89,6 +102,66 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             _revokeRole(FACTORY_ROLE, oldFactory);
         }
         _grantRole(FACTORY_ROLE, _factory);
+    }
+
+    /**
+     * @notice Set wrapped native token address (only admin)
+     * @param _wNative New wrapped native token address
+     * @dev Use with caution - changing this affects all future trades
+     */
+    function setWNative(address _wNative) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_wNative == address(0)) {
+            revert InvalidAddress();
+        }
+        address oldWNative = _getWNative();
+        storedWNative = _wNative;
+        emit SetWNative(oldWNative, _wNative);
+    }
+
+    /**
+     * @notice Set fee vault address (only admin)
+     * @param _vault New fee vault address
+     * @dev Use with caution - changing this affects where fees are sent
+     */
+    function setVault(address _vault) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_vault == address(0)) {
+            revert InvalidAddress();
+        }
+        address oldVault = _getVault();
+        storedVault = _vault;
+        emit SetVault(oldVault, _vault);
+    }
+
+    /**
+     * @notice Get the wrapped native token address
+     * @return wNative_ Wrapped native token address (stored if set, otherwise immutable)
+     */
+    function _getWNative() internal view returns (address wNative_) {
+        wNative_ = storedWNative != address(0) ? storedWNative : wNativeImmutable;
+    }
+
+    /**
+     * @notice Get the fee vault address
+     * @return vault_ Fee vault address (stored if set, otherwise immutable)
+     */
+    function _getVault() internal view returns (address vault_) {
+        vault_ = storedVault != address(0) ? storedVault : vaultImmutable;
+    }
+
+    /**
+     * @notice Get wrapped native token address (public getter)
+     * @return wNative_ Wrapped native token address
+     */
+    function wNative() external view returns (address wNative_) {
+        wNative_ = _getWNative();
+    }
+
+    /**
+     * @notice Get fee vault address (public getter)
+     * @return vault_ Fee vault address
+     */
+    function vault() external view returns (address vault_) {
+        vault_ = _getVault();
     }
 
     /**
@@ -120,7 +193,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         string memory tokenURI,
         uint256 amountIn,
         uint256 fee
-    ) external payable override returns (address curve_, address token_) {
+    ) external payable override whenNotPaused returns (address curve_, address token_) {
         if (!isInitialized) {
             revert NotInitialized();
         }
@@ -138,15 +211,18 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             revert InvalidFee();
         }
 
+        // Cache wNative address for gas efficiency
+        address _wNative = _getWNative();
+
         // Wrap native token if sent
         if (msg.value > 0) {
-            IWNative(wNative).deposit{value: msg.value}();
+            IWNative(_wNative).deposit{value: msg.value}();
         }
 
         // Pull wNative tokens from caller if amountIn or fee is provided
         uint256 totalNeeded = amountIn + fee;
         if (totalNeeded > 0) {
-            IERC20(wNative).safeTransferFrom(msg.sender, address(this), totalNeeded);
+            IERC20(_wNative).safeTransferFrom(msg.sender, address(this), totalNeeded);
         }
 
         // Create curve and token
@@ -167,7 +243,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             );
 
             // Transfer wrapped native to curve
-            IERC20(wNative).safeTransfer(curve_, amountIn);
+            IERC20(_wNative).safeTransfer(curve_, amountIn);
 
             // Get balance before buy to calculate actual tokens received (after fee)
             uint256 balanceBefore = IERC20(token_).balanceOf(address(this));
@@ -186,7 +262,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
 
         // Transfer deploy fee to vault
         if (fee > 0) {
-            IERC20(wNative).safeTransfer(vault, fee);
+            IERC20(_wNative).safeTransfer(_getVault(), fee);
         }
 
         emit CreateCurve(creator, curve_, token_, tokenURI, name, symbol);
@@ -206,7 +282,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         address token,
         address to,
         uint256 deadline
-    ) external payable override ensure(deadline) {
+    ) external payable override ensure(deadline) whenNotPaused {
         if (!isInitialized) {
             revert NotInitialized();
         }
@@ -216,9 +292,12 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             revert InvalidAddress();
         }
 
+        // Cache wNative address for gas efficiency
+        address _wNative = _getWNative();
+
         // Wrap native token if sent
         if (msg.value > 0) {
-            IWNative(wNative).deposit{value: msg.value}();
+            IWNative(_wNative).deposit{value: msg.value}();
         }
 
         // Get curve
@@ -228,11 +307,11 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         }
 
         IBondingCurve curveContract = IBondingCurve(curve);
-        
+
         // Get curve data
         (uint256 virtualNative, uint256 virtualToken) = curveContract.getVirtualReserves();
         uint256 k = curveContract.getK();
-        
+
         // Calculate output
         uint256 amountOut = BondingCurveLibrary.getAmountOut(
             amountIn,
@@ -249,7 +328,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         _checkFee(curve, amountIn);
 
         // Pull wrapped native from caller and transfer to curve
-        IERC20(wNative).safeTransferFrom(msg.sender, curve, amountIn);
+        IERC20(_wNative).safeTransferFrom(msg.sender, curve, amountIn);
 
         // Execute buy
         curveContract.buy(to, amountOut);
@@ -274,7 +353,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         address token,
         address to,
         uint256 deadline
-    ) external payable override ensure(deadline) {
+    ) external payable override ensure(deadline) whenNotPaused {
         if (!isInitialized) {
             revert NotInitialized();
         }
@@ -284,9 +363,12 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             revert InvalidAddress();
         }
 
+        // Cache wNative address for gas efficiency
+        address _wNative = _getWNative();
+
         // Wrap native token if sent
         if (msg.value > 0) {
-            IWNative(wNative).deposit{value: msg.value}();
+            IWNative(_wNative).deposit{value: msg.value}();
         }
 
         // Get curve
@@ -296,11 +378,11 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         }
 
         IBondingCurve curveContract = IBondingCurve(curve);
-        
+
         // Get curve data
         (uint256 virtualNative, uint256 virtualToken) = curveContract.getVirtualReserves();
         uint256 k = curveContract.getK();
-        
+
         // Calculate required input
         uint256 amountIn = BondingCurveLibrary.getAmountIn(
             amountOut,
@@ -317,7 +399,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         _checkFee(curve, amountIn);
 
         // Pull wrapped native from caller and transfer to curve
-        IERC20(wNative).safeTransferFrom(msg.sender, curve, amountIn);
+        IERC20(_wNative).safeTransferFrom(msg.sender, curve, amountIn);
 
         // Execute buy
         curveContract.buy(to, amountOut);
@@ -344,7 +426,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         address from,
         address to,
         uint256 deadline
-    ) external override ensure(deadline) {
+    ) external override ensure(deadline) whenNotPaused {
         if (!isInitialized) {
             revert NotInitialized();
         }
@@ -409,7 +491,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         address from,
         address to,
         uint256 deadline
-    ) external override ensure(deadline) {
+    ) external override ensure(deadline) whenNotPaused {
         if (!isInitialized) {
             revert NotInitialized();
         }
@@ -514,7 +596,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
      * @return vault_ Fee vault address
      */
     function getFeeVault() external view override returns (address vault_) {
-        vault_ = vault;
+        vault_ = _getVault();
     }
 
     /**
@@ -541,6 +623,22 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
             revert InvalidAddress();
         }
         return IBondingCurve(curve).calculateMarketCap();
+    }
+
+    /**
+     * @notice Pause the contract (emergency stop)
+     * @dev Only admin can call this. Pauses all trading and curve creation.
+     */
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    /**
+     * @notice Unpause the contract
+     * @dev Only admin can call this. Resumes all trading and curve creation.
+     */
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
     }
 
     /**
