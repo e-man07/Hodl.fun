@@ -26,6 +26,9 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
     /// @notice Role for factory
     bytes32 public constant FACTORY_ROLE = keccak256("FACTORY_ROLE");
 
+    /// @notice Role for emergency pause (separate from admin for instant response)
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+
     /// @notice Factory address
     address public factory;
 
@@ -83,6 +86,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
         storedVault = vaultImmutable;
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
+        _grantRole(PAUSER_ROLE, _owner); // Owner also gets pauser role initially
         if (_factory != address(0)) {
             _grantRole(FACTORY_ROLE, _factory);
         }
@@ -629,7 +633,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
      * @notice Pause the contract (emergency stop)
      * @dev Only admin can call this. Pauses all trading and curve creation.
      */
-    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
 
@@ -637,7 +641,7 @@ contract Core is ICore, Initializable, UUPSUpgradeable, AccessControlUpgradeable
      * @notice Unpause the contract
      * @dev Only admin can call this. Resumes all trading and curve creation.
      */
-    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
     }
 
