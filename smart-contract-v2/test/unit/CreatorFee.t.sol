@@ -242,9 +242,9 @@ contract CreatorFeeTest is Test {
         assertTrue(coreHasRole, "Core should have CORE_ROLE on BondingCurve");
     }
 
-    function testCreatorFeeDefaultIs10Percent() public {
+    function testCreatorFeeDefaultIs37Point5Percent() public {
         uint16 feeShare = factory.creatorFeeShare();
-        assertEq(feeShare, 1000, "Default creator fee share should be 10% (1000 basis points)");
+        assertEq(feeShare, 3750, "Default creator fee share should be 37.5% (3750 basis points)");
     }
 
     function testSellSplitsFeesCorrectly() public {
@@ -272,9 +272,12 @@ contract CreatorFeeTest is Test {
         );
 
         // Calculate expected fees
+        // Fee structure: 20% to liquidity reserve, then remaining 80% split between creator (37.5%) and platform (62.5%)
         uint256 totalFee = (sellAmountOut * feeNumerator) / feeDenominator;
-        uint256 expectedCreatorFee = (totalFee * 1000) / 10000; // 10% of fee
-        uint256 expectedPlatformFee = totalFee - expectedCreatorFee;
+        uint256 liquidityFee = (totalFee * 2000) / 10000; // 20%
+        uint256 remainingFee = totalFee - liquidityFee; // 80%
+        uint256 expectedCreatorFee = (remainingFee * 3750) / 10000; // 37.5% of remaining = 30% of total
+        uint256 expectedPlatformFee = remainingFee - expectedCreatorFee; // 62.5% of remaining = 50% of total
 
         // Get initial balances
         uint256 factoryBalanceBefore = wNative.balanceOf(address(factory));
@@ -372,8 +375,11 @@ contract CreatorFeeTest is Test {
                 vToken,
                 vNative
             );
+            // Fee structure: 20% to liquidity reserve, then remaining 80% split between creator (37.5%) and platform
             uint256 totalFee = (sellAmountOut * feeNumerator) / feeDenominator;
-            uint256 creatorFee = (totalFee * 1000) / 10000;
+            uint256 liquidityFee = (totalFee * 2000) / 10000; // 20%
+            uint256 remainingFee = totalFee - liquidityFee; // 80%
+            uint256 creatorFee = (remainingFee * 3750) / 10000; // 37.5% of remaining
             totalCreatorFees += creatorFee;
 
             core.exactInSell(tokensToSell, 0, token_, user1, user1, block.timestamp + 1000);
@@ -437,7 +443,7 @@ contract CreatorFeeTest is Test {
     function testAllFeesGoToPlatformWhenNoCreator() public {
         // Create token with address(0) as creator (shouldn't happen but test edge case)
         // Actually, we can't create with address(0) due to validation, so test with feeShare = 0
-        
+
         vm.prank(admin);
         factory.setCreatorFeeShare(0);
 
@@ -450,7 +456,7 @@ contract CreatorFeeTest is Test {
         core.exactInBuy(buyAmount, 0, token_, user1, block.timestamp + 1000);
 
         uint256 tokensToSell = IERC20(token_).balanceOf(user1);
-        
+
         (uint256 vNative, uint256 vToken) = BondingCurve(factory.getCurve(token_)).getVirtualReserves();
         uint256 sellAmountOut = BondingCurveLibrary.getAmountOut(
             tokensToSell,
@@ -458,7 +464,10 @@ contract CreatorFeeTest is Test {
             vToken,
             vNative
         );
-        uint256 expectedTotalFee = (sellAmountOut * feeNumerator) / feeDenominator;
+        uint256 totalFee = (sellAmountOut * feeNumerator) / feeDenominator;
+        // 20% of fee goes to liquidity reserve, 80% goes to platform when creatorFeeShare = 0
+        uint256 liquidityFee = (totalFee * 2000) / 10000; // 20%
+        uint256 expectedPlatformFee = totalFee - liquidityFee; // 80%
 
         uint256 vaultBalanceBefore = wNative.balanceOf(address(feeVault));
         IERC20(token_).approve(address(core), tokensToSell);
@@ -468,8 +477,8 @@ contract CreatorFeeTest is Test {
         uint256 vaultBalanceAfter = wNative.balanceOf(address(feeVault));
         assertEq(
             vaultBalanceAfter - vaultBalanceBefore,
-            expectedTotalFee,
-            "All fees should go to vault when creator fee share is 0%"
+            expectedPlatformFee,
+            "Platform fees should go to vault when creator fee share is 0% (minus liquidity reserve)"
         );
     }
 

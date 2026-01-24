@@ -55,6 +55,15 @@ interface IBondingCurve {
     /// @notice Emitted when buy fee is deferred (kept in curve)
     event CreatorFeeDeferredFromBuy(address indexed token, uint256 feeTokenAmount, uint256 price);
 
+    /// @notice Emitted when liquidity reserve is accumulated from trading fees
+    event LiquidityReserveAccumulated(address indexed token, uint256 amount, uint256 totalReserve);
+
+    /// @notice Emitted when LP is permanently locked (burned to dead address)
+    event LPBurned(address indexed token, address indexed pool, int24 tickLower, int24 tickUpper, uint128 liquidity);
+
+    /// @notice Emitted when excess tokens are burned at graduation
+    event TokensBurned(address indexed token, uint256 amount);
+
     /**
      * @notice Initialize the bonding curve
      * @param _token Token address

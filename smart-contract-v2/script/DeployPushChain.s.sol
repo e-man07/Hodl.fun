@@ -20,16 +20,19 @@ contract DeployPushChainScript is Script {
     address public constant DEX_FACTORY = address(0x0000000000000000000000000000000000000000); // TODO: Deploy or find Uniswap V2 Factory
     
     // Initialization parameters (values in PUSH - 18 decimals)
-    uint256 public constant DEPLOY_FEE = 0.01 ether; // 0.01 PUSH
-    uint256 public constant LISTING_FEE = 0.1 ether; // 0.1 PUSH
-    // Note: Token total supply is fixed at 100M tokens in Token.sol (hardcoded)
-    uint256 public constant VIRTUAL_NATIVE = 1 ether; // 1 PUSH virtual reserve
-    uint256 public constant VIRTUAL_TOKEN = 50_000_000 * 10**18; // 50M tokens virtual reserve
-    // Graduation market cap: 1M PUSH (~$20k at $0.02 per PUSH)
+    uint256 public constant DEPLOY_FEE = 2 ether; // 2 PUSH
+    uint256 public constant LISTING_FEE = 100 ether; // 100 PUSH
+    // Note: Token total supply is fixed at 1B tokens in Token.sol (hardcoded)
+    uint256 public constant VIRTUAL_NATIVE = 30_000 ether; // 30K PUSH virtual reserve (pump.fun style)
+    uint256 public constant VIRTUAL_TOKEN = 1_073_000_191 * 10**18; // ~1.073B tokens virtual reserve (pump.fun style)
+    // Graduation market cap: 690K PUSH (~$69K at $0.10 per PUSH)
     // Similar to pump.fun's approach - fixed native currency threshold
-    uint256 public constant GRADUATION_MARKET_CAP = 1_000_000 ether;
+    uint256 public constant GRADUATION_MARKET_CAP = 690_000 ether;
     uint8 public constant FEE_DENOMINATOR = 100;
-    uint16 public constant FEE_NUMERATOR = 1; // 1% fee
+    uint16 public constant FEE_NUMERATOR = 1; // 1% total fee
+    // Fee split: 0.2% liquidity reserve, 0.3% creator, 0.5% platform
+    // LP is permanently locked (burned) at graduation
+    // Adaptive V3 range: 0.25x to 4x graduation price
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");

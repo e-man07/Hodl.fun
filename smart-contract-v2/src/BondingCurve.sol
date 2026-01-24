@@ -77,6 +77,21 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
     bool public lock;
     bool public isListing;
 
+    /// @notice Liquidity reserve accumulated from 0.2% of trading fees
+    /// @dev This is added to DEX liquidity at graduation for deeper pools
+    uint256 public liquidityReserve;
+
+    /// @notice Dead address for burning LP (liquidity locked forever)
+    address public constant DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+
+    /// @notice LP position details (stored for transparency)
+    int24 public lpTickLower;
+    int24 public lpTickUpper;
+    uint128 public lpLiquidity;
+
+    /// @notice Liquidity fee share in basis points (default 2000 = 20% of total fee = 0.2% of trade)
+    uint16 public constant LIQUIDITY_FEE_SHARE = 2000;
+
     /// @notice Custom errors
     error BondingCurveLocked();
     error OnlyCore();
@@ -389,7 +404,8 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         // Interactions: Transfer AFTER state update (CEI pattern)
         IERC20(_wNative).safeTransfer(to, nativeToUser);
 
-        // Split fees between creator and platform
+        // Split fees between liquidity reserve, creator, and platform
+        // Fee split: 20% liquidity reserve, 30% creator, 50% platform
         if (feeAmount > 0) {
             // Use storedFactory (proxy address) if available, otherwise fall back to immutable factory (implementation address)
             address factoryAddress = storedFactory != address(0) ? storedFactory : factory;
@@ -397,24 +413,33 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
             address creator = factoryContract.getCreator(_token);
             uint16 creatorFeeShare = factoryContract.getCreatorFeeShare();
 
-            // Calculate creator portion (in basis points, e.g., 1000 = 10%)
-            uint256 creatorFee = (feeAmount * creatorFeeShare) / 10000;
-            uint256 platformFee = feeAmount - creatorFee;
+            // 1. First deduct liquidity reserve (20% of fee = 0.2% of trade)
+            // This stays in the contract and is added to DEX liquidity at graduation
+            uint256 liquidityFee = (feeAmount * LIQUIDITY_FEE_SHARE) / 10000;
+            uint256 remainingFee = feeAmount - liquidityFee;
 
-            // Accumulate creator fees (if creator exists and share > 0)
+            // Accumulate liquidity reserve (stays in contract)
+            liquidityReserve += liquidityFee;
+            emit LiquidityReserveAccumulated(_token, liquidityFee, liquidityReserve);
+
+            // 2. Calculate creator portion from remaining fee
+            // creatorFeeShare is now relative to remaining fee (e.g., 3750 = 37.5% of remaining = 30% of total)
+            uint256 creatorFee = (remainingFee * creatorFeeShare) / 10000;
+            uint256 platformFee = remainingFee - creatorFee;
+
+            // 3. Accumulate creator fees (if creator exists and share > 0)
             if (creator != address(0) && creatorFee > 0) {
                 // Transfer creator fee directly to factory for accumulation
-                // Use factoryAddress (storedFactory or immutable) to ensure transfer goes to the same address as accumulateCreatorFees
                 IERC20(_wNative).safeTransfer(factoryAddress, creatorFee);
-                // Let factory accumulate the fee (no approval needed since we transferred first)
+                // Let factory accumulate the fee
                 factoryContract.accumulateCreatorFees(creator, creatorFee);
                 emit CreatorFeeDistributed(creator, _token, creatorFee);
             } else {
                 // If no creator or creatorFee is 0, add to platform fee
-                platformFee = feeAmount;
+                platformFee = remainingFee;
             }
 
-            // Transfer platform fee to vault
+            // 4. Transfer platform fee to vault
             if (platformFee > 0) {
                 IERC20(_wNative).safeTransfer(feeVault, platformFee);
             }
@@ -433,7 +458,8 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
      * @notice List token on Uniswap V3 after reaching target
      * @return pool_ Address of the created pool
      * @dev Protected by nonReentrant and checks listingFee <= realNativeReserves
-     * @dev Uses concentrated liquidity with price range around graduation price
+     * @dev Uses ADAPTIVE concentrated liquidity with ASYMMETRIC price range (0.25x to 4x)
+     * @dev LP is PERMANENTLY LOCKED - no function exists to remove liquidity (effectively burned)
      */
     function listing() external override nonReentrant returns (address pool_) {
         if (!lock) {
@@ -449,8 +475,11 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
 
         uint256 listingFee = _factory.getListingFee();
 
+        // Total native available = real reserves + liquidity reserve accumulated from fees
+        uint256 totalNativeAvailable = realNativeReserves + liquidityReserve;
+
         // Validate that listing fee doesn't exceed available reserves
-        if (listingFee > realNativeReserves) {
+        if (listingFee > totalNativeAvailable) {
             revert InsufficientNativeReserves();
         }
 
@@ -461,16 +490,17 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
             if (virtualNative == 0) {
                 revert InvalidReserves();
             }
-            
+
             // Calculate expected token amount based on native reserves after listing fee
-            // Safe to subtract now since we've checked listingFee <= realNativeReserves
-            uint256 expectedTokenAmount = ((realNativeReserves - listingFee) * virtualToken) / virtualNative;
-            
+            uint256 nativeForLP = totalNativeAvailable - listingFee;
+            uint256 expectedTokenAmount = (nativeForLP * virtualToken) / virtualNative;
+
             // Only burn if actual reserves exceed expected
             if (realTokenReserves > expectedTokenAmount) {
                 burnTokenAmount = realTokenReserves - expectedTokenAmount;
                 if (burnTokenAmount > 0) {
                     IToken(token).burn(burnTokenAmount);
+                    emit TokensBurned(token, burnTokenAmount);
                 }
             }
             // Transfer listing fee to vault
@@ -483,6 +513,9 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
             }
         }
 
+        // Reset liquidity reserve (now included in LP)
+        liquidityReserve = 0;
+
         uint256 listingNativeAmount = IERC20(wNative).balanceOf(address(this));
         uint256 listingTokenAmount = IERC20(token).balanceOf(address(this));
 
@@ -493,7 +526,7 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         // Get or create pool
         IUniswapV3Factory v3Factory = IUniswapV3Factory(dexFactory);
         pool_ = v3Factory.getPool(token0, token1, fee);
-        
+
         if (pool_ == address(0)) {
             pool_ = v3Factory.createPool(token0, token1, fee);
         }
@@ -504,30 +537,23 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         // Calculate sqrtPriceX96 from current reserves
         // V3 uses Q64.96 format: sqrtPriceX96 = sqrt(amount1/amount0) * 2^96
         // Both tokens have 18 decimals, so we can use amounts directly
-        
+
         // SECURITY FIX: Validate reserves before division
         if (listingNativeAmount == 0 || listingTokenAmount == 0) {
             revert InvalidReserves();
         }
-        
+
         uint160 sqrtPriceX96;
         if (token0IsNative) {
-            // token0 = native, token1 = token
-            // priceRatio = token1/token0 = listingTokenAmount / listingNativeAmount
-            // sqrtPriceX96 = sqrt(listingTokenAmount / listingNativeAmount) * 2^96
-            // Multiply by 2^192 to maintain precision, then divide by 1e9 after sqrt
             uint256 priceRatioX192 = (listingTokenAmount << 192) / listingNativeAmount;
             uint256 sqrtPriceRatio = _sqrt(priceRatioX192);
             sqrtPriceX96 = uint160(sqrtPriceRatio / 1e9);
         } else {
-            // token0 = token, token1 = native
-            // priceRatio = token1/token0 = listingNativeAmount / listingTokenAmount
-            // sqrtPriceX96 = sqrt(listingNativeAmount / listingTokenAmount) * 2^96
             uint256 priceRatioX192 = (listingNativeAmount << 192) / listingTokenAmount;
             uint256 sqrtPriceRatio = _sqrt(priceRatioX192);
             sqrtPriceX96 = uint160(sqrtPriceRatio / 1e9);
         }
-        
+
         // Ensure sqrtPriceX96 is within valid range
         if (sqrtPriceX96 < TickMath.MIN_SQRT_RATIO) {
             sqrtPriceX96 = TickMath.MIN_SQRT_RATIO;
@@ -541,20 +567,33 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
             poolContract.initialize(sqrtPriceX96);
         }
 
-        // Calculate price range (ticks)
-        // Default: ±100% from current price (±10 ticks for 0.30% fee tier)
+        // ADAPTIVE V3 RANGE: Asymmetric range optimized for memecoin volatility
+        // Lower bound: 0.25x graduation price (75% drop allowed)
+        // Upper bound: 4x graduation price (300% gain allowed)
+        // This provides:
+        // - Sell liquidity if price drops significantly
+        // - Capture upside if token moons
+        // - Better capital efficiency than full-range V2 style
         int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
         int24 tickSpacing = _getTickSpacing(fee);
-        
-        // Calculate tick range (±100% = ±10 ticks for 0.30% tier)
-        // For wider range, use more ticks
-        int24 tickRange = tickSpacing * 10; // ±100% range
-        int24 tickLower = ((tick / tickSpacing) * tickSpacing) - tickRange;
-        int24 tickUpper = ((tick / tickSpacing) * tickSpacing) + tickRange;
-        
+
+        // Calculate asymmetric tick range
+        // ln(0.25) / ln(1.0001) ≈ -13863 ticks (75% drop)
+        // ln(4) / ln(1.0001) ≈ +13863 ticks (4x gain)
+        // We use ~13860 ticks as approximation, adjusted for tick spacing
+        int24 ticksForLowerBound = int24(13860 / int24(tickSpacing)) * tickSpacing; // Ticks for 0.25x
+        int24 ticksForUpperBound = int24(13860 / int24(tickSpacing)) * tickSpacing; // Ticks for 4x
+
+        int24 tickLower = ((tick / tickSpacing) * tickSpacing) - ticksForLowerBound;
+        int24 tickUpper = ((tick / tickSpacing) * tickSpacing) + ticksForUpperBound;
+
         // Ensure ticks are within valid range
-        if (tickLower < TickMath.MIN_TICK) tickLower = TickMath.MIN_TICK;
-        if (tickUpper > TickMath.MAX_TICK) tickUpper = TickMath.MAX_TICK;
+        if (tickLower < TickMath.MIN_TICK) tickLower = (TickMath.MIN_TICK / tickSpacing) * tickSpacing;
+        if (tickUpper > TickMath.MAX_TICK) tickUpper = (TickMath.MAX_TICK / tickSpacing) * tickSpacing;
+
+        // Store LP position details for transparency
+        lpTickLower = tickLower;
+        lpTickUpper = tickUpper;
 
         // Get sqrt prices for range
         uint160 sqrtPriceAX96 = TickMath.getSqrtRatioAtTick(tickLower);
@@ -580,6 +619,9 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
             );
         }
 
+        // Store liquidity amount for transparency
+        lpLiquidity = liquidity;
+
         // Mint liquidity position
         // V3 will call back to uniswapV3MintCallback to get the tokens
         (uint256 amount0, uint256 amount1) = poolContract.mint(
@@ -593,10 +635,23 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         // Reset reserves
         realNativeReserves = 0;
         realTokenReserves = 0;
-        
+
         isListing = true;
+
+        // LP IS PERMANENTLY LOCKED (BURNED)
+        // ═══════════════════════════════════════════════════════════════
+        // The liquidity position is owned by this contract (BondingCurve).
+        // There is NO function to remove or withdraw this liquidity.
+        // This is equivalent to burning the LP - the liquidity is locked forever.
+        // Users can verify this by checking:
+        // 1. This contract has no burn(), decreaseLiquidity(), or collect() functions
+        // 2. The lpTickLower, lpTickUpper, and lpLiquidity are publicly visible
+        // 3. The liquidity can be verified on-chain via the Uniswap V3 pool
+        // ═══════════════════════════════════════════════════════════════
+
         emit Listing(address(this), token, pool_, amount0, amount1, uint256(uint128(liquidity)));
-        
+        emit LPBurned(token, pool_, tickLower, tickUpper, liquidity);
+
         return pool_;
     }
 

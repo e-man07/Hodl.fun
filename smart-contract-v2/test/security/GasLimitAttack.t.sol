@@ -474,7 +474,7 @@ contract GasLimitAttackTest is Test {
 
         // Simulate worst case: large buy followed by large sell
         // Use smaller amount to avoid triggering graduation
-        uint256 amountNative = 5 ether;
+        uint256 amountNative = 0.5 ether;
         vm.startPrank(attacker);
         wNative.deposit{value: amountNative}();
         wNative.approve(address(core), amountNative);

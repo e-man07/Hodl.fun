@@ -78,7 +78,7 @@ Hodl.fun is a universal token launchpad built on Push Chain. The smart contract 
 │       TOKEN          │  │       WPUSH          │
 │     (ERC20)          │  │  (Wrapped Native)    │
 │                      │  │                      │
-│ • Fixed 100M supply  │  │ • deposit()          │
+│ • Fixed 1B supply    │  │ • deposit()          │
 │ • Minting by curve   │  │ • withdraw()         │
 │ • Burning for grad   │  │ • ERC20 compatible   │
 │ • tokenURI metadata  │  │ • Permit support     │
@@ -218,7 +218,7 @@ function setTokenURI(string memory tokenURI_)
 function tokenURI() returns (string memory)
 ```
 
-**Token Supply**: Fixed at 100,000,000 tokens (100M * 10^18)
+**Token Supply**: Fixed at 1,000,000,000 tokens (1B * 10^18)
 
 ### 5. FeeVault.sol (ERC4626)
 **Location**: `src/FeeVault.sol`
@@ -317,16 +317,16 @@ function withdrawWithPermit(uint256 amount, uint256 deadline, uint8 v, bytes32 r
 ### Factory Configuration
 ```solidity
 struct Config {
-    uint256 deployFee;           // Fee to create token (0.01 PUSH)
-    uint256 listingFee;          // Fee for DEX listing (0.1 PUSH)
-    uint256 virtualNative;       // Initial virtual PUSH reserve (1 PUSH)
-    uint256 virtualToken;        // Initial virtual token reserve (50M)
+    uint256 deployFee;           // Fee to create token (2 PUSH)
+    uint256 listingFee;          // Fee for DEX listing (100 PUSH)
+    uint256 virtualNative;       // Initial virtual PUSH reserve (30K PUSH)
+    uint256 virtualToken;        // Initial virtual token reserve (~1.073B)
     uint256 k;                   // virtualNative * virtualToken (constant product)
-    uint256 graduationMarketCap; // Threshold to trigger listing (1M PUSH)
+    uint256 graduationMarketCap; // Threshold to trigger listing (690K PUSH ≈ $69K)
     uint8 feeDenominator;        // Fee denominator (100)
-    uint16 feeNumerator;         // Fee numerator (1) → 1%
+    uint16 feeNumerator;         // Fee numerator (1) → 1% total fee
     uint24 dexFee;               // Uniswap V3 fee tier (3000 = 0.30%)
-    uint16 creatorFeeShare;      // Creator share in bps (1000 = 10%)
+    uint16 creatorFeeShare;      // Creator share in bps (3750 = 37.5% of distributed fee)
 }
 ```
 
@@ -396,7 +396,7 @@ Phase 1: CREATION
   │ 1. Factory deploys Token proxy (ERC1967)                                │
   │ 2. Factory deploys BondingCurve proxy (ERC1967)                         │
   │ 3. Token initialized with name, symbol, metadata                        │
-  │ 4. 100M tokens minted to BondingCurve                                   │
+  │ 4. 1B tokens minted to BondingCurve                                     │
   │ 5. BondingCurve initialized with virtual reserves                       │
   │ 6. Deploy fee (0.01 PUSH) sent to FeeVault                              │
   │ 7. If amountIn > 0: Initial buy executed                                │
@@ -515,7 +515,7 @@ PRICE CALCULATION
 MARKET CAP CALCULATION
 ═══════════════════════════════════════════════════════════════════════════════
   marketCap = (price * TOTAL_SUPPLY) / 1e18
-            = (price * 100M tokens) / 1e18
+            = (price * 1B tokens) / 1e18
 ```
 
 ### Price Curve Visualization
@@ -556,12 +556,12 @@ Price
 │                              FEE BREAKDOWN                                   │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-DEPLOY FEE: 0.01 PUSH
+DEPLOY FEE: 2 PUSH
 ═══════════════════════════════════════════════════════════════════════════════
   Paid when: Creating a new token
   Recipient: FeeVault (100%)
 
-LISTING FEE: 0.1 PUSH
+LISTING FEE: 100 PUSH
 ═══════════════════════════════════════════════════════════════════════════════
   Paid when: Token graduates to Uniswap V3
   Recipient: FeeVault (100%)
@@ -577,27 +577,38 @@ ON BUY:
   • Creator fee deferred to sell operations
 
 ON SELL:
-  ┌─────────────────────────────────────────────┐
-  │            Sell Amount: 100 PUSH            │
-  │                     │                       │
-  │         ┌───────────┴───────────┐           │
-  │         ▼                       ▼           │
-  │   User Receives: 99 PUSH   Fee: 1 PUSH      │
-  │                                 │           │
-  │                    ┌────────────┴────────┐  │
-  │                    ▼                     ▼  │
-  │           Creator: 0.1 PUSH     Platform: 0.9 PUSH
-  │           (10% of fee)          (90% of fee)
-  │                    │                     │  │
-  │                    ▼                     ▼  │
-  │           Factory           FeeVault        │
-  │           (accumulated)     (deposited)     │
-  └─────────────────────────────────────────────┘
+  ┌─────────────────────────────────────────────────────┐
+  │            Sell Amount: 100 PUSH                    │
+  │                     │                               │
+  │         ┌───────────┴───────────┐                   │
+  │         ▼                       ▼                   │
+  │   User Receives: 99 PUSH   Fee: 1 PUSH              │
+  │                                 │                   │
+  │              ┌──────────────────┼──────────────┐    │
+  │              ▼                  ▼              ▼    │
+  │   Liquidity Reserve    Creator: 0.3 PUSH  Platform │
+  │      0.2 PUSH          (30% of fee)       0.5 PUSH │
+  │   (20% of fee)                           (50% fee) │
+  │        │                    │                 │    │
+  │        ▼                    ▼                 ▼    │
+  │   BondingCurve         Factory           FeeVault  │
+  │   (for DEX LP)       (accumulated)      (deposited)│
+  └─────────────────────────────────────────────────────┘
+
+LIQUIDITY RESERVE:
+  • 0.2% of each trade accumulated in BondingCurve
+  • Added to DEX liquidity at graduation
+  • Creates deeper liquidity pools for high-volume tokens
 
 CREATOR FEE CLAIM:
   • Creator calls Factory.claimCreatorFees()
-  • Accumulated fees sent to creator
+  • Accumulated fees sent to creator immediately
   • Event: CreatorFeesClaimed(creator, amount)
+
+AT GRADUATION:
+  • Excess tokens are BURNED (deflationary)
+  • LP created with ADAPTIVE V3 RANGE (0.25x to 4x)
+  • LP is PERMANENTLY LOCKED (no withdrawal function exists)
 ```
 
 ---

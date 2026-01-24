@@ -612,9 +612,9 @@ contract LibraryBranchCoverageTest is Test {
 
         // Buy first
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         uint256 priceAfterBuy = BondingCurve(curve_).getCurrentPrice();
 
@@ -896,9 +896,9 @@ contract LibraryBranchCoverageTest is Test {
 
         // First buy tokens
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         uint256 tokenBalance = IERC20(token_).balanceOf(user1);
         IERC20(token_).approve(address(core), tokenBalance);

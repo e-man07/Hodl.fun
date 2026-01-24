@@ -115,8 +115,12 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             revert InvalidFeeConfig(); // Must be valid V3 fee tier
         }
 
-        // Initialize creator fee share (default 10% = 1000 basis points)
-        creatorFeeShare = 1000; // Can be updated later by admin
+        // Initialize creator fee share
+        // Fee split: 20% liquidity reserve (stays in curve), 80% distributed
+        // Of the 80%: Creator gets 37.5% (= 30% of total), Platform gets 62.5% (= 50% of total)
+        // So creatorFeeShare = 3750 basis points (37.5% of distributed fees)
+        // This results in: 0.2% liquidity, 0.3% creator, 0.5% platform from 1% total fee
+        creatorFeeShare = 3750; // Can be updated later by admin
 
         uint256 k = params.virtualNative * params.virtualToken;
         config = Config(

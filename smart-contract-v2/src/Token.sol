@@ -28,7 +28,7 @@ contract Token is
     bytes32 public constant CORE_ROLE = keccak256("CORE_ROLE");
     
     /// @notice Fixed total supply for all tokens
-    uint256 public constant TOTAL_SUPPLY = 100_000_000 * 10**18; // 100M tokens
+    uint256 public constant TOTAL_SUPPLY = 1_000_000_000 * 10**18; // 1B tokens
     
     /// @notice Token metadata URI
     string private _tokenURI;

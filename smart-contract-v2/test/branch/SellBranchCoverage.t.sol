@@ -121,9 +121,9 @@ contract SellBranchCoverageTest is Test {
 
         // Buy tokens first
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         uint256 tokenBalance = IERC20(token_).balanceOf(user1);
         assertTrue(tokenBalance > 0, "Should have tokens after buy");
@@ -144,9 +144,9 @@ contract SellBranchCoverageTest is Test {
         (, address token_) = createTestToken();
 
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         IERC20(token_).approve(address(core), 1e18);
 
@@ -161,9 +161,9 @@ contract SellBranchCoverageTest is Test {
         (, address token_) = createTestToken();
 
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         uint256 tokenBalance = IERC20(token_).balanceOf(user1);
         IERC20(token_).approve(address(core), tokenBalance);
@@ -215,9 +215,9 @@ contract SellBranchCoverageTest is Test {
         (, address token_) = createTestToken();
 
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         uint256 tokenBalance = IERC20(token_).balanceOf(user1);
         IERC20(token_).approve(address(core), tokenBalance);
@@ -233,9 +233,9 @@ contract SellBranchCoverageTest is Test {
         (, address token_) = createTestToken();
 
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         uint256 tokenBalance = IERC20(token_).balanceOf(user1);
         IERC20(token_).approve(address(core), tokenBalance);
@@ -293,9 +293,9 @@ contract SellBranchCoverageTest is Test {
         (, address token_) = createTestToken();
 
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         uint256 tokenBalance = IERC20(token_).balanceOf(user1);
         IERC20(token_).approve(address(core), tokenBalance);
@@ -313,9 +313,9 @@ contract SellBranchCoverageTest is Test {
         (, address token_) = createTestToken();
 
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         uint256 tokenBalance = IERC20(token_).balanceOf(user1);
         IERC20(token_).approve(address(core), tokenBalance);
@@ -336,9 +336,9 @@ contract SellBranchCoverageTest is Test {
 
         // Use smaller buy to avoid hitting graduation threshold (100 ether)
         vm.startPrank(user1);
-        wNative.deposit{value: 2 ether}();
-        wNative.approve(address(core), 2 ether);
-        core.exactInBuy(2 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         uint256 tokenBalance = IERC20(token_).balanceOf(user1);
         IERC20(token_).approve(address(core), tokenBalance);
@@ -362,18 +362,18 @@ contract SellBranchCoverageTest is Test {
 
         // Use smaller buys to avoid hitting graduation threshold (100 ether)
         vm.startPrank(user1);
-        wNative.deposit{value: 1 ether}();
-        wNative.approve(address(core), 1 ether);
-        core.exactInBuy(1 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.25 ether}();
+        wNative.approve(address(core), 0.25 ether);
+        core.exactInBuy(0.25 ether, 0, token_, user1, block.timestamp + 1000);
         vm.stopPrank();
 
         uint256 priceAfterUser1 = BondingCurve(curve_).getCurrentPrice();
 
         // User2 buys tokens (increases price)
         vm.startPrank(user2);
-        wNative.deposit{value: 2 ether}();
-        wNative.approve(address(core), 2 ether);
-        core.exactInBuy(2 ether, 0, token_, user2, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user2, block.timestamp + 1000);
         vm.stopPrank();
 
         uint256 priceAfterUser2 = BondingCurve(curve_).getCurrentPrice();
@@ -397,9 +397,9 @@ contract SellBranchCoverageTest is Test {
         (, address token_) = createTestToken();
 
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         uint256 tokenBalance = IERC20(token_).balanceOf(user1);
         IERC20(token_).approve(address(core), tokenBalance);
@@ -441,9 +441,9 @@ contract SellBranchCoverageTest is Test {
 
         // Buy tokens - use smaller amount to avoid graduation
         vm.startPrank(user1);
-        wNative.deposit{value: 2 ether}();
-        wNative.approve(address(core), 2 ether);
-        core.exactInBuy(2 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         uint256 tokenBalance = IERC20(token_).balanceOf(user1);
         IERC20(token_).approve(address(core), tokenBalance);
@@ -461,9 +461,9 @@ contract SellBranchCoverageTest is Test {
         (address curve_, address token_) = createTestToken();
 
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         // Try to call sell directly on BondingCurve without CORE_ROLE
         vm.expectRevert();
@@ -476,9 +476,9 @@ contract SellBranchCoverageTest is Test {
         (, address token_) = createTestToken();
 
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
         vm.stopPrank();
 
         // Pause core
@@ -500,9 +500,9 @@ contract SellBranchCoverageTest is Test {
         (, address token_) = createTestToken();
 
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
         vm.stopPrank();
 
         // Pause and unpause
@@ -525,9 +525,9 @@ contract SellBranchCoverageTest is Test {
         (, address token_) = createTestToken();
 
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         IERC20(token_).approve(address(core), 1e18);
 

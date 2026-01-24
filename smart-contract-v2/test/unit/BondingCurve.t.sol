@@ -172,7 +172,7 @@ contract BondingCurveTest is Test {
         Token t = Token(token_);
 
         assertEq(bc.token(), token_, "Token address mismatch");
-        assertEq(t.totalSupply(), 100_000_000 * 1e18, "Total supply not 100M");
+        assertEq(t.totalSupply(), 1_000_000_000 * 1e18, "Total supply not 1B");
 
         (uint256 vNative, uint256 vToken) = bc.getVirtualReserves();
         assertEq(vNative, virtualNative, "Virtual native mismatch");

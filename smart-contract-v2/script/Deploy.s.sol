@@ -19,16 +19,19 @@ contract DeployScript is Script {
     address public constant DEX_FACTORY = address(0x1234567890123456789012345678901234567890); // Update with actual DEX factory
     
     // Initialization parameters
-    uint256 public constant DEPLOY_FEE = 0.01 ether;
-    uint256 public constant LISTING_FEE = 0.1 ether;
-    // Note: Token total supply is fixed at 100M tokens in Token.sol (hardcoded)
-    uint256 public constant VIRTUAL_NATIVE = 1 ether;
-    uint256 public constant VIRTUAL_TOKEN = 50_000_000 * 10**18; // 50M tokens
-    // Graduation market cap: 1M native currency units (~$20k at $0.02 per token)
+    uint256 public constant DEPLOY_FEE = 2 ether; // 2 native tokens
+    uint256 public constant LISTING_FEE = 100 ether; // 100 native tokens
+    // Note: Token total supply is fixed at 1B tokens in Token.sol (hardcoded)
+    uint256 public constant VIRTUAL_NATIVE = 30_000 ether; // 30K native tokens (pump.fun style)
+    uint256 public constant VIRTUAL_TOKEN = 1_073_000_191 * 10**18; // ~1.073B tokens (pump.fun style)
+    // Graduation market cap: 690K native currency units (~$69K at $0.10 per token)
     // Similar to pump.fun's approach - fixed native currency threshold
-    uint256 public constant GRADUATION_MARKET_CAP = 1_000_000 ether;
+    uint256 public constant GRADUATION_MARKET_CAP = 690_000 ether;
     uint8 public constant FEE_DENOMINATOR = 100;
-    uint16 public constant FEE_NUMERATOR = 1; // 1% fee
+    uint16 public constant FEE_NUMERATOR = 1; // 1% total fee
+    // Fee split: 0.2% liquidity reserve, 0.3% creator, 0.5% platform
+    // LP is permanently locked (burned) at graduation
+    // Adaptive V3 range: 0.25x to 4x graduation price
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");

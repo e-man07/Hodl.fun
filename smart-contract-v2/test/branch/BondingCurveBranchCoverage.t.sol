@@ -435,9 +435,9 @@ contract BondingCurveBranchCoverageTest is Test {
 
         // Buy to increase price
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
         vm.stopPrank();
 
         (uint256 athPriceAfter, ) = BondingCurve(curve_).getATHPrice();
@@ -452,9 +452,9 @@ contract BondingCurveBranchCoverageTest is Test {
 
         // Buy to increase market cap
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
         vm.stopPrank();
 
         (uint256 athMcAfter, ) = BondingCurve(curve_).getATHMarketCap();
@@ -467,9 +467,9 @@ contract BondingCurveBranchCoverageTest is Test {
 
         // Buy first
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token_, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token_, user1, block.timestamp + 1000);
 
         (uint256 athPriceAfterBuy, ) = BondingCurve(curve_).getATHPrice();
         (uint256 athMcAfterBuy, ) = BondingCurve(curve_).getATHMarketCap();

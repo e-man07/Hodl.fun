@@ -480,7 +480,7 @@ contract CoreTest is Test {
     function testExactInSell() public {
         // Create curve and buy some tokens first
         uint256 fee = deployFee;
-        uint256 buyAmount = 5 ether;
+        uint256 buyAmount = 0.5 ether;
 
         vm.startPrank(creator);
         wNative.approve(address(core), fee + buyAmount);
@@ -519,7 +519,7 @@ contract CoreTest is Test {
     function testExactInSellInsufficientOutputReverts() public {
         // Create curve and buy some tokens first
         uint256 fee = deployFee;
-        uint256 buyAmount = 5 ether;
+        uint256 buyAmount = 0.5 ether;
 
         vm.startPrank(creator);
         wNative.approve(address(core), fee + buyAmount);
@@ -557,7 +557,7 @@ contract CoreTest is Test {
     function testExactOutSell() public {
         // Create curve and buy some tokens first
         uint256 fee = deployFee;
-        uint256 buyAmount = 5 ether;
+        uint256 buyAmount = 0.5 ether;
 
         vm.startPrank(creator);
         wNative.approve(address(core), fee + buyAmount);

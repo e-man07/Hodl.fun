@@ -84,7 +84,7 @@ contract TokenTest is Test {
     // ============ Constants Tests ============
 
     function testTotalSupplyConstant() public view {
-        assertEq(token.TOTAL_SUPPLY(), 100_000_000 * 10**18);
+        assertEq(token.TOTAL_SUPPLY(), 1_000_000_000 * 10**18);
     }
 
     function testBondingCurveRoleConstant() public view {

@@ -389,11 +389,11 @@ contract BondingCurveFactoryTest is Test {
         );
         vm.stopPrank();
 
-        // User buys tokens
+        // User buys tokens - use smaller amount to avoid graduation
         vm.startPrank(user1);
-        wNative.deposit{value: 5 ether}();
-        wNative.approve(address(core), 5 ether);
-        core.exactInBuy(5 ether, 0, token, user1, block.timestamp + 1000);
+        wNative.deposit{value: 0.5 ether}();
+        wNative.approve(address(core), 0.5 ether);
+        core.exactInBuy(0.5 ether, 0, token, user1, block.timestamp + 1000);
 
         // User sells tokens
         uint256 tokenBalance = IERC20(token).balanceOf(user1);

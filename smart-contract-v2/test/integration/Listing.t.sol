@@ -387,9 +387,9 @@ contract ListingIntegrationTest is Test {
         assertFalse(bc.getLock(), "Not locked initially");
         assertFalse(bc.getIsListing(), "Not listed initially");
 
-        // 2. Multiple users buy tokens
-        uint256 user1Tokens = buyTokens(user1, token_, 5 ether);
-        uint256 user2Tokens = buyTokens(user2, token_, 3 ether);
+        // 2. Multiple users buy tokens - use small amounts to not trigger graduation
+        uint256 user1Tokens = buyTokens(user1, token_, 0.5 ether);
+        uint256 user2Tokens = buyTokens(user2, token_, 0.3 ether);
 
         assertGt(user1Tokens, 0, "User1 should have tokens");
         assertGt(user2Tokens, 0, "User2 should have tokens");
