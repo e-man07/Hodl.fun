@@ -109,7 +109,7 @@ forge script script/Deploy.s.sol --rpc-url $RPC_URL --broadcast --verify
 ┌─────────────────────────────┐  ┌─────────────────────────────┐
 │      BONDINGCURVE.sol       │  │         TOKEN.sol           │
 │  One per token (proxy)      │  │  ERC20 Upgradeable (proxy)  │
-│  • buy() / sell()           │  │  • Fixed supply: 100M       │
+│  • buy() / sell()           │  │  • Fixed supply: 1B         │
 │  • Virtual reserves (k=x*y) │  │  • mint() - one-time        │
 │  • Real reserves tracking   │  │  • burn() - for graduation  │
 │  • ATH price/marketcap      │  │  • tokenURI for metadata    │
@@ -123,7 +123,7 @@ forge script script/Deploy.s.sol --rpc-url $RPC_URL --broadcast --verify
 - **BondingCurveFactory.sol**: Deploys Token+BondingCurve proxy pairs, stores global config
 - **BondingCurve.sol**: Per-token AMM implementing constant product (x * y = k)
 - **Token.sol**: Standard ERC20 with minting controlled by bonding curve
-- **FeeVault.sol**: ERC4626 vault collecting platform fees (1%) and creator fees (10% of fee)
+- **FeeVault.sol**: ERC4626 vault collecting platform fees (1%) and creator fees (30% of fee)
 - **WPUSH.sol**: Wrapped native token for ERC20 compatibility
 
 **Key Mechanics:**
@@ -226,7 +226,7 @@ src/
 ```solidity
 Core.createCurve(creator, name, symbol, tokenURI, amountIn, fee)
 // → Deploys Token proxy + BondingCurve proxy
-// → Mints 100M tokens to curve
+// → Mints 1B tokens to curve
 // → Optional initial buy with amountIn
 // → Collects deployFee to FeeVault
 // Events: CreateCurve, Buy (if amountIn > 0)
@@ -277,7 +277,7 @@ Core.exactInSell(amountIn, amountOutMin, token, from, to, deadline)
 | feeDenominator | uint8 | 100 | Fee calculation denominator |
 | feeNumerator | uint16 | 1 | Fee = amount * 1/100 = 1% |
 | dexFee | uint24 | 3000 | Uniswap V3 fee tier (0.30%) |
-| creatorFeeShare | uint16 | 1000 | 10% of fees go to creator |
+| creatorFeeShare | uint16 | 3750 | 30% of fees go to creator (37.5% of remaining after liquidity) |
 
 ### Bonding Curve Math (BondingCurveLibrary.sol)
 

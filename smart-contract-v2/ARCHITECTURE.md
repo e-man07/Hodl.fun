@@ -317,16 +317,16 @@ function withdrawWithPermit(uint256 amount, uint256 deadline, uint8 v, bytes32 r
 ### Factory Configuration
 ```solidity
 struct Config {
-    uint256 deployFee;           // Fee to create token (2 PUSH)
-    uint256 listingFee;          // Fee for DEX listing (100 PUSH)
-    uint256 virtualNative;       // Initial virtual PUSH reserve (30K PUSH)
-    uint256 virtualToken;        // Initial virtual token reserve (~1.073B)
+    uint256 deployFee;           // Fee to create token (0.01 PUSH)
+    uint256 listingFee;          // Fee for DEX listing (0.1 PUSH)
+    uint256 virtualNative;       // Initial virtual PUSH reserve (1 PUSH)
+    uint256 virtualToken;        // Initial virtual token reserve (50M tokens)
     uint256 k;                   // virtualNative * virtualToken (constant product)
-    uint256 graduationMarketCap; // Threshold to trigger listing (690K PUSH ≈ $69K)
+    uint256 graduationMarketCap; // Threshold to trigger listing (1M PUSH)
     uint8 feeDenominator;        // Fee denominator (100)
     uint16 feeNumerator;         // Fee numerator (1) → 1% total fee
     uint24 dexFee;               // Uniswap V3 fee tier (3000 = 0.30%)
-    uint16 creatorFeeShare;      // Creator share in bps (3750 = 37.5% of distributed fee)
+    uint16 creatorFeeShare;      // Creator share in bps (3750 = 37.5% of remaining = 30% of total)
 }
 ```
 
@@ -578,12 +578,12 @@ Price
 │                              FEE BREAKDOWN                                   │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-DEPLOY FEE: 2 PUSH
+DEPLOY FEE: 0.01 PUSH
 ═══════════════════════════════════════════════════════════════════════════════
   Paid when: Creating a new token
   Recipient: FeeVault (100%)
 
-LISTING FEE: 100 PUSH
+LISTING FEE: 0.1 PUSH
 ═══════════════════════════════════════════════════════════════════════════════
   Paid when: Token graduates to Uniswap V3
   Recipient: FeeVault (100%)
@@ -942,7 +942,7 @@ Block Explorer: https://donut.push.network/
 | Fee Denominator | 100 | Fee calculation denominator |
 | Fee Numerator | 1 | Fee calculation numerator (1%) |
 | DEX Fee | 3000 | Uniswap V3 fee tier (0.30%) |
-| Creator Fee Share | 1000 | Creator receives 10% of fees |
+| Creator Fee Share | 3750 | Creator receives 30% of total fee (37.5% of remaining after liquidity) |
 
 ### Deployed Addresses (Testnet)
 ```
