@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Hodl.fun is a universal token launchpad platform built on Push Chain. Users can launch and trade ERC20 tokens with bonding curve mechanics. The platform consists of three main components:
 - **frontend/**: Next.js 15 React application
 - **backend-nestjs/**: NestJS enterprise backend (API, Indexer, Worker services)
-- **smart-contract2/**: Foundry-based upgradeable smart contracts (v2)
+- **smart-contract-v2/**: Foundry-based upgradeable smart contracts (v2)
 
 ## Build and Development Commands
 
@@ -43,17 +43,25 @@ npm run test:cov               # Coverage report
 npm run test:e2e               # End-to-end tests
 ```
 
-### Smart Contracts (`/smart-contract2`)
+### Smart Contracts (`/smart-contract-v2`)
 ```bash
 forge build                    # Compile contracts
 forge test                     # Run all tests
 forge test -vvv                # Verbose test output
 forge test --match-test <name> # Run specific test
+forge test --match-contract <ContractName> # Run specific test contract
 forge coverage                 # Coverage report
+forge coverage --ir-minimum    # Coverage with IR optimization (more accurate)
 
 # Deployment
 forge script script/Deploy.s.sol --rpc-url $RPC_URL --broadcast --verify
 ```
+
+#### Testing Notes
+- **594+ tests** covering unit tests, integration tests, and branch coverage
+- Test files organized: `test/` (integration), `test/unit/` (unit), `test/branch/` (branch coverage)
+- **Known Forge bug**: `require(condition, "string")` format may show 0% branch coverage even when both branches are tested. Use `require(condition, Error())` with custom errors for accurate coverage reporting.
+- Branch coverage target: 80%+ (currently ~54% due to Forge reporting limitations)
 
 ## Architecture
 
@@ -188,7 +196,7 @@ BigInt values are stored as strings for precision.
 
 ## Smart Contract Deep Dive
 
-### File Structure (`/smart-contract2/src`)
+### File Structure (`/smart-contract-v2/src`)
 ```
 src/
 ├── Core.sol                    # Main orchestrator (entry point)
@@ -313,3 +321,46 @@ amountIn = newReserveIn - reserveIn
 - Proxies are deployed via `ERC1967Proxy`
 - `_authorizeUpgrade()` restricted to DEFAULT_ADMIN_ROLE
 - Factory deploys BondingCurve and Token as proxies sharing implementations
+
+## Production Readiness Checklist
+
+See `smart-contract-v2/AUDIT_REPORT.md` for detailed status. Key items:
+
+### Completed
+- ✅ 594+ passing tests (unit, integration, branch coverage)
+- ✅ Custom error selectors for gas optimization
+- ✅ Reentrancy protection on all state-changing functions
+- ✅ Access control with OpenZeppelin roles
+- ✅ Slippage protection and deadline validation
+- ✅ Virtual reserve bonding curve mechanics
+
+### Production Blockers
+1. **Professional Security Audit** - Required before mainnet
+2. **Multi-sig Wallet** - Deploy Gnosis Safe for admin operations
+3. **Timelock Controller** - Add delay to admin functions
+
+### Configuration TODOs (Before Mainnet)
+- Set real `DEX_FACTORY` address (Uniswap V3 on Push Chain mainnet)
+- Tune `GRADUATION_MARKET_CAP` based on market conditions
+- Consider `VIRTUAL_NATIVE` adjustment for launch economics
+
+## Common Smart Contract Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `InvalidTo()` | Zero address recipient | Use valid recipient address |
+| `Expired()` | Transaction past deadline | Increase deadline timestamp |
+| `ExcessiveInput()` | Slippage exceeded | Increase `amountOutMin` or retry |
+| `BondingCurveLocked()` | Curve graduated | Trade on Uniswap V3 instead |
+| `InsufficientOutput()` | Not enough tokens | Reduce buy amount |
+| `CallerNotCore()` | Direct curve call | Use Core.sol entry points |
+
+## Testing Gotchas
+
+1. **Graduation Threshold**: Default is 1M PUSH market cap. Large buys in tests may trigger graduation and lock the curve. Use smaller amounts or mock the threshold.
+
+2. **Virtual vs Real Reserves**: Tests must account for both. `getVirtualReserves()` returns the k-maintaining values, while `realNativeReserve` and `realTokenReserve` track actual balances.
+
+3. **Fee Calculations**: 1% platform fee is deducted before bonding curve math. When calculating expected outputs, subtract fee first.
+
+4. **ERC1967 Proxy Setup**: Tests need to deploy both implementation and proxy, then initialize via proxy. See `test/helpers/TestSetup.sol` for patterns.
