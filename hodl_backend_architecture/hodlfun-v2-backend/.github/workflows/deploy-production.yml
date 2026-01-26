@@ -1,0 +1,228 @@
+# name: Deploy to Production
+
+# on:
+#   push:
+#     tags:
+#       - 'v*'
+#   workflow_dispatch:
+#     inputs:
+#       image_tag:
+#         description: 'Image tag to deploy (e.g., staging-abc1234)'
+#         required: true
+#         type: string
+
+# env:
+#   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID_PRODUCTION }}
+#   REGION: us-central1
+#   CLUSTER_NAME: hodlfun-production-gke
+#   REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_PRODUCTION }}/hodlfun-production
+
+# jobs:
+#   build-and-push:
+#     name: Build and Push Docker Images
+#     runs-on: ubuntu-latest
+#     if: github.event_name == 'push'
+#     permissions:
+#       contents: read
+#       id-token: write
+
+#     outputs:
+#       image_tag: ${{ steps.meta.outputs.version }}
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Set up Docker Buildx
+#         uses: docker/setup-buildx-action@v3
+
+#       - name: Authenticate to Google Cloud
+#         uses: google-github-actions/auth@v2
+#         with:
+#           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
+#           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_PROD }}
+
+#       - name: Configure Docker for Artifact Registry
+#         run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev
+
+#       - name: Extract metadata
+#         id: meta
+#         run: |
+#           echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+#           echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+
+#       - name: Build and push API image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: .
+#           file: docker/Dockerfile
+#           target: api
+#           push: true
+#           tags: |
+#             ${{ env.REGISTRY }}/api:${{ steps.meta.outputs.version }}
+#             ${{ env.REGISTRY }}/api:latest
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+#           build-args: |
+#             BUILD_DATE=${{ steps.meta.outputs.date }}
+#             VERSION=${{ steps.meta.outputs.version }}
+
+#       - name: Build and push WebSocket image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: .
+#           file: docker/Dockerfile
+#           target: websocket
+#           push: true
+#           tags: |
+#             ${{ env.REGISTRY }}/websocket:${{ steps.meta.outputs.version }}
+#             ${{ env.REGISTRY }}/websocket:latest
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+
+#       - name: Build and push Indexer image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: .
+#           file: docker/Dockerfile
+#           target: indexer
+#           push: true
+#           tags: |
+#             ${{ env.REGISTRY }}/indexer:${{ steps.meta.outputs.version }}
+#             ${{ env.REGISTRY }}/indexer:latest
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+
+#       - name: Build and push Worker image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: .
+#           file: docker/Dockerfile
+#           target: worker
+#           push: true
+#           tags: |
+#             ${{ env.REGISTRY }}/worker:${{ steps.meta.outputs.version }}
+#             ${{ env.REGISTRY }}/worker:latest
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+
+#   deploy:
+#     name: Deploy to GKE
+#     runs-on: ubuntu-latest
+#     needs: build-and-push
+#     if: always() && (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped')
+#     permissions:
+#       contents: read
+#       id-token: write
+#     environment:
+#       name: production
+#       url: https://api.hodl.fun
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Set image tag
+#         id: set_tag
+#         run: |
+#           if [ "${{ github.event.inputs.image_tag }}" != "" ]; then
+#             echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+#           else
+#             echo "tag=${{ needs.build-and-push.outputs.image_tag }}" >> $GITHUB_OUTPUT
+#           fi
+
+#       - name: Authenticate to Google Cloud
+#         uses: google-github-actions/auth@v2
+#         with:
+#           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
+#           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_PROD }}
+
+#       - name: Get GKE credentials
+#         uses: google-github-actions/get-gke-credentials@v2
+#         with:
+#           cluster_name: ${{ env.CLUSTER_NAME }}
+#           location: ${{ env.REGION }}
+
+#       - name: Setup Kustomize
+#         uses: imranismail/setup-kustomize@v2
+
+#       - name: Update image tags
+#         run: |
+#           cd k8s/overlays/production
+#           kustomize edit set image \
+#             gcr.io/hodlfun/api=${{ env.REGISTRY }}/api:${{ steps.set_tag.outputs.tag }} \
+#             gcr.io/hodlfun/websocket=${{ env.REGISTRY }}/websocket:${{ steps.set_tag.outputs.tag }} \
+#             gcr.io/hodlfun/indexer=${{ env.REGISTRY }}/indexer:${{ steps.set_tag.outputs.tag }} \
+#             gcr.io/hodlfun/worker=${{ env.REGISTRY }}/worker:${{ steps.set_tag.outputs.tag }}
+
+#       - name: Run database migrations
+#         run: |
+#           kubectl run migrate-${{ github.sha }} \
+#             --image=${{ env.REGISTRY }}/api:${{ steps.set_tag.outputs.tag }} \
+#             --restart=Never \
+#             --namespace=hodlfun-production \
+#             --command -- npx prisma migrate deploy
+#           kubectl wait --for=condition=complete job/migrate-${{ github.sha }} -n hodlfun-production --timeout=120s || true
+#           kubectl delete pod migrate-${{ github.sha }} -n hodlfun-production --ignore-not-found
+
+#       - name: Deploy to GKE with rolling update
+#         run: |
+#           kustomize build k8s/overlays/production | kubectl apply -f -
+
+#           # Wait for rollouts with proper health checks
+#           kubectl rollout status deployment/prod-api -n hodlfun-production --timeout=600s
+#           kubectl rollout status deployment/prod-websocket -n hodlfun-production --timeout=600s
+#           kubectl rollout status deployment/prod-indexer -n hodlfun-production --timeout=600s
+#           kubectl rollout status deployment/prod-worker -n hodlfun-production --timeout=600s
+
+#       - name: Verify deployment health
+#         run: |
+#           # Check API health
+#           API_POD=$(kubectl get pods -n hodlfun-production -l app=api -o jsonpath='{.items[0].metadata.name}')
+#           kubectl exec -n hodlfun-production $API_POD -- curl -sf http://localhost:3000/health/ready || exit 1
+
+#           echo "Deployment verified successfully"
+
+#   rollback:
+#     name: Rollback on Failure
+#     runs-on: ubuntu-latest
+#     needs: deploy
+#     if: failure()
+#     permissions:
+#       contents: read
+#       id-token: write
+
+#     steps:
+#       - name: Authenticate to Google Cloud
+#         uses: google-github-actions/auth@v2
+#         with:
+#           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
+#           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_PROD }}
+
+#       - name: Get GKE credentials
+#         uses: google-github-actions/get-gke-credentials@v2
+#         with:
+#           cluster_name: ${{ env.CLUSTER_NAME }}
+#           location: ${{ env.REGION }}
+
+#       - name: Rollback deployments
+#         run: |
+#           kubectl rollout undo deployment/prod-api -n hodlfun-production
+#           kubectl rollout undo deployment/prod-websocket -n hodlfun-production
+#           kubectl rollout undo deployment/prod-indexer -n hodlfun-production
+#           kubectl rollout undo deployment/prod-worker -n hodlfun-production
+
+#   notify:
+#     name: Notify
+#     runs-on: ubuntu-latest
+#     needs: [build-and-push, deploy]
+#     if: always()
+#     steps:
+#       - name: Slack notification
+#         uses: 8398a7/action-slack@v3
+#         with:
+#           status: ${{ job.status }}
+#           fields: repo,message,commit,author,action,eventName,ref,workflow
+#         env:
+#           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+#         if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}

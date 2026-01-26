@@ -1,0 +1,35 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local"],
+  "pipeline": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "lint": {
+      "outputs": []
+    },
+    "lint:fix": {
+      "outputs": []
+    },
+    "typecheck": {
+      "outputs": []
+    },
+    "test": {
+      "outputs": ["coverage/**"],
+      "cache": false
+    },
+    "test:cov": {
+      "outputs": ["coverage/**"],
+      "cache": false
+    },
+    "test:e2e": {
+      "outputs": [],
+      "cache": false
+    },
+    "start:dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

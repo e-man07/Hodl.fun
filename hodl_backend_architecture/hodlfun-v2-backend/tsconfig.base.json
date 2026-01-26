@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2021",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@hodlfun/common": ["libs/common/src"],
+      "@hodlfun/common/*": ["libs/common/src/*"],
+      "@hodlfun/database": ["libs/database/src"],
+      "@hodlfun/database/*": ["libs/database/src/*"],
+      "@hodlfun/redis": ["libs/redis/src"],
+      "@hodlfun/redis/*": ["libs/redis/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist"]
+}

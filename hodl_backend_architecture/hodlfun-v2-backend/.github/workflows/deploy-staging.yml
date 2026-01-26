@@ -1,0 +1,169 @@
+# name: Deploy to Staging
+
+# on:
+#   push:
+#     branches: [develop]
+#   workflow_dispatch:
+
+# env:
+#   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID_STAGING }}
+#   REGION: us-central1
+#   CLUSTER_NAME: hodlfun-staging-gke
+#   REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_STAGING }}/hodlfun-staging
+
+# jobs:
+#   build-and-push:
+#     name: Build and Push Docker Images
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: read
+#       id-token: write
+
+#     outputs:
+#       image_tag: ${{ steps.meta.outputs.version }}
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Set up Docker Buildx
+#         uses: docker/setup-buildx-action@v3
+
+#       - name: Authenticate to Google Cloud
+#         uses: google-github-actions/auth@v2
+#         with:
+#           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+#           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+#       - name: Configure Docker for Artifact Registry
+#         run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev
+
+#       - name: Extract metadata
+#         id: meta
+#         run: |
+#           echo "version=staging-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+#           echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+
+#       - name: Build and push API image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: .
+#           file: docker/Dockerfile
+#           target: api
+#           push: true
+#           tags: |
+#             ${{ env.REGISTRY }}/api:${{ steps.meta.outputs.version }}
+#             ${{ env.REGISTRY }}/api:staging
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+#           build-args: |
+#             BUILD_DATE=${{ steps.meta.outputs.date }}
+#             VERSION=${{ steps.meta.outputs.version }}
+
+#       - name: Build and push WebSocket image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: .
+#           file: docker/Dockerfile
+#           target: websocket
+#           push: true
+#           tags: |
+#             ${{ env.REGISTRY }}/websocket:${{ steps.meta.outputs.version }}
+#             ${{ env.REGISTRY }}/websocket:staging
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+
+#       - name: Build and push Indexer image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: .
+#           file: docker/Dockerfile
+#           target: indexer
+#           push: true
+#           tags: |
+#             ${{ env.REGISTRY }}/indexer:${{ steps.meta.outputs.version }}
+#             ${{ env.REGISTRY }}/indexer:staging
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+
+#       - name: Build and push Worker image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: .
+#           file: docker/Dockerfile
+#           target: worker
+#           push: true
+#           tags: |
+#             ${{ env.REGISTRY }}/worker:${{ steps.meta.outputs.version }}
+#             ${{ env.REGISTRY }}/worker:staging
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+
+#   deploy:
+#     name: Deploy to GKE
+#     runs-on: ubuntu-latest
+#     needs: build-and-push
+#     permissions:
+#       contents: read
+#       id-token: write
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Authenticate to Google Cloud
+#         uses: google-github-actions/auth@v2
+#         with:
+#           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+#           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+#       - name: Get GKE credentials
+#         uses: google-github-actions/get-gke-credentials@v2
+#         with:
+#           cluster_name: ${{ env.CLUSTER_NAME }}
+#           location: ${{ env.REGION }}
+
+#       - name: Setup Kustomize
+#         uses: imranismail/setup-kustomize@v2
+
+#       - name: Update image tags
+#         run: |
+#           cd k8s/overlays/staging
+#           kustomize edit set image \
+#             gcr.io/hodlfun/api=${{ env.REGISTRY }}/api:${{ needs.build-and-push.outputs.image_tag }} \
+#             gcr.io/hodlfun/websocket=${{ env.REGISTRY }}/websocket:${{ needs.build-and-push.outputs.image_tag }} \
+#             gcr.io/hodlfun/indexer=${{ env.REGISTRY }}/indexer:${{ needs.build-and-push.outputs.image_tag }} \
+#             gcr.io/hodlfun/worker=${{ env.REGISTRY }}/worker:${{ needs.build-and-push.outputs.image_tag }}
+
+#       - name: Deploy to GKE
+#         run: |
+#           kustomize build k8s/overlays/staging | kubectl apply -f -
+#           kubectl rollout status deployment/staging-api -n hodlfun-staging --timeout=300s
+#           kubectl rollout status deployment/staging-websocket -n hodlfun-staging --timeout=300s
+#           kubectl rollout status deployment/staging-indexer -n hodlfun-staging --timeout=300s
+#           kubectl rollout status deployment/staging-worker -n hodlfun-staging --timeout=300s
+
+#       - name: Run database migrations
+#         run: |
+#           kubectl run migrate-${{ github.sha }} \
+#             --image=${{ env.REGISTRY }}/api:${{ needs.build-and-push.outputs.image_tag }} \
+#             --restart=Never \
+#             --namespace=hodlfun-staging \
+#             --command -- npx prisma migrate deploy
+#           kubectl wait --for=condition=complete job/migrate-${{ github.sha }} -n hodlfun-staging --timeout=120s || true
+#           kubectl delete pod migrate-${{ github.sha }} -n hodlfun-staging --ignore-not-found
+
+#   notify:
+#     name: Notify
+#     runs-on: ubuntu-latest
+#     needs: [build-and-push, deploy]
+#     if: always()
+#     steps:
+#       - name: Slack notification
+#         uses: 8398a7/action-slack@v3
+#         with:
+#           status: ${{ job.status }}
+#           fields: repo,message,commit,author,action,eventName,ref,workflow
+#         env:
+#           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+#         if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}

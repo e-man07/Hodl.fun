@@ -1,0 +1,173 @@
+# name: CI
+
+# on:
+#   push:
+#     branches: [main, develop]
+#   pull_request:
+#     branches: [main, develop]
+
+# env:
+#   NODE_VERSION: '20'
+#   PNPM_VERSION: '8'
+
+# jobs:
+#   lint:
+#     name: Lint
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Setup pnpm
+#         uses: pnpm/action-setup@v2
+#         with:
+#           version: ${{ env.PNPM_VERSION }}
+
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: ${{ env.NODE_VERSION }}
+#           cache: 'pnpm'
+
+#       - name: Install dependencies
+#         run: pnpm install --frozen-lockfile
+
+#       - name: Run ESLint
+#         run: pnpm run lint
+
+#       - name: Check formatting
+#         run: pnpm run format:check
+
+#   typecheck:
+#     name: Type Check
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Setup pnpm
+#         uses: pnpm/action-setup@v2
+#         with:
+#           version: ${{ env.PNPM_VERSION }}
+
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: ${{ env.NODE_VERSION }}
+#           cache: 'pnpm'
+
+#       - name: Install dependencies
+#         run: pnpm install --frozen-lockfile
+
+#       - name: Generate Prisma client
+#         run: pnpm run prisma:generate
+
+#       - name: Run type check
+#         run: pnpm run typecheck
+
+#   test:
+#     name: Test
+#     runs-on: ubuntu-latest
+#     services:
+#       postgres:
+#         image: postgres:15-alpine
+#         env:
+#           POSTGRES_USER: test
+#           POSTGRES_PASSWORD: test
+#           POSTGRES_DB: hodlfun_test
+#         ports:
+#           - 5432:5432
+#         options: >-
+#           --health-cmd pg_isready
+#           --health-interval 10s
+#           --health-timeout 5s
+#           --health-retries 5
+
+#       redis:
+#         image: redis:7-alpine
+#         ports:
+#           - 6379:6379
+#         options: >-
+#           --health-cmd "redis-cli ping"
+#           --health-interval 10s
+#           --health-timeout 5s
+#           --health-retries 5
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Setup pnpm
+#         uses: pnpm/action-setup@v2
+#         with:
+#           version: ${{ env.PNPM_VERSION }}
+
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: ${{ env.NODE_VERSION }}
+#           cache: 'pnpm'
+
+#       - name: Install dependencies
+#         run: pnpm install --frozen-lockfile
+
+#       - name: Generate Prisma client
+#         run: pnpm run prisma:generate
+
+#       - name: Run database migrations
+#         run: pnpm run prisma:deploy
+#         env:
+#           DATABASE_URL: postgresql://test:test@localhost:5432/hodlfun_test?schema=public
+
+#       - name: Run unit tests
+#         run: pnpm run test
+#         env:
+#           DATABASE_URL: postgresql://test:test@localhost:5432/hodlfun_test?schema=public
+#           REDIS_URL: redis://localhost:6379
+#           JWT_SECRET: test-jwt-secret
+#           JWT_REFRESH_SECRET: test-jwt-refresh-secret
+
+#       - name: Run e2e tests
+#         run: pnpm run test:e2e
+#         env:
+#           DATABASE_URL: postgresql://test:test@localhost:5432/hodlfun_test?schema=public
+#           REDIS_URL: redis://localhost:6379
+#           JWT_SECRET: test-jwt-secret
+#           JWT_REFRESH_SECRET: test-jwt-refresh-secret
+
+#   build:
+#     name: Build
+#     runs-on: ubuntu-latest
+#     needs: [lint, typecheck, test]
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Setup pnpm
+#         uses: pnpm/action-setup@v2
+#         with:
+#           version: ${{ env.PNPM_VERSION }}
+
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: ${{ env.NODE_VERSION }}
+#           cache: 'pnpm'
+
+#       - name: Install dependencies
+#         run: pnpm install --frozen-lockfile
+
+#       - name: Generate Prisma client
+#         run: pnpm run prisma:generate
+
+#       - name: Build
+#         run: pnpm run build
+
+#       - name: Upload build artifacts
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: dist
+#           path: |
+#             apps/*/dist
+#             libs/*/dist
+#           retention-days: 7

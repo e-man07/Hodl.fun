@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: websocket
+  namespace: hodlfun
+  labels:
+    app: websocket
+    app.kubernetes.io/name: websocket
+    app.kubernetes.io/component: realtime
+    app.kubernetes.io/part-of: hodlfun-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: websocket
+  template:
+    metadata:
+      labels:
+        app: websocket
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3001"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: hodlfun-websocket
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: websocket
+          image: hodlfun/websocket:latest
+          imagePullPolicy: Always
+          ports:
+            - name: ws
+              containerPort: 3001
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: hodlfun-config
+            - secretRef:
+                name: hodlfun-secrets
+          env:
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: hodlfun-secrets
+                  key: REDIS_URL
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: ws
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: ws
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - websocket
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: websocket
+  namespace: hodlfun
+  labels:
+    app: websocket
+  annotations:
+    cloud.google.com/backend-config: '{"default": "websocket-backend-config"}'
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: ws
+      protocol: TCP
+      name: ws
+  selector:
+    app: websocket
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hodlfun-websocket
+  namespace: hodlfun

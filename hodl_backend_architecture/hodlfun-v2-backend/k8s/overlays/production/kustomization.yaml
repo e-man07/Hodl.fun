@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: hodlfun-production
+
+resources:
+  - ../../base
+
+namePrefix: prod-
+
+commonLabels:
+  environment: production
+
+patches:
+  - path: patches/api-deployment.yaml
+  - path: patches/websocket-deployment.yaml
+  - path: patches/indexer-deployment.yaml
+  - path: patches/worker-deployment.yaml
+  - path: patches/hpa.yaml
+
+configMapGenerator:
+  - name: hodlfun-config
+    behavior: merge
+    literals:
+      - NODE_ENV=production
+
+images:
+  - name: gcr.io/hodlfun/api
+    newTag: production
+  - name: gcr.io/hodlfun/websocket
+    newTag: production
+  - name: gcr.io/hodlfun/indexer
+    newTag: production
+  - name: gcr.io/hodlfun/worker
+    newTag: production

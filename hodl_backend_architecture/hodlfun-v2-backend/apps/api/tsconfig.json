@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "paths": {
+      "@hodlfun/common": ["../../libs/common/src"],
+      "@hodlfun/common/*": ["../../libs/common/src/*"],
+      "@hodlfun/database": ["../../libs/database/src"],
+      "@hodlfun/database/*": ["../../libs/database/src/*"],
+      "@hodlfun/redis": ["../../libs/redis/src"],
+      "@hodlfun/redis/*": ["../../libs/redis/src/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}

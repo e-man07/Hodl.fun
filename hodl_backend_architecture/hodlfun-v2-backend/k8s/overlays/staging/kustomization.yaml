@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: hodlfun-staging
+
+resources:
+  - ../../base
+
+namePrefix: staging-
+
+commonLabels:
+  environment: staging
+
+patches:
+  - path: patches/api-deployment.yaml
+  - path: patches/websocket-deployment.yaml
+  - path: patches/indexer-deployment.yaml
+  - path: patches/worker-deployment.yaml
+  - path: patches/hpa.yaml
+
+configMapGenerator:
+  - name: hodlfun-config
+    behavior: merge
+    literals:
+      - NODE_ENV=staging
+      - RPC_URL=https://evm.rpc-testnet-donut-node1.push.org/
+
+images:
+  - name: gcr.io/hodlfun/api
+    newTag: staging
+  - name: gcr.io/hodlfun/websocket
+    newTag: staging
+  - name: gcr.io/hodlfun/indexer
+    newTag: staging
+  - name: gcr.io/hodlfun/worker
+    newTag: staging

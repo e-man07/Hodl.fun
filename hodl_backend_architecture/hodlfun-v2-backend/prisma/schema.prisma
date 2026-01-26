@@ -1,0 +1,199 @@
+// =============================================================================
+// Hodl.fun V2 Backend - Prisma Schema
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// TOKENS
+// =============================================================================
+
+model Token {
+  id                    String      @id @default(uuid())
+  address               String      @unique
+  curveAddress          String      @unique @map("curve_address")
+  creatorAddress        String      @map("creator_address")
+  name                  String
+  symbol                String
+  tokenUri              String?     @map("token_uri")
+
+  // Reserves (stored as strings for BigInt precision)
+  virtualNative         String      @map("virtual_native")
+  virtualToken          String      @map("virtual_token")
+  realNative            String      @default("0") @map("real_native")
+  realToken             String      @default("0") @map("real_token")
+  k                     String
+
+  // Price data
+  currentPrice          String      @map("current_price")
+  marketCap             String      @map("market_cap")
+  athPrice              String?     @map("ath_price")
+  athPriceTimestamp     DateTime?   @map("ath_price_timestamp")
+  athMarketCap          String?     @map("ath_market_cap")
+  athMarketCapTimestamp DateTime?   @map("ath_market_cap_timestamp")
+
+  // Status
+  status                TokenStatus @default(TRADING)
+  poolAddress           String?     @map("pool_address")
+
+  // Timestamps
+  createdAt             DateTime    @default(now()) @map("created_at")
+  createdBlock          BigInt      @map("created_block")
+  graduatedAt           DateTime?   @map("graduated_at")
+  listedAt              DateTime?   @map("listed_at")
+  listingBlock          BigInt?     @map("listing_block")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  trades                Trade[]
+  holders               Holder[]
+  priceHistory          PriceHistory[]
+
+  @@index([creatorAddress])
+  @@index([status])
+  @@index([createdAt])
+  @@index([marketCap])
+  @@map("tokens")
+}
+
+enum TokenStatus {
+  TRADING
+  LOCKED
+  LISTED
+}
+
+// =============================================================================
+// TRADES
+// =============================================================================
+
+model Trade {
+  id            String    @id @default(uuid())
+  tokenAddress  String    @map("token_address")
+  type          TradeType
+  traderAddress String    @map("trader_address")
+  amountIn      String    @map("amount_in")
+  amountOut     String    @map("amount_out")
+  price         String
+  feeAmount     String    @map("fee_amount")
+  txHash        String    @unique @map("tx_hash")
+  blockNumber   BigInt    @map("block_number")
+  timestamp     DateTime
+
+  // Relations
+  token         Token     @relation(fields: [tokenAddress], references: [address])
+
+  @@index([tokenAddress, timestamp])
+  @@index([traderAddress, timestamp])
+  @@index([blockNumber])
+  @@map("trades")
+}
+
+enum TradeType {
+  BUY
+  SELL
+}
+
+// =============================================================================
+// HOLDERS
+// =============================================================================
+
+model Holder {
+  id                    String   @id @default(uuid())
+  tokenAddress          String   @map("token_address")
+  holderAddress         String   @map("holder_address")
+  balance               String
+  firstBuyTimestamp     DateTime @map("first_buy_timestamp")
+  lastActivityTimestamp DateTime @map("last_activity_timestamp")
+
+  // Relations
+  token                 Token    @relation(fields: [tokenAddress], references: [address])
+
+  @@unique([tokenAddress, holderAddress])
+  @@index([tokenAddress])
+  @@index([holderAddress])
+  @@map("holders")
+}
+
+// =============================================================================
+// PRICE HISTORY (OHLC)
+// =============================================================================
+
+model PriceHistory {
+  id           String        @id @default(uuid())
+  tokenAddress String        @map("token_address")
+  timestamp    DateTime
+  interval     PriceInterval
+  open         String
+  high         String
+  low          String
+  close        String
+  volumeNative String        @map("volume_native")
+  volumeToken  String        @map("volume_token")
+  tradeCount   Int           @map("trade_count")
+
+  // Relations
+  token        Token         @relation(fields: [tokenAddress], references: [address])
+
+  @@unique([tokenAddress, interval, timestamp])
+  @@index([tokenAddress, interval, timestamp])
+  @@map("price_history")
+}
+
+enum PriceInterval {
+  ONE_MINUTE
+  FIVE_MINUTES
+  FIFTEEN_MINUTES
+  ONE_HOUR
+  FOUR_HOURS
+  ONE_DAY
+}
+
+// =============================================================================
+// CREATOR FEES
+// =============================================================================
+
+model CreatorFee {
+  id                        String    @id @default(uuid())
+  creatorAddress            String    @unique @map("creator_address")
+  accumulatedFees           String    @map("accumulated_fees")
+  claimedFees               String    @default("0") @map("claimed_fees")
+  lastAccumulationTimestamp DateTime  @map("last_accumulation_timestamp")
+  lastClaimTimestamp        DateTime? @map("last_claim_timestamp")
+
+  @@map("creator_fees")
+}
+
+// =============================================================================
+// USER PORTFOLIOS
+// =============================================================================
+
+model UserPortfolio {
+  id            String   @id @default(uuid())
+  walletAddress String   @unique @map("wallet_address")
+  totalInvested String   @default("0") @map("total_invested")
+  totalReturned String   @default("0") @map("total_returned")
+  totalTrades   Int      @default(0) @map("total_trades")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("user_portfolios")
+}
+
+// =============================================================================
+// INDEXER STATE
+// =============================================================================
+
+model IndexerState {
+  id                 String   @id @default("main")
+  lastProcessedBlock BigInt   @map("last_processed_block")
+  lastProcessedHash  String?  @map("last_processed_hash")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("indexer_state")
+}

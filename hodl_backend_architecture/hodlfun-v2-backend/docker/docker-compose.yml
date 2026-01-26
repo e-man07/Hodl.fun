@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: hodlfun
+      POSTGRES_PASSWORD: hodlfun_dev_password
+      POSTGRES_DB: hodlfun
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hodlfun']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: api
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://hodlfun:hodlfun_dev_password@postgres:5432/hodlfun?schema=public
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=dev-jwt-secret-change-in-production
+      - JWT_REFRESH_SECRET=dev-jwt-refresh-secret-change-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  websocket:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: websocket
+    ports:
+      - '3001:3001'
+    environment:
+      - NODE_ENV=development
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  indexer:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: indexer
+    ports:
+      - '3002:3002'
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://hodlfun:hodlfun_dev_password@postgres:5432/hodlfun?schema=public
+      - REDIS_URL=redis://redis:6379
+      - RPC_URL=https://evm.rpc-testnet-donut-node1.push.org/
+      - CORE_ADDRESS=0x592F8f0abbB9a3d3c425980Ac0263363C8405b03
+      - FACTORY_ADDRESS=0x3c2e258d3cf31653a17b27d5c4f1789d25d14ea8
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: worker
+    ports:
+      - '3003:3003'
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://hodlfun:hodlfun_dev_password@postgres:5432/hodlfun?schema=public
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

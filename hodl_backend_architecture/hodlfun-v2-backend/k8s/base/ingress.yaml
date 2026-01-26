@@ -1,0 +1,54 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hodlfun-ingress
+  namespace: hodlfun
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "hodlfun-ip"
+    networking.gke.io/managed-certificates: "hodlfun-cert"
+    kubernetes.io/ingress.allow-http: "false"
+spec:
+  rules:
+    - host: api.hodl.fun
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80
+    - host: ws.hodl.fun
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: websocket
+                port:
+                  number: 80
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: hodlfun-cert
+  namespace: hodlfun
+spec:
+  domains:
+    - api.hodl.fun
+    - ws.hodl.fun
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: websocket-backend-config
+  namespace: hodlfun
+spec:
+  timeoutSec: 86400
+  connectionDraining:
+    drainingTimeoutSec: 60
+  sessionAffinity:
+    affinityType: "CLIENT_IP"

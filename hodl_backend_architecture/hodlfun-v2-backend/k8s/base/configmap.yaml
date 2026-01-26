@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hodlfun-config
+  namespace: hodlfun
+data:
+  NODE_ENV: "production"
+  API_PORT: "3000"
+  WEBSOCKET_PORT: "3001"
+  INDEXER_PORT: "3002"
+  WORKER_PORT: "3003"
+  RPC_URL: "https://evm.rpc-testnet-donut-node1.push.org/"
+  CORE_ADDRESS: "0x592F8f0abbB9a3d3c425980Ac0263363C8405b03"
+  FACTORY_ADDRESS: "0x3c2e258d3cf31653a17b27d5c4f1789d25d14ea8"
+  FEEVAULT_ADDRESS: "0xbe2fd9b720d1d7fac7208523376d2a3332019928"
+  WPUSH_ADDRESS: "0x2137c11bdb56c8a74be8cc0fbad23ccf5cb9a8a7"

@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: indexer
+  namespace: hodlfun
+  labels:
+    app: indexer
+    app.kubernetes.io/name: indexer
+    app.kubernetes.io/component: blockchain
+    app.kubernetes.io/part-of: hodlfun-platform
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: indexer
+  template:
+    metadata:
+      labels:
+        app: indexer
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3002"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: hodlfun-indexer
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: indexer
+          image: hodlfun/indexer:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3002
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: hodlfun-config
+            - secretRef:
+                name: hodlfun-secrets
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: hodlfun-secrets
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: hodlfun-secrets
+                  key: REDIS_URL
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: indexer
+  namespace: hodlfun
+  labels:
+    app: indexer
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: indexer
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hodlfun-indexer
+  namespace: hodlfun

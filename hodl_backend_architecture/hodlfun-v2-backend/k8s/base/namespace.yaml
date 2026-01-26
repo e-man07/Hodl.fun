@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hodlfun
+  labels:
+    app.kubernetes.io/name: hodlfun
+    app.kubernetes.io/part-of: hodlfun-platform

@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: hodlfun
+  labels:
+    grafana_dashboard: "1"
+data:
+  hodlfun-overview.json: |
+    {
+      "dashboard": {
+        "title": "Hodl.fun Overview",
+        "uid": "hodlfun-overview",
+        "timezone": "browser",
+        "schemaVersion": 38,
+        "refresh": "30s",
+        "panels": [
+          {
+            "type": "stat",
+            "title": "Total Tokens",
+            "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "tokens_total",
+                "legendFormat": "Tokens"
+              }
+            ]
+          },
+          {
+            "type": "stat",
+            "title": "24h Trading Volume",
+            "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "sum(increase(trades_volume_total[24h]))",
+                "legendFormat": "Volume"
+              }
+            ]
+          },
+          {
+            "type": "stat",
+            "title": "Active Users (24h)",
+            "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "count(count by (wallet) (trades_total))",
+                "legendFormat": "Users"
+              }
+            ]
+          },
+          {
+            "type": "stat",
+            "title": "WebSocket Connections",
+            "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "sum(websocket_active_connections)",
+                "legendFormat": "Connections"
+              }
+            ]
+          },
+          {
+            "type": "timeseries",
+            "title": "API Request Rate",
+            "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{job=\"hodlfun-api\"}[5m])) by (path)",
+                "legendFormat": "{{ path }}"
+              }
+            ]
+          },
+          {
+            "type": "timeseries",
+            "title": "API Latency (p95)",
+            "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"hodlfun-api\"}[5m])) by (le, path))",
+                "legendFormat": "{{ path }}"
+              }
+            ]
+          },
+          {
+            "type": "timeseries",
+            "title": "Indexer Block Progress",
+            "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+            "targets": [
+              {
+                "expr": "indexer_last_processed_block",
+                "legendFormat": "Processed Block"
+              },
+              {
+                "expr": "chain_head_block",
+                "legendFormat": "Chain Head"
+              }
+            ]
+          },
+          {
+            "type": "timeseries",
+            "title": "Queue Job Status",
+            "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(queue_jobs_waiting) by (queue)",
+                "legendFormat": "Waiting - {{ queue }}"
+              },
+              {
+                "expr": "sum(queue_jobs_active) by (queue)",
+                "legendFormat": "Active - {{ queue }}"
+              }
+            ]
+          }
+        ]
+      }
+    }

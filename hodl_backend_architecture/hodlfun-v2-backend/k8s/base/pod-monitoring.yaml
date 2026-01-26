@@ -1,0 +1,55 @@
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: api-monitoring
+  namespace: hodlfun
+spec:
+  selector:
+    matchLabels:
+      app: api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: websocket-monitoring
+  namespace: hodlfun
+spec:
+  selector:
+    matchLabels:
+      app: websocket
+  endpoints:
+    - port: ws
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: indexer-monitoring
+  namespace: hodlfun
+spec:
+  selector:
+    matchLabels:
+      app: indexer
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: worker-monitoring
+  namespace: hodlfun
+spec:
+  selector:
+    matchLabels:
+      app: worker
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
