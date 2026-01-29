@@ -467,3 +467,530 @@ resource "google_monitoring_alert_policy" "uptime_check_failed" {
     auto_close = "86400s"
   }
 }
+
+# -----------------------------------------------------------------------------
+# DASHBOARDS
+# -----------------------------------------------------------------------------
+
+resource "google_monitoring_dashboard" "backend_overview" {
+  dashboard_json = jsonencode({
+    displayName = "Hodl.fun Backend Overview"
+    gridLayout = {
+      columns = 3
+      widgets = [
+        # =====================================================================
+        # ROW 1: Service Health
+        # =====================================================================
+        {
+          title = "Service Health"
+          text = {
+            content = "**Service Health Metrics**"
+            format  = "MARKDOWN"
+          }
+        },
+        {
+          title = "API Pods Running"
+          scorecard = {
+            timeSeriesQuery = {
+              timeSeriesFilter = {
+                filter = "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"hodlfun\" AND resource.labels.container_name=\"api\""
+                aggregation = {
+                  alignmentPeriod    = "60s"
+                  perSeriesAligner   = "ALIGN_COUNT"
+                  crossSeriesReducer = "REDUCE_SUM"
+                }
+              }
+            }
+            thresholds = [
+              {
+                value     = 1
+                color     = "YELLOW"
+                direction = "BELOW"
+              },
+              {
+                value     = 2
+                color     = "GREEN"
+                direction = "ABOVE"
+              }
+            ]
+          }
+        },
+        {
+          title = "WebSocket Connections"
+          scorecard = {
+            timeSeriesQuery = {
+              timeSeriesFilter = {
+                filter = "metric.type=\"prometheus.googleapis.com/hodlfun_websocket_connections_active/gauge\""
+                aggregation = {
+                  alignmentPeriod    = "60s"
+                  perSeriesAligner   = "ALIGN_MEAN"
+                  crossSeriesReducer = "REDUCE_SUM"
+                }
+              }
+            }
+          }
+        },
+        {
+          title = "Indexer Block Lag"
+          scorecard = {
+            timeSeriesQuery = {
+              timeSeriesFilter = {
+                filter = "metric.type=\"prometheus.googleapis.com/hodlfun_indexer_block_lag/gauge\""
+                aggregation = {
+                  alignmentPeriod  = "60s"
+                  perSeriesAligner = "ALIGN_MEAN"
+                }
+              }
+            }
+            thresholds = [
+              {
+                value     = 100
+                color     = "YELLOW"
+                direction = "ABOVE"
+              },
+              {
+                value     = 500
+                color     = "RED"
+                direction = "ABOVE"
+              }
+            ]
+          }
+        },
+        # =====================================================================
+        # ROW 2: API Performance
+        # =====================================================================
+        {
+          title = "API Performance"
+          text = {
+            content = "**API Performance Metrics**"
+            format  = "MARKDOWN"
+          }
+        },
+        {
+          title = "Request Rate (req/s)"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/http_requests_total/counter\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_RATE"
+                      crossSeriesReducer = "REDUCE_SUM"
+                      groupByFields      = ["metric.label.method"]
+                    }
+                  }
+                }
+                plotType       = "LINE"
+                legendTemplate = "$${metric.label.method}"
+              }
+            ]
+            timeshiftDuration = "0s"
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        {
+          title = "Latency P95 (seconds)"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/http_request_duration_seconds/histogram\""
+                    aggregation = {
+                      alignmentPeriod  = "60s"
+                      perSeriesAligner = "ALIGN_PERCENTILE_95"
+                    }
+                  }
+                }
+                plotType = "LINE"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        {
+          title = "Error Rate (5xx)"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/http_requests_total/counter\" AND metric.labels.status=~\"5..\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_RATE"
+                      crossSeriesReducer = "REDUCE_SUM"
+                    }
+                  }
+                }
+                plotType = "LINE"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        # =====================================================================
+        # ROW 3: Business Metrics
+        # =====================================================================
+        {
+          title = "Business Metrics"
+          text = {
+            content = "**Business Metrics**"
+            format  = "MARKDOWN"
+          }
+        },
+        {
+          title = "Trades per Minute"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/hodlfun_trades_total/counter\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_RATE"
+                      crossSeriesReducer = "REDUCE_SUM"
+                    }
+                  }
+                }
+                plotType = "LINE"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        {
+          title = "Trading Volume (PUSH)"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/hodlfun_trading_volume_push/counter\""
+                    aggregation = {
+                      alignmentPeriod    = "3600s"
+                      perSeriesAligner   = "ALIGN_DELTA"
+                      crossSeriesReducer = "REDUCE_SUM"
+                    }
+                  }
+                }
+                plotType = "STACKED_BAR"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        {
+          title = "Tokens Created"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/hodlfun_tokens_created_total/counter\""
+                    aggregation = {
+                      alignmentPeriod    = "3600s"
+                      perSeriesAligner   = "ALIGN_DELTA"
+                      crossSeriesReducer = "REDUCE_SUM"
+                    }
+                  }
+                }
+                plotType = "STACKED_BAR"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        # =====================================================================
+        # ROW 4: Infrastructure
+        # =====================================================================
+        {
+          title = "Infrastructure"
+          text = {
+            content = "**Infrastructure Metrics**"
+            format  = "MARKDOWN"
+          }
+        },
+        {
+          title = "Database Connections"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/postgresql/num_backends\""
+                    aggregation = {
+                      alignmentPeriod  = "60s"
+                      perSeriesAligner = "ALIGN_MEAN"
+                    }
+                  }
+                }
+                plotType = "LINE"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        {
+          title = "Redis Memory Usage (%)"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "resource.type=\"redis_instance\" AND metric.type=\"redis.googleapis.com/stats/memory/usage_ratio\""
+                    aggregation = {
+                      alignmentPeriod  = "60s"
+                      perSeriesAligner = "ALIGN_MEAN"
+                    }
+                  }
+                }
+                plotType = "LINE"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        {
+          title = "Queue Depth"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/hodlfun_queue_depth/gauge\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_MEAN"
+                      crossSeriesReducer = "REDUCE_SUM"
+                      groupByFields      = ["metric.label.queue"]
+                    }
+                  }
+                }
+                plotType       = "STACKED_AREA"
+                legendTemplate = "$${metric.label.queue}"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        # =====================================================================
+        # ROW 5: Queue Processing
+        # =====================================================================
+        {
+          title = "Queue Processing"
+          text = {
+            content = "**Queue Processing Metrics**"
+            format  = "MARKDOWN"
+          }
+        },
+        {
+          title = "Jobs Processed (by status)"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/hodlfun_queue_jobs_processed_total/counter\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_RATE"
+                      crossSeriesReducer = "REDUCE_SUM"
+                      groupByFields      = ["metric.label.status"]
+                    }
+                  }
+                }
+                plotType       = "STACKED_BAR"
+                legendTemplate = "$${metric.label.status}"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        {
+          title = "Job Duration P95 (seconds)"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/hodlfun_queue_job_duration_seconds/histogram\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_PERCENTILE_95"
+                      crossSeriesReducer = "REDUCE_MAX"
+                      groupByFields      = ["metric.label.queue"]
+                    }
+                  }
+                }
+                plotType       = "LINE"
+                legendTemplate = "$${metric.label.queue}"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        {
+          title = "Indexer Events Processed"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/hodlfun_indexer_events_processed_total/counter\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_RATE"
+                      crossSeriesReducer = "REDUCE_SUM"
+                      groupByFields      = ["metric.label.event_type"]
+                    }
+                  }
+                }
+                plotType       = "STACKED_AREA"
+                legendTemplate = "$${metric.label.event_type}"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        }
+      ]
+    }
+  })
+}
+
+# -----------------------------------------------------------------------------
+# ADDITIONAL DASHBOARD: Indexer Deep Dive
+# -----------------------------------------------------------------------------
+
+resource "google_monitoring_dashboard" "indexer_dashboard" {
+  dashboard_json = jsonencode({
+    displayName = "Hodl.fun Indexer Deep Dive"
+    gridLayout = {
+      columns = 2
+      widgets = [
+        {
+          title = "Block Lag"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/hodlfun_indexer_block_lag/gauge\""
+                    aggregation = {
+                      alignmentPeriod  = "60s"
+                      perSeriesAligner = "ALIGN_MEAN"
+                    }
+                  }
+                }
+                plotType = "LINE"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        {
+          title = "Events by Type"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/hodlfun_indexer_events_processed_total/counter\""
+                    aggregation = {
+                      alignmentPeriod    = "300s"
+                      perSeriesAligner   = "ALIGN_RATE"
+                      crossSeriesReducer = "REDUCE_SUM"
+                      groupByFields      = ["metric.label.event_type"]
+                    }
+                  }
+                }
+                plotType       = "STACKED_AREA"
+                legendTemplate = "$${metric.label.event_type}"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        {
+          title = "Indexer Errors (from logs)"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"logging.googleapis.com/user/hodlfun/indexer_errors\""
+                    aggregation = {
+                      alignmentPeriod    = "300s"
+                      perSeriesAligner   = "ALIGN_RATE"
+                      crossSeriesReducer = "REDUCE_SUM"
+                    }
+                  }
+                }
+                plotType = "LINE"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        },
+        {
+          title = "Trade Events (Buy/Sell)"
+          xyChart = {
+            dataSets = [
+              {
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"prometheus.googleapis.com/hodlfun_trades_total/counter\""
+                    aggregation = {
+                      alignmentPeriod    = "300s"
+                      perSeriesAligner   = "ALIGN_RATE"
+                      crossSeriesReducer = "REDUCE_SUM"
+                      groupByFields      = ["metric.label.type"]
+                    }
+                  }
+                }
+                plotType       = "LINE"
+                legendTemplate = "$${metric.label.type}"
+              }
+            ]
+            yAxis = {
+              scale = "LINEAR"
+            }
+          }
+        }
+      ]
+    }
+  })
+}

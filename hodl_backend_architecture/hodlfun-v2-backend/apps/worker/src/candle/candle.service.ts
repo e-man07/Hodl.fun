@@ -31,23 +31,26 @@ export class CandleService {
     }
 
     // Calculate OHLCV
-    const prices = trades.map((t) => BigInt(t.price));
+    const prices = trades.map((t: { price: string }) => BigInt(t.price));
     const open = prices[0].toString();
     const close = prices[prices.length - 1].toString();
     const high = prices
-      .reduce((a, b) => (a > b ? a : b))
+      .reduce((a: bigint, b: bigint) => (a > b ? a : b))
       .toString();
     const low = prices
-      .reduce((a, b) => (a < b ? a : b))
+      .reduce((a: bigint, b: bigint) => (a < b ? a : b))
       .toString();
 
+    // volumeNative = BUY amountIn (PUSH spent) + SELL amountOut (PUSH received)
+    // This measures total PUSH flow through the bonding curve
     const volumeNative = trades
-      .filter((t) => t.type === 'BUY')
-      .reduce((sum, t) => sum + BigInt(t.amountIn), 0n)
+      .reduce((sum: bigint, t: { type: string; amountIn: string; amountOut: string }) => {
+        return t.type === 'BUY' ? sum + BigInt(t.amountIn) : sum + BigInt(t.amountOut);
+      }, 0n)
       .toString();
 
     const volumeToken = trades
-      .reduce((sum, t) => {
+      .reduce((sum: bigint, t: { type: string; amountIn: string; amountOut: string }) => {
         return t.type === 'BUY' ? sum + BigInt(t.amountOut) : sum + BigInt(t.amountIn);
       }, 0n)
       .toString();

@@ -1,0 +1,44 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createMockPriceHistorySeries = exports.createMockPriceHistory = exports.createLosingPortfolio = exports.createProfitablePortfolio = exports.createMockUserPortfolio = exports.resetHolderCounter = exports.createHolderDistribution = exports.createCreatorAsHolder = exports.createZeroBalanceHolder = exports.createSmallHolder = exports.createWhaleHolder = exports.createMockHolders = exports.createMockHolder = exports.resetTradeCounter = exports.createTradesForCandles = exports.createSmallBuyTrade = exports.createWhaleBuyTrade = exports.createMockTrades = exports.createMockSellTrade = exports.createMockBuyTrade = exports.createMockTrade = exports.resetTokenCounter = exports.createTrendingToken = exports.createTokenWithATH = exports.createListedToken = exports.createGraduatedToken = exports.createMockTokens = exports.createMockToken = void 0;
+exports.resetAllFactories = resetAllFactories;
+var token_factory_1 = require("./token.factory");
+Object.defineProperty(exports, "createMockToken", { enumerable: true, get: function () { return token_factory_1.createMockToken; } });
+Object.defineProperty(exports, "createMockTokens", { enumerable: true, get: function () { return token_factory_1.createMockTokens; } });
+Object.defineProperty(exports, "createGraduatedToken", { enumerable: true, get: function () { return token_factory_1.createGraduatedToken; } });
+Object.defineProperty(exports, "createListedToken", { enumerable: true, get: function () { return token_factory_1.createListedToken; } });
+Object.defineProperty(exports, "createTokenWithATH", { enumerable: true, get: function () { return token_factory_1.createTokenWithATH; } });
+Object.defineProperty(exports, "createTrendingToken", { enumerable: true, get: function () { return token_factory_1.createTrendingToken; } });
+Object.defineProperty(exports, "resetTokenCounter", { enumerable: true, get: function () { return token_factory_1.resetTokenCounter; } });
+var trade_factory_1 = require("./trade.factory");
+Object.defineProperty(exports, "createMockTrade", { enumerable: true, get: function () { return trade_factory_1.createMockTrade; } });
+Object.defineProperty(exports, "createMockBuyTrade", { enumerable: true, get: function () { return trade_factory_1.createMockBuyTrade; } });
+Object.defineProperty(exports, "createMockSellTrade", { enumerable: true, get: function () { return trade_factory_1.createMockSellTrade; } });
+Object.defineProperty(exports, "createMockTrades", { enumerable: true, get: function () { return trade_factory_1.createMockTrades; } });
+Object.defineProperty(exports, "createWhaleBuyTrade", { enumerable: true, get: function () { return trade_factory_1.createWhaleBuyTrade; } });
+Object.defineProperty(exports, "createSmallBuyTrade", { enumerable: true, get: function () { return trade_factory_1.createSmallBuyTrade; } });
+Object.defineProperty(exports, "createTradesForCandles", { enumerable: true, get: function () { return trade_factory_1.createTradesForCandles; } });
+Object.defineProperty(exports, "resetTradeCounter", { enumerable: true, get: function () { return trade_factory_1.resetTradeCounter; } });
+var holder_factory_1 = require("./holder.factory");
+Object.defineProperty(exports, "createMockHolder", { enumerable: true, get: function () { return holder_factory_1.createMockHolder; } });
+Object.defineProperty(exports, "createMockHolders", { enumerable: true, get: function () { return holder_factory_1.createMockHolders; } });
+Object.defineProperty(exports, "createWhaleHolder", { enumerable: true, get: function () { return holder_factory_1.createWhaleHolder; } });
+Object.defineProperty(exports, "createSmallHolder", { enumerable: true, get: function () { return holder_factory_1.createSmallHolder; } });
+Object.defineProperty(exports, "createZeroBalanceHolder", { enumerable: true, get: function () { return holder_factory_1.createZeroBalanceHolder; } });
+Object.defineProperty(exports, "createCreatorAsHolder", { enumerable: true, get: function () { return holder_factory_1.createCreatorAsHolder; } });
+Object.defineProperty(exports, "createHolderDistribution", { enumerable: true, get: function () { return holder_factory_1.createHolderDistribution; } });
+Object.defineProperty(exports, "resetHolderCounter", { enumerable: true, get: function () { return holder_factory_1.resetHolderCounter; } });
+Object.defineProperty(exports, "createMockUserPortfolio", { enumerable: true, get: function () { return holder_factory_1.createMockUserPortfolio; } });
+Object.defineProperty(exports, "createProfitablePortfolio", { enumerable: true, get: function () { return holder_factory_1.createProfitablePortfolio; } });
+Object.defineProperty(exports, "createLosingPortfolio", { enumerable: true, get: function () { return holder_factory_1.createLosingPortfolio; } });
+Object.defineProperty(exports, "createMockPriceHistory", { enumerable: true, get: function () { return holder_factory_1.createMockPriceHistory; } });
+Object.defineProperty(exports, "createMockPriceHistorySeries", { enumerable: true, get: function () { return holder_factory_1.createMockPriceHistorySeries; } });
+function resetAllFactories() {
+    const { resetTokenCounter } = require('./token.factory');
+    const { resetTradeCounter } = require('./trade.factory');
+    const { resetHolderCounter } = require('./holder.factory');
+    resetTokenCounter();
+    resetTradeCounter();
+    resetHolderCounter();
+}
+//# sourceMappingURL=index.js.map

@@ -7,8 +7,8 @@ import {
   Inject,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RedisService } from '@hodlfun/redis';
-import { RATE_LIMIT_KEY } from '../decorators/rate-limit.decorator';
+import { RedisService } from './redis.service';
+import { RATE_LIMIT_KEY } from './rate-limit.decorator';
 
 export interface RateLimitConfig {
   limit: number;

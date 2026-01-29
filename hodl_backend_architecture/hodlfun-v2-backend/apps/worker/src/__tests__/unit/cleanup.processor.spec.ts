@@ -45,12 +45,11 @@ describe('CleanupProcessor', () => {
     jest.clearAllMocks();
   });
 
-  describe('handleCleanupOldCandles', () => {
+  describe('cleanupOldCandles', () => {
     it('should delete ONE_MINUTE candles older than 7 days', async () => {
       mockPrisma.priceHistory.deleteMany.mockResolvedValue({ count: 100 });
 
-      const job = {} as any;
-      await processor.handleCleanupOldCandles(job);
+      await processor.cleanupOldCandles();
 
       expect(mockPrisma.priceHistory.deleteMany).toHaveBeenCalledWith({
         where: {
@@ -66,8 +65,7 @@ describe('CleanupProcessor', () => {
 
       mockPrisma.priceHistory.deleteMany.mockResolvedValue({ count: 0 });
 
-      const job = {} as any;
-      await processor.handleCleanupOldCandles(job);
+      await processor.cleanupOldCandles();
 
       const expectedThreshold = new Date(now - 7 * 24 * 60 * 60 * 1000);
       const callArgs = mockPrisma.priceHistory.deleteMany.mock.calls[0][0];
@@ -82,8 +80,7 @@ describe('CleanupProcessor', () => {
     it('should only target ONE_MINUTE interval', async () => {
       mockPrisma.priceHistory.deleteMany.mockResolvedValue({ count: 50 });
 
-      const job = {} as any;
-      await processor.handleCleanupOldCandles(job);
+      await processor.cleanupOldCandles();
 
       const callArgs = mockPrisma.priceHistory.deleteMany.mock.calls[0][0];
       expect(callArgs.where.interval).toBe('ONE_MINUTE');
@@ -92,31 +89,27 @@ describe('CleanupProcessor', () => {
     it('should handle no candles to delete', async () => {
       mockPrisma.priceHistory.deleteMany.mockResolvedValue({ count: 0 });
 
-      const job = {} as any;
-      await expect(processor.handleCleanupOldCandles(job)).resolves.not.toThrow();
+      await expect(processor.cleanupOldCandles()).resolves.not.toThrow();
     });
 
     it('should handle large number of candles deleted', async () => {
       mockPrisma.priceHistory.deleteMany.mockResolvedValue({ count: 1000000 });
 
-      const job = {} as any;
-      await expect(processor.handleCleanupOldCandles(job)).resolves.not.toThrow();
+      await expect(processor.cleanupOldCandles()).resolves.not.toThrow();
     });
 
     it('should propagate database errors', async () => {
       mockPrisma.priceHistory.deleteMany.mockRejectedValue(new Error('Database unavailable'));
 
-      const job = {} as any;
-      await expect(processor.handleCleanupOldCandles(job)).rejects.toThrow('Database unavailable');
+      await expect(processor.cleanupOldCandles()).rejects.toThrow('Database unavailable');
     });
   });
 
-  describe('handleCleanupZeroBalanceHolders', () => {
+  describe('cleanupZeroBalanceHolders', () => {
     it('should delete holders with zero balance', async () => {
       mockPrisma.holder.deleteMany.mockResolvedValue({ count: 50 });
 
-      const job = {} as any;
-      await processor.handleCleanupZeroBalanceHolders(job);
+      await processor.cleanupZeroBalanceHolders();
 
       expect(mockPrisma.holder.deleteMany).toHaveBeenCalledWith({
         where: { balance: '0' },
@@ -126,8 +119,7 @@ describe('CleanupProcessor', () => {
     it('should use exact string match for zero balance', async () => {
       mockPrisma.holder.deleteMany.mockResolvedValue({ count: 10 });
 
-      const job = {} as any;
-      await processor.handleCleanupZeroBalanceHolders(job);
+      await processor.cleanupZeroBalanceHolders();
 
       const callArgs = mockPrisma.holder.deleteMany.mock.calls[0][0];
       expect(callArgs.where.balance).toBe('0');
@@ -137,31 +129,27 @@ describe('CleanupProcessor', () => {
     it('should handle no zero-balance holders', async () => {
       mockPrisma.holder.deleteMany.mockResolvedValue({ count: 0 });
 
-      const job = {} as any;
-      await expect(processor.handleCleanupZeroBalanceHolders(job)).resolves.not.toThrow();
+      await expect(processor.cleanupZeroBalanceHolders()).resolves.not.toThrow();
     });
 
     it('should handle large cleanup operations', async () => {
       mockPrisma.holder.deleteMany.mockResolvedValue({ count: 500000 });
 
-      const job = {} as any;
-      await expect(processor.handleCleanupZeroBalanceHolders(job)).resolves.not.toThrow();
+      await expect(processor.cleanupZeroBalanceHolders()).resolves.not.toThrow();
     });
 
     it('should propagate database errors', async () => {
       mockPrisma.holder.deleteMany.mockRejectedValue(new Error('Connection lost'));
 
-      const job = {} as any;
-      await expect(processor.handleCleanupZeroBalanceHolders(job)).rejects.toThrow('Connection lost');
+      await expect(processor.cleanupZeroBalanceHolders()).rejects.toThrow('Connection lost');
     });
   });
 
-  describe('handleCacheWarmup', () => {
+  describe('cacheWarmup', () => {
     it('should delete all leaderboard cache keys', async () => {
       mockRedis.del.mockResolvedValue(1);
 
-      const job = {} as any;
-      await processor.handleCacheWarmup(job);
+      await processor.cacheWarmup();
 
       expect(mockRedis.del).toHaveBeenCalledTimes(3);
       expect(mockRedis.del).toHaveBeenCalledWith('leaderboard:gainers');
@@ -172,8 +160,7 @@ describe('CleanupProcessor', () => {
     it('should delete cache keys in correct order', async () => {
       mockRedis.del.mockResolvedValue(1);
 
-      const job = {} as any;
-      await processor.handleCacheWarmup(job);
+      await processor.cacheWarmup();
 
       const calls = mockRedis.del.mock.calls;
       expect(calls[0][0]).toBe('leaderboard:gainers');
@@ -184,8 +171,7 @@ describe('CleanupProcessor', () => {
     it('should handle missing cache keys gracefully', async () => {
       mockRedis.del.mockResolvedValue(0); // Key doesn't exist
 
-      const job = {} as any;
-      await expect(processor.handleCacheWarmup(job)).resolves.not.toThrow();
+      await expect(processor.cacheWarmup()).resolves.not.toThrow();
     });
 
     it('should continue deleting other keys if one fails', async () => {
@@ -194,11 +180,9 @@ describe('CleanupProcessor', () => {
         .mockRejectedValueOnce(new Error('Redis error'))
         .mockResolvedValueOnce(1);
 
-      const job = {} as any;
-
       // The current implementation doesn't handle individual errors gracefully
       // It will throw on the second call
-      await expect(processor.handleCacheWarmup(job)).rejects.toThrow('Redis error');
+      await expect(processor.cacheWarmup()).rejects.toThrow('Redis error');
 
       // First key was deleted before error
       expect(mockRedis.del).toHaveBeenCalledWith('leaderboard:gainers');
@@ -207,56 +191,14 @@ describe('CleanupProcessor', () => {
     it('should propagate Redis connection errors', async () => {
       mockRedis.del.mockRejectedValue(new Error('Redis connection refused'));
 
-      const job = {} as any;
-      await expect(processor.handleCacheWarmup(job)).rejects.toThrow('Redis connection refused');
+      await expect(processor.cacheWarmup()).rejects.toThrow('Redis connection refused');
     });
 
     it('should warm up exactly three leaderboard types', async () => {
       mockRedis.del.mockResolvedValue(1);
 
-      const job = {} as any;
-      await processor.handleCacheWarmup(job);
+      await processor.cacheWarmup();
 
-      expect(mockRedis.del).toHaveBeenCalledTimes(3);
-    });
-  });
-
-  describe('job parameter handling', () => {
-    it('should not use job data for cleanup-old-candles', async () => {
-      mockPrisma.priceHistory.deleteMany.mockResolvedValue({ count: 0 });
-
-      // Job data is ignored for this processor
-      const job = { data: { someParam: 'value' } } as any;
-      await processor.handleCleanupOldCandles(job);
-
-      // Should still use hardcoded 7-day threshold
-      expect(mockPrisma.priceHistory.deleteMany).toHaveBeenCalledWith({
-        where: {
-          interval: 'ONE_MINUTE',
-          timestamp: { lt: expect.any(Date) },
-        },
-      });
-    });
-
-    it('should not use job data for cleanup-zero-balance-holders', async () => {
-      mockPrisma.holder.deleteMany.mockResolvedValue({ count: 0 });
-
-      const job = { data: { customBalance: '100' } } as any;
-      await processor.handleCleanupZeroBalanceHolders(job);
-
-      // Should still use hardcoded '0' balance
-      expect(mockPrisma.holder.deleteMany).toHaveBeenCalledWith({
-        where: { balance: '0' },
-      });
-    });
-
-    it('should not use job data for cache-warmup', async () => {
-      mockRedis.del.mockResolvedValue(1);
-
-      const job = { data: { customTypes: ['custom'] } } as any;
-      await processor.handleCacheWarmup(job);
-
-      // Should still use hardcoded leaderboard types
       expect(mockRedis.del).toHaveBeenCalledTimes(3);
     });
   });

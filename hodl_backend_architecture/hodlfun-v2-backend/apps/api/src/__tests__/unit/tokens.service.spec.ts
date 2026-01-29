@@ -78,8 +78,8 @@ describe('TokensService', () => {
         take: 20,
         orderBy: { createdAt: 'desc' },
       });
-      expect(result.items).toEqual(mockTokens);
-      expect(result.pagination.total).toBe(2);
+      expect(result.data).toEqual(mockTokens);
+      expect(result.meta.total).toBe(2);
     });
 
     it('should filter by status', async () => {
@@ -128,7 +128,7 @@ describe('TokensService', () => {
 
       const result = await service.findAll({ page: 2, limit: 10 });
 
-      expect(result.pagination).toEqual({
+      expect(result.meta).toEqual({
         page: 2,
         limit: 10,
         total: 50,
@@ -208,7 +208,7 @@ describe('TokensService', () => {
         take: 20,
         orderBy: { timestamp: 'desc' },
       });
-      expect(result.items).toEqual(mockTrades);
+      expect(result.data).toEqual(mockTrades);
     });
 
     it('should normalize token address', async () => {
@@ -236,7 +236,7 @@ describe('TokensService', () => {
           take: 10,
         }),
       );
-      expect(result.pagination.totalPages).toBe(10);
+      expect(result.meta.totalPages).toBe(10);
     });
   });
 
@@ -258,7 +258,7 @@ describe('TokensService', () => {
         take: 20,
         orderBy: { balance: 'desc' },
       });
-      expect(result.items).toEqual(mockHolders);
+      expect(result.data).toEqual(mockHolders);
     });
 
     it('should normalize token address', async () => {
@@ -317,7 +317,7 @@ describe('TokensService', () => {
     ];
 
     it('should return cached trending tokens', async () => {
-      const paginatedResult = { items: mockTokens, pagination: {} };
+      const paginatedResult = { data: mockTokens, meta: {} };
       mockCache.getOrSet.mockResolvedValue(paginatedResult);
 
       const result = await service.getTrending({ page: 1, limit: 20 });
@@ -372,7 +372,7 @@ describe('TokensService', () => {
           orderBy: { createdAt: 'desc' },
         }),
       );
-      expect(result.items).toEqual(mockTokens);
+      expect(result.data).toEqual(mockTokens);
     });
 
     it('should filter for TRADING status only', async () => {

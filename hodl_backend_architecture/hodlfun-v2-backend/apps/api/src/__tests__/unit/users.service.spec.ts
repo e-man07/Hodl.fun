@@ -225,7 +225,7 @@ describe('UsersService', () => {
         },
         orderBy: { lastActivityTimestamp: 'desc' },
       });
-      expect(result.items).toEqual(mockHoldings);
+      expect(result.data).toEqual(mockHoldings);
     });
 
     it('should filter out zero balance holdings', async () => {
@@ -255,7 +255,7 @@ describe('UsersService', () => {
           take: 10,
         }),
       );
-      expect(result.pagination.totalPages).toBe(5);
+      expect(result.meta.totalPages).toBe(5);
     });
   });
 
@@ -289,7 +289,7 @@ describe('UsersService', () => {
         },
         orderBy: { timestamp: 'desc' },
       });
-      expect(result.items).toEqual(mockTrades);
+      expect(result.data).toEqual(mockTrades);
     });
 
     it('should order by timestamp descending', async () => {
@@ -327,7 +327,7 @@ describe('UsersService', () => {
         take: 20,
         orderBy: { createdAt: 'desc' },
       });
-      expect(result.items).toEqual(mockTokens);
+      expect(result.data).toEqual(mockTokens);
     });
 
     it('should order by creation date descending', async () => {

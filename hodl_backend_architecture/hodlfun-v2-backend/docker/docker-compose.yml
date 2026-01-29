@@ -75,8 +75,14 @@ services:
       - DATABASE_URL=postgresql://hodlfun:hodlfun_dev_password@postgres:5432/hodlfun?schema=public
       - REDIS_URL=redis://redis:6379
       - RPC_URL=https://evm.rpc-testnet-donut-node1.push.org/
+      - WS_RPC_URL=wss://evm.rpc-testnet-donut-node1.push.org/
       - CORE_ADDRESS=0x592F8f0abbB9a3d3c425980Ac0263363C8405b03
       - FACTORY_ADDRESS=0x3c2e258d3cf31653a17b27d5c4f1789d25d14ea8
+      - FEE_VAULT_ADDRESS=0xbe2fd9b720d1d7fac7208523376d2a3332019928
+      - WPUSH_ADDRESS=0x2137c11bdb56c8a74be8cc0fbad23ccf5cb9a8a7
+      - INDEXER_START_BLOCK=6661337
+      - INDEXER_POLL_INTERVAL=5000
+      - INDEXER_BATCH_SIZE=5000
     depends_on:
       postgres:
         condition: service_healthy

@@ -4,21 +4,26 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
-import { WalletAuthService } from '../../auth/services/wallet-auth.service';
 import { RedisService } from '@hodlfun/redis';
-import { ethers } from 'ethers';
 
-// Mock uuid
-jest.mock('uuid', () => ({
-  v4: jest.fn().mockReturnValue('mock-uuid-1234'),
-}));
-
-// Mock ethers
+// Mock ethers - use jest.fn in the factory function to ensure proper hoisting
 jest.mock('ethers', () => ({
   ethers: {
     verifyMessage: jest.fn(),
   },
 }));
+
+// Mock uuid before importing the service
+jest.mock('uuid', () => ({
+  v4: () => 'mock-uuid-1234',
+}));
+
+// Import service and ethers AFTER mocks are set up
+import { WalletAuthService } from '../../auth/services/wallet-auth.service';
+import { ethers } from 'ethers';
+
+// Get the mocked verifyMessage
+const mockVerifyMessage = ethers.verifyMessage as jest.Mock;
 
 const createMockRedisService = () => ({
   get: jest.fn(),
@@ -140,7 +145,7 @@ describe('WalletAuthService', () => {
     });
 
     it('should verify valid signature and return true', async () => {
-      (ethers.verifyMessage as jest.Mock).mockReturnValue(normalizedWallet);
+      mockVerifyMessage.mockReturnValue(normalizedWallet);
       mockRedis.del.mockResolvedValue(1);
 
       const result = await service.verifySignature(mockWallet, mockSignature);
@@ -160,19 +165,19 @@ describe('WalletAuthService', () => {
     });
 
     it('should verify message matches stored nonce', async () => {
-      (ethers.verifyMessage as jest.Mock).mockReturnValue(normalizedWallet);
+      mockVerifyMessage.mockReturnValue(normalizedWallet);
       mockRedis.del.mockResolvedValue(1);
 
       await service.verifySignature(mockWallet, mockSignature);
 
-      expect(ethers.verifyMessage).toHaveBeenCalledWith(
+      expect(mockVerifyMessage).toHaveBeenCalledWith(
         expect.stringContaining(`Nonce: ${mockNonce}`),
         mockSignature,
       );
     });
 
     it('should delete nonce after successful verification (one-time use)', async () => {
-      (ethers.verifyMessage as jest.Mock).mockReturnValue(normalizedWallet);
+      mockVerifyMessage.mockReturnValue(normalizedWallet);
       mockRedis.del.mockResolvedValue(1);
 
       await service.verifySignature(mockWallet, mockSignature);
@@ -181,7 +186,7 @@ describe('WalletAuthService', () => {
     });
 
     it('should not delete nonce if verification fails', async () => {
-      (ethers.verifyMessage as jest.Mock).mockReturnValue('0xdifferentaddress');
+      mockVerifyMessage.mockReturnValue('0xdifferentaddress');
 
       const result = await service.verifySignature(mockWallet, mockSignature);
 
@@ -190,7 +195,7 @@ describe('WalletAuthService', () => {
     });
 
     it('should return false for mismatched wallet address', async () => {
-      (ethers.verifyMessage as jest.Mock).mockReturnValue('0xdifferentaddress');
+      mockVerifyMessage.mockReturnValue('0xdifferentaddress');
 
       const result = await service.verifySignature(mockWallet, mockSignature);
 
@@ -198,7 +203,7 @@ describe('WalletAuthService', () => {
     });
 
     it('should throw UnauthorizedException for invalid signature', async () => {
-      (ethers.verifyMessage as jest.Mock).mockImplementation(() => {
+      mockVerifyMessage.mockImplementation(() => {
         throw new Error('invalid signature');
       });
 
@@ -211,7 +216,7 @@ describe('WalletAuthService', () => {
     });
 
     it('should normalize wallet address comparison', async () => {
-      (ethers.verifyMessage as jest.Mock).mockReturnValue('0xABC123DEF456'); // uppercase
+      mockVerifyMessage.mockReturnValue('0xABC123DEF456'); // uppercase
       mockRedis.del.mockResolvedValue(1);
 
       const result = await service.verifySignature('0xabc123def456', mockSignature);
@@ -220,7 +225,7 @@ describe('WalletAuthService', () => {
     });
 
     it('should look up nonce with normalized address', async () => {
-      (ethers.verifyMessage as jest.Mock).mockReturnValue(normalizedWallet);
+      mockVerifyMessage.mockReturnValue(normalizedWallet);
       mockRedis.del.mockResolvedValue(1);
 
       await service.verifySignature('0xABC123DEF456', mockSignature);

@@ -96,7 +96,7 @@ describe('CandleService', () => {
       });
     });
 
-    it('should calculate correct volume for buys', async () => {
+    it('should calculate correct native volume (buys + sells)', async () => {
       const trades = [
         { type: 'BUY', price: '100', amountIn: '1000', amountOut: '500', timestamp: new Date() },
         { type: 'BUY', price: '100', amountIn: '2000', amountOut: '1000', timestamp: new Date() },
@@ -110,7 +110,9 @@ describe('CandleService', () => {
       expect(mockPrisma.priceHistory.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           update: expect.objectContaining({
-            volumeNative: '3000', // Sum of BUY amountIn: 1000 + 2000
+            // volumeNative = BUY amountIn (PUSH spent) + SELL amountOut (PUSH received)
+            // = (1000 + 2000) + 500 = 3500
+            volumeNative: '3500',
           }),
         }),
       );

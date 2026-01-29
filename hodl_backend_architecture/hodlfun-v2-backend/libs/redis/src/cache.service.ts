@@ -1,6 +1,38 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RedisService } from './redis.service';
 
+/**
+ * Recursively convert BigInt values to strings for JSON serialization
+ * Inlined here to avoid circular dependency with @hodlfun/common
+ */
+function serializeBigInts<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  if (typeof obj === 'bigint') {
+    return obj.toString() as unknown as T;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(serializeBigInts) as unknown as T;
+  }
+
+  if (typeof obj === 'object') {
+    if (obj instanceof Date) {
+      return obj;
+    }
+
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = serializeBigInts(value);
+    }
+    return result as T;
+  }
+
+  return obj;
+}
+
 @Injectable()
 export class CacheService {
   private readonly logger = new Logger(CacheService.name);
@@ -20,7 +52,8 @@ export class CacheService {
   }
 
   async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
-    const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+    // Serialize BigInts to strings before JSON.stringify to prevent serialization errors
+    const serialized = typeof value === 'string' ? value : JSON.stringify(serializeBigInts(value));
     if (ttlSeconds) {
       await this.redis.set(key, serialized, 'EX', ttlSeconds);
     } else {

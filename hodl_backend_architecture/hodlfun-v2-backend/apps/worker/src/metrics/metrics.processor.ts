@@ -1,21 +1,37 @@
-import { Process, Processor } from '@nestjs/bull';
-import { Logger } from '@nestjs/common';
-import { Job } from 'bull';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '@hodlfun/database';
-import { CacheService } from '@hodlfun/redis';
+import { CacheService, PubSubService } from '@hodlfun/redis';
 
-@Processor('metrics')
-export class MetricsProcessor {
+@Injectable()
+export class MetricsProcessor implements OnModuleInit {
   private readonly logger = new Logger(MetricsProcessor.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
+    private readonly pubsub: PubSubService,
   ) {}
 
-  @Process('calculate-leaderboard')
-  async handleCalculateLeaderboard(job: Job<{ type: string }>) {
-    const { type } = job.data;
+  async onModuleInit() {
+    // Subscribe to portfolio_update channel from the indexer
+    await this.pubsub.subscribe('portfolio_update', (message: unknown) => {
+      const msg = message as { type?: string; walletAddress?: string };
+      if (msg.type === 'portfolio_update' && msg.walletAddress) {
+        this.logger.debug(`Received portfolio update for ${msg.walletAddress}`);
+        // Process async without blocking the subscriber
+        this.updateUserPortfolio(msg.walletAddress).catch((err) => {
+          this.logger.error(`Failed to update portfolio: ${(err as Error).message}`);
+        });
+      }
+    });
+    this.logger.log('Subscribed to portfolio_update channel');
+  }
+
+  /**
+   * Calculate and cache leaderboard data by type.
+   * Called directly by the scheduler every 30 seconds.
+   */
+  async calculateLeaderboard(type: string) {
 
     let result: unknown[];
     switch (type) {
@@ -36,7 +52,7 @@ export class MetricsProcessor {
     this.logger.log(`Updated ${type} leaderboard: ${result.length} tokens`);
   }
 
-  private async calculateGainers() {
+  private async calculateGainers(): Promise<unknown[]> {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     return this.prisma.$queryRaw`
@@ -68,7 +84,7 @@ export class MetricsProcessor {
     `;
   }
 
-  private async calculateVolumeLeaders() {
+  private async calculateVolumeLeaders(): Promise<unknown[]> {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     return this.prisma.$queryRaw`
@@ -88,7 +104,7 @@ export class MetricsProcessor {
     `;
   }
 
-  private async calculateNewTokens() {
+  private async calculateNewTokens(): Promise<unknown[]> {
     return this.prisma.token.findMany({
       where: { status: 'TRADING' },
       orderBy: { createdAt: 'desc' },
@@ -104,35 +120,40 @@ export class MetricsProcessor {
     });
   }
 
-  @Process('update-user-portfolio')
-  async handleUpdateUserPortfolio(job: Job<{ walletAddress: string }>) {
-    const { walletAddress } = job.data;
+  /**
+   * Update a user's portfolio with their total invested, returned, and trade count.
+   * Called via PubSub when indexer processes trades.
+   */
+  async updateUserPortfolio(walletAddress: string) {
+    const normalizedAddress = walletAddress.toLowerCase();
 
     const trades = await this.prisma.trade.findMany({
-      where: { traderAddress: walletAddress.toLowerCase() },
+      where: { traderAddress: normalizedAddress },
     });
 
     const totalInvested = trades
-      .filter((t) => t.type === 'BUY')
-      .reduce((sum, t) => sum + BigInt(t.amountIn), 0n);
+      .filter((t: { type: string }) => t.type === 'BUY')
+      .reduce((sum: bigint, t: { amountIn: string }) => sum + BigInt(t.amountIn), 0n);
 
     const totalReturned = trades
-      .filter((t) => t.type === 'SELL')
-      .reduce((sum, t) => sum + BigInt(t.amountOut), 0n);
+      .filter((t: { type: string }) => t.type === 'SELL')
+      .reduce((sum: bigint, t: { amountOut: string }) => sum + BigInt(t.amountOut), 0n);
 
     await this.prisma.userPortfolio.upsert({
-      where: { walletAddress: walletAddress.toLowerCase() },
+      where: { walletAddress: normalizedAddress },
       update: {
         totalInvested: totalInvested.toString(),
         totalReturned: totalReturned.toString(),
         totalTrades: trades.length,
       },
       create: {
-        walletAddress: walletAddress.toLowerCase(),
+        walletAddress: normalizedAddress,
         totalInvested: totalInvested.toString(),
         totalReturned: totalReturned.toString(),
         totalTrades: trades.length,
       },
     });
+
+    this.logger.debug(`Updated portfolio for ${normalizedAddress}: invested=${totalInvested}, returned=${totalReturned}, trades=${trades.length}`);
   }
 }

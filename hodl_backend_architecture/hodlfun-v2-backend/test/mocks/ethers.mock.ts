@@ -84,18 +84,22 @@ export class MockWallet {
   address: string;
   privateKey: string;
   provider: MockJsonRpcProvider;
+  signMessage: jest.Mock;
+  signTransaction: jest.Mock;
+  signTypedData: jest.Mock;
+  getAddress: jest.Mock;
+  connect: jest.Mock;
 
   constructor(privateKey?: string, provider?: MockJsonRpcProvider) {
     this.privateKey = privateKey || '0x' + '1'.repeat(64);
     this.address = '0x' + 'a'.repeat(40);
     this.provider = provider || new MockJsonRpcProvider();
+    this.signMessage = jest.fn().mockResolvedValue('0x' + '1'.repeat(130));
+    this.signTransaction = jest.fn().mockResolvedValue('0x');
+    this.signTypedData = jest.fn().mockResolvedValue('0x' + '1'.repeat(130));
+    this.getAddress = jest.fn().mockResolvedValue(this.address);
+    this.connect = jest.fn().mockReturnThis();
   }
-
-  signMessage = jest.fn().mockResolvedValue('0x' + '1'.repeat(130));
-  signTransaction = jest.fn().mockResolvedValue('0x');
-  signTypedData = jest.fn().mockResolvedValue('0x' + '1'.repeat(130));
-  getAddress = jest.fn().mockResolvedValue(this.address);
-  connect = jest.fn().mockReturnThis();
 }
 
 /**

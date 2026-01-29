@@ -1,29 +1,40 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
+import { CleanupProcessor } from './cleanup.processor';
 
 @Injectable()
 export class CleanupScheduler {
   private readonly logger = new Logger(CleanupScheduler.name);
 
-  constructor(@InjectQueue('cleanup') private readonly queue: Queue) {}
+  constructor(private readonly cleanupProcessor: CleanupProcessor) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async scheduleOldCandleCleanup() {
-    await this.queue.add('cleanup-old-candles', {});
-    this.logger.debug('Scheduled old candle cleanup');
+    try {
+      await this.cleanupProcessor.cleanupOldCandles();
+      this.logger.debug('Completed old candle cleanup');
+    } catch (error) {
+      this.logger.error(`Failed to cleanup old candles: ${(error as Error).message}`);
+    }
   }
 
   @Cron(CronExpression.EVERY_HOUR)
   async scheduleZeroBalanceCleanup() {
-    await this.queue.add('cleanup-zero-balance-holders', {});
-    this.logger.debug('Scheduled zero-balance holder cleanup');
+    try {
+      await this.cleanupProcessor.cleanupZeroBalanceHolders();
+      this.logger.debug('Completed zero-balance holder cleanup');
+    } catch (error) {
+      this.logger.error(`Failed to cleanup zero-balance holders: ${(error as Error).message}`);
+    }
   }
 
   @Cron(CronExpression.EVERY_10_MINUTES)
   async scheduleCacheWarmup() {
-    await this.queue.add('cache-warmup', {});
-    this.logger.debug('Scheduled cache warmup');
+    try {
+      await this.cleanupProcessor.cacheWarmup();
+      this.logger.debug('Completed cache warmup');
+    } catch (error) {
+      this.logger.error(`Failed cache warmup: ${(error as Error).message}`);
+    }
   }
 }

@@ -24,6 +24,10 @@ export class MetricsService {
   public readonly indexerBlockLag: Gauge;
   public readonly indexerEventsProcessed: Counter;
 
+  // Alert Metrics
+  public readonly alertsChecked: Counter;
+  public readonly alertsTriggered: Counter;
+
   constructor() {
     this.registry = new Registry();
     this.registry.setDefaultLabels({ app: 'hodlfun' });
@@ -106,6 +110,21 @@ export class MetricsService {
       name: 'hodlfun_indexer_events_processed_total',
       help: 'Total number of blockchain events processed',
       labelNames: ['event_type'],
+      registers: [this.registry],
+    });
+
+    // Alert Metrics
+    this.alertsChecked = new Counter({
+      name: 'hodlfun_alerts_checked_total',
+      help: 'Total number of alerts checked',
+      labelNames: ['token'],
+      registers: [this.registry],
+    });
+
+    this.alertsTriggered = new Counter({
+      name: 'hodlfun_alerts_triggered_total',
+      help: 'Total number of alerts triggered',
+      labelNames: ['type'],
       registers: [this.registry],
     });
   }

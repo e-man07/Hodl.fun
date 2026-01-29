@@ -63,3 +63,35 @@ export function compareBigIntStrings(a: string, b: string): number {
   if (bigA > bigB) return 1;
   return 0;
 }
+
+/**
+ * Recursively convert BigInt values to strings for JSON serialization
+ * This prevents "Do not know how to serialize a BigInt" errors
+ */
+export function serializeBigInts<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  if (typeof obj === 'bigint') {
+    return obj.toString() as unknown as T;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(serializeBigInts) as unknown as T;
+  }
+
+  if (typeof obj === 'object') {
+    if (obj instanceof Date) {
+      return obj;
+    }
+
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = serializeBigInts(value);
+    }
+    return result as T;
+  }
+
+  return obj;
+}

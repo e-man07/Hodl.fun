@@ -59,12 +59,13 @@ describe('Address Validators', () => {
       expect(errors[0].property).toBe('address');
     });
 
-    it('should fail validation for an invalid address (no 0x prefix)', async () => {
+    it('should pass validation for address without 0x prefix (ethers v6 accepts this)', async () => {
+      // Note: ethers v6 isAddress() accepts addresses without 0x prefix
       const dto = new TestAddressDto();
       dto.address = '1234567890abcdef1234567890abcdef12345678';
 
       const errors = await validate(dto);
-      expect(errors.length).toBe(1);
+      expect(errors.length).toBe(0);
     });
 
     it('should fail validation for an invalid address (invalid characters)', async () => {

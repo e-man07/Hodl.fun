@@ -1,10 +1,8 @@
-import { Process, Processor } from '@nestjs/bull';
-import { Logger } from '@nestjs/common';
-import { Job } from 'bull';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@hodlfun/database';
 import { RedisService } from '@hodlfun/redis';
 
-@Processor('cleanup')
+@Injectable()
 export class CleanupProcessor {
   private readonly logger = new Logger(CleanupProcessor.name);
 
@@ -13,9 +11,11 @@ export class CleanupProcessor {
     private readonly redis: RedisService,
   ) {}
 
-  @Process('cleanup-old-candles')
-  async handleCleanupOldCandles(_job: Job) {
-    // Keep 1-minute candles for 7 days
+  /**
+   * Clean up old 1-minute candles (keep 7 days).
+   * Called by scheduler at 3 AM daily.
+   */
+  async cleanupOldCandles() {
     const oneMinuteThreshold = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const deleted = await this.prisma.priceHistory.deleteMany({
@@ -28,8 +28,11 @@ export class CleanupProcessor {
     this.logger.log(`Cleaned up ${deleted.count} old 1-minute candles`);
   }
 
-  @Process('cleanup-zero-balance-holders')
-  async handleCleanupZeroBalanceHolders(_job: Job) {
+  /**
+   * Clean up holders with zero balance.
+   * Called by scheduler every hour.
+   */
+  async cleanupZeroBalanceHolders() {
     const deleted = await this.prisma.holder.deleteMany({
       where: { balance: '0' },
     });
@@ -37,9 +40,11 @@ export class CleanupProcessor {
     this.logger.log(`Cleaned up ${deleted.count} zero-balance holders`);
   }
 
-  @Process('cache-warmup')
-  async handleCacheWarmup(_job: Job) {
-    // Warm up leaderboard caches
+  /**
+   * Warm up caches by invalidating stale leaderboard data.
+   * Called by scheduler every 10 minutes.
+   */
+  async cacheWarmup() {
     const types = ['gainers', 'volume', 'new'];
     for (const type of types) {
       await this.redis.del(`leaderboard:${type}`);

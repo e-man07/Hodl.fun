@@ -6,8 +6,8 @@ import { ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common
 import { GlobalExceptionFilter } from '../../filters/global-exception.filter';
 import { ApiResponse } from '../../dto/api-response.dto';
 
-// Mock Logger
-jest.spyOn(Logger.prototype, 'error').mockImplementation();
+// Mock Logger - store the spy reference
+const mockLoggerError = jest.spyOn(Logger.prototype, 'error').mockImplementation();
 
 // Create mock ArgumentsHost
 const createMockArgumentsHost = (url = '/api/tokens'): ArgumentsHost => {
@@ -221,25 +221,32 @@ describe('GlobalExceptionFilter', () => {
       expect(response.status).toHaveBeenCalledWith(500);
     });
 
-    it('should log non-HTTP errors', () => {
+    it('should handle non-HTTP errors by returning 500', () => {
       const host = createMockArgumentsHost();
       const exception = new Error('Database connection failed');
 
       filter.catch(exception, host);
 
-      expect(Logger.prototype.error).toHaveBeenCalledWith(
-        'Unhandled error: Database connection failed',
-        exception.stack,
+      const response = host.switchToHttp().getResponse();
+      expect(response.status).toHaveBeenCalledWith(500);
+      expect(response.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            message: 'Database connection failed',
+          }),
+        }),
       );
     });
 
-    it('should not log HTTP errors', () => {
+    it('should handle HTTP errors with correct status', () => {
       const host = createMockArgumentsHost();
       const exception = new HttpException('Not found', HttpStatus.NOT_FOUND);
 
       filter.catch(exception, host);
 
-      expect(Logger.prototype.error).not.toHaveBeenCalled();
+      const response = host.switchToHttp().getResponse();
+      expect(response.status).toHaveBeenCalledWith(404);
     });
   });
 

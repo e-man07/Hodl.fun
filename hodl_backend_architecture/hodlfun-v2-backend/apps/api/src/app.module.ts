@@ -10,12 +10,14 @@ import { TokensModule } from './tokens/tokens.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { LeaderboardModule } from './leaderboard/leaderboard.module';
+import { AlertsModule } from './alerts/alerts.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: ['../../.env.local', '../../.env'],
     }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
@@ -47,6 +49,8 @@ import { MetricsModule } from './metrics/metrics.module';
     TokensModule,
     UsersModule,
     AuthModule,
+    LeaderboardModule,
+    AlertsModule,
   ],
   providers: [
     {

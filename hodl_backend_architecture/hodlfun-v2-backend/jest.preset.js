@@ -1,3 +1,5 @@
+const path = require('path');
+
 /**
  * Shared Jest Preset for all packages
  */
@@ -7,8 +9,9 @@ module.exports = {
     '^.+\\.tsx?$': [
       'ts-jest',
       {
-        tsconfig: '<rootDir>/tsconfig.json',
-        isolatedModules: true,
+        // Use the root tsconfig.test.json for consistent path resolution
+        // isolatedModules is now set in tsconfig.test.json
+        tsconfig: path.resolve(__dirname, 'tsconfig.test.json'),
       },
     ],
   },

@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": false,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2021",
+    "sourceMap": true,
+    "baseUrl": "..",
+    "skipLibCheck": true,
+    "strict": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "paths": {
+      "@hodlfun/common": ["libs/common/src"],
+      "@hodlfun/common/*": ["libs/common/src/*"],
+      "@hodlfun/database": ["libs/database/src"],
+      "@hodlfun/database/*": ["libs/database/src/*"],
+      "@hodlfun/redis": ["libs/redis/src"],
+      "@hodlfun/redis/*": ["libs/redis/src/*"],
+      "@nestjs/*": ["apps/api/node_modules/@nestjs/*", "node_modules/@nestjs/*"],
+      "ethers": ["apps/api/node_modules/ethers"],
+      "supertest": ["node_modules/supertest"]
+    }
+  },
+  "include": [
+    "./**/*.ts",
+    "../apps/**/*.ts",
+    "../libs/**/*.ts"
+  ]
+}

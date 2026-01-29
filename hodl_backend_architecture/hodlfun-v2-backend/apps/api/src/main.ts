@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter, LoggingInterceptor, TransformInterceptor } from '@hodlfun/common';
@@ -26,7 +27,7 @@ async function bootstrap() {
   );
 
   // Get real IP from Cloudflare
-  app.use((req, _res, next) => {
+  app.use((req: any, _res: any, next: any) => {
     const cfConnectingIp = req.headers['cf-connecting-ip'];
     if (cfConnectingIp && typeof cfConnectingIp === 'string') {
       req.ip = cfConnectingIp;
@@ -61,6 +62,36 @@ async function bootstrap() {
     credentials: true,
     maxAge: 86400,
   });
+
+  // Swagger/OpenAPI documentation
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Hodl.fun API')
+    .setDescription('Universal token launchpad API for Push Chain')
+    .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'JWT-auth',
+    )
+    .addTag('auth', 'Authentication endpoints')
+    .addTag('tokens', 'Token endpoints')
+    .addTag('users', 'User endpoints')
+    .addTag('health', 'Health check endpoints')
+    .build();
+
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  });
+  logger.log('Swagger documentation available at /api/docs');
 
   const port = configService.get('PORT', 3000);
   await app.listen(port);

@@ -1,0 +1,36 @@
+export type TokenStatus = 'TRADING' | 'LOCKED' | 'LISTED';
+export interface MockToken {
+    id: string;
+    address: string;
+    curveAddress: string;
+    creatorAddress: string;
+    name: string;
+    symbol: string;
+    tokenUri: string | null;
+    virtualNative: string;
+    virtualToken: string;
+    realNative: string;
+    realToken: string;
+    k: string;
+    currentPrice: string;
+    marketCap: string;
+    athPrice: string | null;
+    athPriceTimestamp: Date | null;
+    athMarketCap: string | null;
+    athMarketCapTimestamp: Date | null;
+    status: TokenStatus;
+    poolAddress: string | null;
+    createdAt: Date;
+    createdBlock: bigint;
+    graduatedAt: Date | null;
+    listedAt: Date | null;
+    listingBlock: bigint | null;
+    updatedAt: Date;
+}
+export declare function createMockToken(overrides?: Partial<MockToken>): MockToken;
+export declare function createMockTokens(count: number, overrides?: Partial<MockToken>): MockToken[];
+export declare function createGraduatedToken(overrides?: Partial<MockToken>): MockToken;
+export declare function createListedToken(overrides?: Partial<MockToken>): MockToken;
+export declare function createTokenWithATH(overrides?: Partial<MockToken>): MockToken;
+export declare function createTrendingToken(overrides?: Partial<MockToken>): MockToken;
+export declare function resetTokenCounter(): void;

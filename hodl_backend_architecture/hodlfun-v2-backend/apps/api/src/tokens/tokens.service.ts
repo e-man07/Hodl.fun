@@ -30,7 +30,7 @@ export class TokensService {
     return PaginatedResponse.create(tokens, page, limit, total);
   }
 
-  async findByAddress(address: string) {
+  async findByAddress(address: string): Promise<unknown> {
     const normalizedAddress = address.toLowerCase();
 
     return this.cache.getOrSet(`token:${normalizedAddress}`, 10, async () => {
@@ -46,7 +46,7 @@ export class TokensService {
     });
   }
 
-  async getTrades(address: string, pagination: PaginationDto) {
+  async getTrades(address: string, pagination: PaginationDto): Promise<PaginatedResponse<unknown>> {
     const { page = 1, limit = 20 } = pagination;
     const skip = (page - 1) * limit;
     const normalizedAddress = address.toLowerCase();
@@ -66,7 +66,7 @@ export class TokensService {
     return PaginatedResponse.create(trades, page, limit, total);
   }
 
-  async getHolders(address: string, pagination: PaginationDto) {
+  async getHolders(address: string, pagination: PaginationDto): Promise<PaginatedResponse<unknown>> {
     const { page = 1, limit = 20 } = pagination;
     const skip = (page - 1) * limit;
     const normalizedAddress = address.toLowerCase();
@@ -86,7 +86,7 @@ export class TokensService {
     return PaginatedResponse.create(holders, page, limit, total);
   }
 
-  async getPriceHistory(address: string, interval: PriceInterval) {
+  async getPriceHistory(address: string, interval: PriceInterval): Promise<unknown> {
     const normalizedAddress = address.toLowerCase();
 
     return this.cache.getOrSet(`candles:${normalizedAddress}:${interval}`, 5, async () => {
@@ -101,10 +101,18 @@ export class TokensService {
     });
   }
 
-  async getTrending(pagination: PaginationDto) {
+  async getTrending(pagination: PaginationDto): Promise<unknown> {
     const { page = 1, limit = 20 } = pagination;
     const skip = (page - 1) * limit;
 
+    // Try to use pre-computed leaderboard from worker (updated every 30s)
+    const cachedLeaderboard = await this.cache.get<unknown[]>('leaderboard:volume');
+    if (cachedLeaderboard && cachedLeaderboard.length > 0) {
+      const paginatedTokens = cachedLeaderboard.slice(skip, skip + limit);
+      return PaginatedResponse.create(paginatedTokens, page, limit, cachedLeaderboard.length);
+    }
+
+    // Fallback to on-demand computation if worker hasn't populated cache
     return this.cache.getOrSet(`trending:${page}:${limit}`, 30, async () => {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
@@ -137,7 +145,7 @@ export class TokensService {
     });
   }
 
-  async getNew(pagination: PaginationDto) {
+  async getNew(pagination: PaginationDto): Promise<PaginatedResponse<unknown>> {
     const { page = 1, limit = 20 } = pagination;
     const skip = (page - 1) * limit;
 

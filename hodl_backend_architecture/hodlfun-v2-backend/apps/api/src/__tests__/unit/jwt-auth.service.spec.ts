@@ -6,13 +6,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { JwtAuthService } from '../../auth/services/jwt-auth.service';
 import { RedisService } from '@hodlfun/redis';
 
-// Mock uuid
+// We need to mock uuid before importing JwtAuthService
 jest.mock('uuid', () => ({
-  v4: jest.fn().mockReturnValue('mock-token-id'),
+  v4: () => 'mock-token-id',
 }));
+
+// Import service AFTER mock is set up
+import { JwtAuthService } from '../../auth/services/jwt-auth.service';
 
 const createMockJwtService = () => ({
   sign: jest.fn(),

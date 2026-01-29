@@ -43,6 +43,12 @@ model Token {
   status                TokenStatus @default(TRADING)
   poolAddress           String?     @map("pool_address")
 
+  // Graduation details (populated when token graduates to DEX)
+  graduationTxHash      String?     @map("graduation_tx_hash")
+  graduationAmount0     String?     @map("graduation_amount0")  // Token amount in pool
+  graduationAmount1     String?     @map("graduation_amount1")  // WPUSH amount in pool
+  graduationLiquidity   String?     @map("graduation_liquidity") // LP token amount
+
   // Timestamps
   createdAt             DateTime    @default(now()) @map("created_at")
   createdBlock          BigInt      @map("created_block")
@@ -55,6 +61,7 @@ model Token {
   trades                Trade[]
   holders               Holder[]
   priceHistory          PriceHistory[]
+  alerts                Alert[]
 
   @@index([creatorAddress])
   @@index([status])
@@ -171,9 +178,40 @@ model CreatorFee {
 }
 
 // =============================================================================
-// USER PORTFOLIOS
+// USERS (expanded from UserPortfolio)
 // =============================================================================
 
+model User {
+  id            String    @id @default(uuid())
+  walletAddress String?   @unique @map("wallet_address")
+  pushDid       String?   @unique @map("push_did")
+  email         String?
+  authType      AuthType  @default(WALLET) @map("auth_type")
+  isAdmin       Boolean   @default(false) @map("is_admin")
+
+  // Timestamps
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastLoginAt   DateTime? @map("last_login_at")
+
+  // Portfolio data (migrated from UserPortfolio)
+  totalInvested String    @default("0") @map("total_invested")
+  totalReturned String    @default("0") @map("total_returned")
+  totalTrades   Int       @default(0) @map("total_trades")
+
+  @@index([walletAddress])
+  @@index([pushDid])
+  @@index([authType])
+  @@map("users")
+}
+
+enum AuthType {
+  WALLET
+  SOCIAL
+}
+
+// Legacy alias for backward compatibility during migration
+// TODO: Remove after migration is complete
 model UserPortfolio {
   id            String   @id @default(uuid())
   walletAddress String   @unique @map("wallet_address")
@@ -196,4 +234,55 @@ model IndexerState {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@map("indexer_state")
+}
+
+// =============================================================================
+// ALERTS
+// =============================================================================
+
+model Alert {
+  id            String      @id @default(uuid())
+  walletAddress String      @map("wallet_address")
+  tokenAddress  String      @map("token_address")
+  alertType     AlertType   @map("alert_type")
+  targetPrice   String?     @map("target_price")
+  isTriggered   Boolean     @default(false) @map("is_triggered")
+  triggeredAt   DateTime?   @map("triggered_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  // Relations
+  token         Token       @relation(fields: [tokenAddress], references: [address])
+
+  @@index([walletAddress])
+  @@index([tokenAddress])
+  @@index([isTriggered])
+  @@map("alerts")
+}
+
+enum AlertType {
+  PRICE_ABOVE
+  PRICE_BELOW
+  GRADUATION
+}
+
+// =============================================================================
+// AUDIT LOGS
+// =============================================================================
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  walletAddress String?  @map("wallet_address")
+  action        String
+  entityType    String?  @map("entity_type")
+  entityId      String?  @map("entity_id")
+  details       Json?
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([walletAddress])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

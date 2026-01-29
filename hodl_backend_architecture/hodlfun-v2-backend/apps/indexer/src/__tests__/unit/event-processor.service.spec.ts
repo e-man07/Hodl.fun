@@ -9,6 +9,7 @@ import { PrismaService } from '@hodlfun/database';
 import { PubSubService, CacheService } from '@hodlfun/redis';
 import { MetricsService } from '@hodlfun/common';
 import { RpcService } from '../../blockchain/rpc.service';
+import { WebSocketService } from '../../blockchain/websocket.service';
 
 // Mock ethers
 jest.mock('ethers', () => ({
@@ -46,6 +47,7 @@ const createMockPrismaService = () => ({
   token: {
     findFirst: jest.fn(),
     findUnique: jest.fn(),
+    findMany: jest.fn(),
     upsert: jest.fn(),
     update: jest.fn(),
   },
@@ -75,6 +77,12 @@ const createMockRpcService = () => ({
   getLogs: jest.fn(),
 });
 
+const createMockWebSocketService = () => ({
+  isConnected: jest.fn().mockReturnValue(false), // Default to polling mode for tests
+  getContract: jest.fn().mockReturnValue(null),
+  onBlock: jest.fn().mockReturnValue(() => {}),
+});
+
 const createMockPubSubService = () => ({
   publish: jest.fn(),
 });
@@ -97,6 +105,7 @@ describe('EventProcessorService', () => {
   let mockConfig: ReturnType<typeof createMockConfigService>;
   let mockPrisma: ReturnType<typeof createMockPrismaService>;
   let mockRpc: ReturnType<typeof createMockRpcService>;
+  let mockWs: ReturnType<typeof createMockWebSocketService>;
   let mockPubsub: ReturnType<typeof createMockPubSubService>;
   let mockCache: ReturnType<typeof createMockCacheService>;
   let mockMetrics: ReturnType<typeof createMockMetricsService>;
@@ -105,6 +114,7 @@ describe('EventProcessorService', () => {
     mockConfig = createMockConfigService();
     mockPrisma = createMockPrismaService();
     mockRpc = createMockRpcService();
+    mockWs = createMockWebSocketService();
     mockPubsub = createMockPubSubService();
     mockCache = createMockCacheService();
     mockMetrics = createMockMetricsService();
@@ -115,6 +125,7 @@ describe('EventProcessorService', () => {
         { provide: ConfigService, useValue: mockConfig },
         { provide: PrismaService, useValue: mockPrisma },
         { provide: RpcService, useValue: mockRpc },
+        { provide: WebSocketService, useValue: mockWs },
         { provide: PubSubService, useValue: mockPubsub },
         { provide: CacheService, useValue: mockCache },
         { provide: MetricsService, useValue: mockMetrics },
@@ -134,7 +145,7 @@ describe('EventProcessorService', () => {
     });
   });
 
-  describe('processNewBlocks', () => {
+  describe('pollForMissedBlocks (polling fallback)', () => {
     beforeEach(() => {
       mockPrisma.indexerState.findUnique.mockResolvedValue({
         id: 'main',
@@ -142,18 +153,40 @@ describe('EventProcessorService', () => {
       });
       mockRpc.getBlockNumber.mockResolvedValue(150);
       mockRpc.getLogs.mockResolvedValue([]);
+      mockPrisma.token.findMany.mockResolvedValue([]);
+      // Ensure polling mode (WebSocket not connected)
+      mockWs.isConnected.mockReturnValue(false);
     });
 
     it('should skip if already processing', async () => {
       // Set processing flag to true via reflection
       (service as any).isProcessing = true;
 
-      await service.processNewBlocks();
+      await service.pollForMissedBlocks();
 
       expect(mockRpc.getBlockNumber).not.toHaveBeenCalled();
 
       // Reset for cleanup
       (service as any).isProcessing = false;
+    });
+
+    it('should still poll as safety net even when WebSocket is connected', async () => {
+      // The implementation always polls as a safety net since WebSocket may miss events
+      mockWs.isConnected.mockReturnValue(true);
+      (service as any).isWebSocketMode = true;
+      mockRpc.getBlockNumber.mockResolvedValue(100);
+      mockPrisma.indexerState.findUnique.mockResolvedValue({
+        id: 'main',
+        lastProcessedBlock: 100n,
+      });
+
+      await service.pollForMissedBlocks();
+
+      // Polling still happens as safety net, but is a no-op if already caught up
+      expect(mockRpc.getBlockNumber).toHaveBeenCalled();
+
+      // Reset
+      (service as any).isWebSocketMode = false;
     });
 
     it('should set block lag to 0 when caught up', async () => {
@@ -163,7 +196,7 @@ describe('EventProcessorService', () => {
         lastProcessedBlock: 100n,
       });
 
-      await service.processNewBlocks();
+      await service.pollForMissedBlocks();
 
       expect(mockMetrics.indexerBlockLag.set).toHaveBeenCalledWith(0);
     });
@@ -172,10 +205,12 @@ describe('EventProcessorService', () => {
       mockRpc.getBlockNumber.mockResolvedValue(250);
       mockConfig.get.mockImplementation((key: string, defaultValue?: string) => {
         if (key === 'INDEXER_BATCH_SIZE') return '100';
+        if (key === 'CORE_ADDRESS') return TEST_ADDRESSES.core;
+        if (key === 'FACTORY_ADDRESS') return TEST_ADDRESSES.factory;
         return defaultValue;
       });
 
-      await service.processNewBlocks();
+      await service.pollForMissedBlocks();
 
       // Should process from 101 to 200 (batch of 100)
       expect(mockRpc.getLogs).toHaveBeenCalledWith(
@@ -187,7 +222,7 @@ describe('EventProcessorService', () => {
     });
 
     it('should update indexer state after processing', async () => {
-      await service.processNewBlocks();
+      await service.pollForMissedBlocks();
 
       expect(mockPrisma.indexerState.update).toHaveBeenCalledWith({
         where: { id: 'main' },
@@ -202,7 +237,7 @@ describe('EventProcessorService', () => {
         lastProcessedBlock: 0n,
       });
 
-      await service.processNewBlocks();
+      await service.pollForMissedBlocks();
 
       expect(mockPrisma.indexerState.create).toHaveBeenCalled();
     });
@@ -493,18 +528,23 @@ describe('EventProcessorService', () => {
   });
 
   describe('handleListing', () => {
-    it('should update token status to LISTED with pool address', async () => {
+    const mockTxHash = '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+
+    it('should update token status to LISTED with pool address and graduation details', async () => {
       const mockListingEvent = {
         args: {
           token: TEST_ADDRESSES.token,
           pool: TEST_ADDRESSES.pool,
-          amount0: BigInt('1000'),
-          amount1: BigInt('2000'),
-          liquidity: BigInt('1414'),
+          amount0: BigInt('1000000000000000000000'), // 1000 tokens
+          amount1: BigInt('500000000000000000'), // 0.5 WPUSH
+          liquidity: BigInt('22360679774997896964'), // sqrt(amount0 * amount1)
         },
       };
 
-      await (service as any).handleListing(mockListingEvent, { blockNumber: 200 });
+      await (service as any).handleListing(mockListingEvent, {
+        blockNumber: 200,
+        transactionHash: mockTxHash,
+      });
 
       expect(mockPrisma.token.update).toHaveBeenCalledWith({
         where: { address: TEST_ADDRESSES.token.toLowerCase() },
@@ -513,11 +553,47 @@ describe('EventProcessorService', () => {
           poolAddress: TEST_ADDRESSES.pool.toLowerCase(),
           listedAt: expect.any(Date),
           listingBlock: 200n,
+          graduationTxHash: mockTxHash,
+          graduationAmount0: '1000000000000000000000',
+          graduationAmount1: '500000000000000000',
+          graduationLiquidity: '22360679774997896964',
         },
       });
     });
 
-    it('should publish listing event', async () => {
+    it('should publish listing event with graduation details', async () => {
+      const mockListingEvent = {
+        args: {
+          token: TEST_ADDRESSES.token,
+          pool: TEST_ADDRESSES.pool,
+          amount0: BigInt('1000000000000000000000'),
+          amount1: BigInt('500000000000000000'),
+          liquidity: BigInt('22360679774997896964'),
+        },
+      };
+
+      await (service as any).handleListing(mockListingEvent, {
+        blockNumber: 200,
+        transactionHash: mockTxHash,
+      });
+
+      expect(mockPubsub.publish).toHaveBeenCalledWith(
+        'listing',
+        expect.objectContaining({
+          type: 'listing',
+          tokenAddress: TEST_ADDRESSES.token.toLowerCase(),
+          poolAddress: TEST_ADDRESSES.pool.toLowerCase(),
+          graduationTxHash: mockTxHash,
+          liquidity: {
+            amount0: '1000000000000000000000',
+            amount1: '500000000000000000',
+            liquidity: '22360679774997896964',
+          },
+        }),
+      );
+    });
+
+    it('should invalidate token caches after listing', async () => {
       const mockListingEvent = {
         args: {
           token: TEST_ADDRESSES.token,
@@ -528,15 +604,36 @@ describe('EventProcessorService', () => {
         },
       };
 
-      await (service as any).handleListing(mockListingEvent, { blockNumber: 200 });
+      await (service as any).handleListing(mockListingEvent, {
+        blockNumber: 200,
+        transactionHash: mockTxHash,
+      });
 
-      expect(mockPubsub.publish).toHaveBeenCalledWith(
-        'listing',
-        expect.objectContaining({
-          type: 'listing',
-          poolAddress: TEST_ADDRESSES.pool.toLowerCase(),
-        }),
+      expect(mockCache.invalidate).toHaveBeenCalledWith(
+        `token:${TEST_ADDRESSES.token.toLowerCase()}`,
       );
+      expect(mockCache.invalidatePattern).toHaveBeenCalledWith('tokens:*');
+    });
+
+    it('should increment listing metrics', async () => {
+      const mockListingEvent = {
+        args: {
+          token: TEST_ADDRESSES.token,
+          pool: TEST_ADDRESSES.pool,
+          amount0: BigInt('1000'),
+          amount1: BigInt('2000'),
+          liquidity: BigInt('1414'),
+        },
+      };
+
+      await (service as any).handleListing(mockListingEvent, {
+        blockNumber: 200,
+        transactionHash: mockTxHash,
+      });
+
+      expect(mockMetrics.indexerEventsProcessed.inc).toHaveBeenCalledWith({
+        event_type: 'Listing',
+      });
     });
   });
 

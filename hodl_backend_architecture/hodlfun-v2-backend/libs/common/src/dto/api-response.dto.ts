@@ -1,5 +1,5 @@
 export class ApiResponse<T> {
-  success: boolean;
+  success!: boolean;
   data?: T;
   error?: {
     statusCode: number;

@@ -1,10 +1,15 @@
 /**
- * Holder Test Data Factory
- * Creates mock Holder entities for testing
+ * Holder, UserPortfolio, and PriceHistory Test Data Factories
+ * Creates mock entities for testing
  */
 import { TEST_ADDRESSES } from '../ethers.mock';
 
-// Holder interface matching Prisma model
+// PriceInterval enum mirroring Prisma schema
+export type PriceInterval = 'ONE_MINUTE' | 'FIVE_MINUTES' | 'FIFTEEN_MINUTES' | 'ONE_HOUR' | 'FOUR_HOURS' | 'ONE_DAY';
+
+/**
+ * Holder interface matching Prisma model
+ */
 export interface MockHolder {
   id: string;
   tokenAddress: string;
@@ -14,141 +19,9 @@ export interface MockHolder {
   lastActivityTimestamp: Date;
 }
 
-let holderCounter = 0;
-
 /**
- * Generate a unique holder address
+ * UserPortfolio interface matching Prisma model
  */
-function generateHolderAddress(): string {
-  holderCounter++;
-  const hex = holderCounter.toString(16).padStart(40, '0');
-  return `0x${hex}`;
-}
-
-/**
- * Create a mock holder with optional overrides
- */
-export function createMockHolder(overrides: Partial<MockHolder> = {}): MockHolder {
-  const now = new Date();
-  const firstBuy = new Date(now.getTime() - 86400000); // 1 day ago
-
-  return {
-    id: overrides.id || `holder-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    tokenAddress: overrides.tokenAddress || TEST_ADDRESSES.token,
-    holderAddress: overrides.holderAddress || generateHolderAddress(),
-    balance: overrides.balance || '1000000000000000000000', // 1000 tokens
-    firstBuyTimestamp: overrides.firstBuyTimestamp || firstBuy,
-    lastActivityTimestamp: overrides.lastActivityTimestamp || now,
-    ...overrides,
-  };
-}
-
-/**
- * Create multiple mock holders for a token
- */
-export function createMockHolders(
-  count: number,
-  tokenAddress = TEST_ADDRESSES.token,
-  options: { varyBalance?: boolean } = {},
-): MockHolder[] {
-  const baseBalance = BigInt('1000000000000000000000'); // 1000 tokens
-  const now = new Date();
-
-  return Array.from({ length: count }, (_, i) => {
-    const balance = options.varyBalance
-      ? (baseBalance * BigInt(count - i)).toString() // Decreasing balances
-      : baseBalance.toString();
-
-    const firstBuy = new Date(now.getTime() - (count - i) * 3600000); // Staggered first buys
-
-    return createMockHolder({
-      tokenAddress,
-      balance,
-      firstBuyTimestamp: firstBuy,
-      lastActivityTimestamp: now,
-    });
-  });
-}
-
-/**
- * Create a whale holder (large balance)
- */
-export function createWhaleHolder(overrides: Partial<MockHolder> = {}): MockHolder {
-  return createMockHolder({
-    balance: '10000000000000000000000000', // 10M tokens
-    ...overrides,
-  });
-}
-
-/**
- * Create a small holder
- */
-export function createSmallHolder(overrides: Partial<MockHolder> = {}): MockHolder {
-  return createMockHolder({
-    balance: '100000000000000000', // 0.1 tokens
-    ...overrides,
-  });
-}
-
-/**
- * Create a holder with zero balance (sold all)
- */
-export function createZeroBalanceHolder(overrides: Partial<MockHolder> = {}): MockHolder {
-  return createMockHolder({
-    balance: '0',
-    ...overrides,
-  });
-}
-
-/**
- * Create the creator as a holder (usually has most tokens initially)
- */
-export function createCreatorAsHolder(
-  tokenAddress = TEST_ADDRESSES.token,
-  creatorAddress = TEST_ADDRESSES.user1,
-  overrides: Partial<MockHolder> = {},
-): MockHolder {
-  return createMockHolder({
-    tokenAddress,
-    holderAddress: creatorAddress,
-    balance: '100000000000000000000000000', // 100M tokens
-    ...overrides,
-  });
-}
-
-/**
- * Create a holder distribution (for testing leaderboards)
- * Returns holders with varying balances in descending order
- */
-export function createHolderDistribution(
-  tokenAddress = TEST_ADDRESSES.token,
-  count = 10,
-): MockHolder[] {
-  const now = new Date();
-
-  return Array.from({ length: count }, (_, i) => {
-    // Exponentially decreasing balances (whale at top, small holders at bottom)
-    const exponent = count - i;
-    const balance = (BigInt(10) ** BigInt(18 + exponent)).toString();
-
-    return createMockHolder({
-      tokenAddress,
-      balance,
-      firstBuyTimestamp: new Date(now.getTime() - i * 3600000),
-    });
-  });
-}
-
-/**
- * Reset the holder counter (useful between tests)
- */
-export function resetHolderCounter(): void {
-  holderCounter = 0;
-}
-
-// Additional factory types
-
-// UserPortfolio interface
 export interface MockUserPortfolio {
   id: string;
   walletAddress: string;
@@ -159,51 +32,13 @@ export interface MockUserPortfolio {
 }
 
 /**
- * Create a mock user portfolio
+ * PriceHistory interface matching Prisma model
  */
-export function createMockUserPortfolio(overrides: Partial<MockUserPortfolio> = {}): MockUserPortfolio {
-  const now = new Date();
-
-  return {
-    id: overrides.id || `portfolio-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    walletAddress: overrides.walletAddress || generateHolderAddress(),
-    totalInvested: overrides.totalInvested || '10000000000000000000', // 10 PUSH
-    totalReturned: overrides.totalReturned || '12000000000000000000', // 12 PUSH (20% profit)
-    totalTrades: overrides.totalTrades || 5,
-    updatedAt: overrides.updatedAt || now,
-  };
-}
-
-/**
- * Create a profitable portfolio
- */
-export function createProfitablePortfolio(overrides: Partial<MockUserPortfolio> = {}): MockUserPortfolio {
-  return createMockUserPortfolio({
-    totalInvested: '100000000000000000000', // 100 PUSH
-    totalReturned: '150000000000000000000', // 150 PUSH (50% profit)
-    totalTrades: 20,
-    ...overrides,
-  });
-}
-
-/**
- * Create a losing portfolio
- */
-export function createLosingPortfolio(overrides: Partial<MockUserPortfolio> = {}): MockUserPortfolio {
-  return createMockUserPortfolio({
-    totalInvested: '100000000000000000000', // 100 PUSH
-    totalReturned: '50000000000000000000', // 50 PUSH (50% loss)
-    totalTrades: 15,
-    ...overrides,
-  });
-}
-
-// PriceHistory interface
 export interface MockPriceHistory {
   id: string;
   tokenAddress: string;
   timestamp: Date;
-  interval: 'ONE_MINUTE' | 'FIVE_MINUTES' | 'FIFTEEN_MINUTES' | 'ONE_HOUR' | 'FOUR_HOURS' | 'ONE_DAY';
+  interval: PriceInterval;
   open: string;
   high: string;
   low: string;
@@ -213,24 +48,232 @@ export interface MockPriceHistory {
   tradeCount: number;
 }
 
+let holderCounter = 0;
+
 /**
- * Create a mock price history candle
+ * Generate a unique holder address
  */
-export function createMockPriceHistory(overrides: Partial<MockPriceHistory> = {}): MockPriceHistory {
-  const basePrice = BigInt('20000000000000'); // 0.00002 PUSH
+function generateHolderAddress(): string {
+  holderCounter++;
+  const hex = holderCounter.toString(16).padStart(40, 'a');
+  return '0x' + hex;
+}
+
+/**
+ * Default holder factory values
+ */
+const DEFAULT_HOLDER_VALUES = {
+  balance: '1000000000000000000', // 1 token (with 18 decimals)
+};
+
+/**
+ * Create a mock holder with optional overrides
+ */
+export function createMockHolder(overrides: Partial<MockHolder> = {}): MockHolder {
+  const now = new Date();
+  const timestamp = now.getTime();
+  const random = Math.random().toString(36).slice(2, 9);
 
   return {
-    id: overrides.id || `candle-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    id: overrides.id || 'holder-' + timestamp + '-' + random,
     tokenAddress: overrides.tokenAddress || TEST_ADDRESSES.token,
-    timestamp: overrides.timestamp || new Date(),
-    interval: overrides.interval || 'ONE_MINUTE',
-    open: overrides.open || basePrice.toString(),
-    high: overrides.high || (basePrice * BigInt(105) / BigInt(100)).toString(), // +5%
-    low: overrides.low || (basePrice * BigInt(95) / BigInt(100)).toString(), // -5%
-    close: overrides.close || (basePrice * BigInt(102) / BigInt(100)).toString(), // +2%
-    volumeNative: overrides.volumeNative || '5000000000000000000', // 5 PUSH
-    volumeToken: overrides.volumeToken || '250000000000000000000000', // 250k tokens
-    tradeCount: overrides.tradeCount || 10,
+    holderAddress: overrides.holderAddress || generateHolderAddress(),
+    firstBuyTimestamp: overrides.firstBuyTimestamp || now,
+    lastActivityTimestamp: overrides.lastActivityTimestamp || now,
+    ...DEFAULT_HOLDER_VALUES,
+    ...overrides,
+  };
+}
+
+/**
+ * Create multiple mock holders
+ */
+export function createMockHolders(count: number, overrides: Partial<MockHolder> = {}): MockHolder[] {
+  return Array.from({ length: count }, () => createMockHolder(overrides));
+}
+
+/**
+ * Create a whale holder (large balance)
+ */
+export function createWhaleHolder(overrides: Partial<MockHolder> = {}): MockHolder {
+  return createMockHolder({
+    balance: '100000000000000000000000000', // 100M tokens
+    ...overrides,
+  });
+}
+
+/**
+ * Create a small holder (small balance)
+ */
+export function createSmallHolder(overrides: Partial<MockHolder> = {}): MockHolder {
+  return createMockHolder({
+    balance: '100000000000000000', // 0.1 tokens
+    ...overrides,
+  });
+}
+
+/**
+ * Create a zero balance holder (sold all tokens)
+ */
+export function createZeroBalanceHolder(overrides: Partial<MockHolder> = {}): MockHolder {
+  return createMockHolder({
+    balance: '0',
+    ...overrides,
+  });
+}
+
+/**
+ * Create a holder who is also the token creator
+ */
+export function createCreatorAsHolder(creatorAddress: string, overrides: Partial<MockHolder> = {}): MockHolder {
+  return createMockHolder({
+    holderAddress: creatorAddress,
+    balance: '50000000000000000000000000', // 50M tokens (creator initial allocation)
+    ...overrides,
+  });
+}
+
+/**
+ * Create a distribution of holders with varying balances
+ */
+export function createHolderDistribution(
+  tokenAddress: string,
+  config: { whales?: number; medium?: number; small?: number } = {},
+): MockHolder[] {
+  const whales = config.whales ?? 3;
+  const medium = config.medium ?? 10;
+  const small = config.small ?? 20;
+  const holders: MockHolder[] = [];
+
+  // Whale holders (1M+ tokens)
+  for (let i = 0; i < whales; i++) {
+    const amount = (10 + Math.random() * 90).toFixed(0);
+    holders.push(
+      createMockHolder({
+        tokenAddress,
+        balance: amount + '000000000000000000000000', // 10M-100M tokens
+      }),
+    );
+  }
+
+  // Medium holders (10K-1M tokens)
+  for (let i = 0; i < medium; i++) {
+    const amount = (10 + Math.random() * 990).toFixed(0);
+    holders.push(
+      createMockHolder({
+        tokenAddress,
+        balance: amount + '000000000000000000000', // 10K-1M tokens
+      }),
+    );
+  }
+
+  // Small holders (<10K tokens)
+  for (let i = 0; i < small; i++) {
+    const amount = (1 + Math.random() * 9).toFixed(0);
+    holders.push(
+      createMockHolder({
+        tokenAddress,
+        balance: amount + '000000000000000000000', // 1K-10K tokens
+      }),
+    );
+  }
+
+  return holders;
+}
+
+/**
+ * Reset the holder counter (useful between tests)
+ */
+export function resetHolderCounter(): void {
+  holderCounter = 0;
+}
+
+// =============================================================================
+// USER PORTFOLIO FACTORIES
+// =============================================================================
+
+/**
+ * Default user portfolio factory values
+ */
+const DEFAULT_PORTFOLIO_VALUES = {
+  totalInvested: '1000000000000000000', // 1 PUSH
+  totalReturned: '0',
+  totalTrades: 0,
+};
+
+/**
+ * Create a mock user portfolio with optional overrides
+ */
+export function createMockUserPortfolio(overrides: Partial<MockUserPortfolio> = {}): MockUserPortfolio {
+  const now = new Date();
+  const timestamp = now.getTime();
+  const random = Math.random().toString(36).slice(2, 9);
+
+  return {
+    id: overrides.id || 'portfolio-' + timestamp + '-' + random,
+    walletAddress: overrides.walletAddress || generateHolderAddress(),
+    updatedAt: overrides.updatedAt || now,
+    ...DEFAULT_PORTFOLIO_VALUES,
+    ...overrides,
+  };
+}
+
+/**
+ * Create a profitable portfolio (more returned than invested)
+ */
+export function createProfitablePortfolio(overrides: Partial<MockUserPortfolio> = {}): MockUserPortfolio {
+  return createMockUserPortfolio({
+    totalInvested: '10000000000000000000', // 10 PUSH invested
+    totalReturned: '25000000000000000000', // 25 PUSH returned (150% profit)
+    totalTrades: 15,
+    ...overrides,
+  });
+}
+
+/**
+ * Create a losing portfolio (less returned than invested)
+ */
+export function createLosingPortfolio(overrides: Partial<MockUserPortfolio> = {}): MockUserPortfolio {
+  return createMockUserPortfolio({
+    totalInvested: '10000000000000000000', // 10 PUSH invested
+    totalReturned: '3000000000000000000', // 3 PUSH returned (70% loss)
+    totalTrades: 8,
+    ...overrides,
+  });
+}
+
+// =============================================================================
+// PRICE HISTORY (CANDLE) FACTORIES
+// =============================================================================
+
+/**
+ * Default price history factory values
+ */
+const DEFAULT_CANDLE_VALUES = {
+  interval: 'ONE_MINUTE' as PriceInterval,
+  open: '20000000000000', // 0.00002 PUSH
+  high: '22000000000000', // 0.000022 PUSH
+  low: '19000000000000', // 0.000019 PUSH
+  close: '21000000000000', // 0.000021 PUSH
+  volumeNative: '1000000000000000000', // 1 PUSH volume
+  volumeToken: '50000000000000000000000', // 50K tokens volume
+  tradeCount: 10,
+};
+
+/**
+ * Create a mock price history (candle) with optional overrides
+ */
+export function createMockPriceHistory(overrides: Partial<MockPriceHistory> = {}): MockPriceHistory {
+  const now = new Date();
+  const timestamp = now.getTime();
+  const random = Math.random().toString(36).slice(2, 9);
+
+  return {
+    id: overrides.id || 'candle-' + timestamp + '-' + random,
+    tokenAddress: overrides.tokenAddress || TEST_ADDRESSES.token,
+    timestamp: overrides.timestamp || now,
+    ...DEFAULT_CANDLE_VALUES,
+    ...overrides,
   };
 }
 
@@ -240,32 +283,52 @@ export function createMockPriceHistory(overrides: Partial<MockPriceHistory> = {}
 export function createMockPriceHistorySeries(
   tokenAddress: string,
   count: number,
-  interval: MockPriceHistory['interval'] = 'ONE_MINUTE',
-  intervalMs = 60000,
+  interval: PriceInterval = 'ONE_MINUTE',
+  startTimestamp?: Date,
 ): MockPriceHistory[] {
-  const baseTime = new Date();
-  const basePrice = 20000000000000; // 0.00002 PUSH
+  const intervalMs: Record<PriceInterval, number> = {
+    ONE_MINUTE: 60 * 1000,
+    FIVE_MINUTES: 5 * 60 * 1000,
+    FIFTEEN_MINUTES: 15 * 60 * 1000,
+    ONE_HOUR: 60 * 60 * 1000,
+    FOUR_HOURS: 4 * 60 * 60 * 1000,
+    ONE_DAY: 24 * 60 * 60 * 1000,
+  };
 
-  return Array.from({ length: count }, (_, i) => {
-    const timestamp = new Date(baseTime.getTime() - i * intervalMs);
+  const start = startTimestamp || new Date(Date.now() - count * intervalMs[interval]);
+  let currentPrice = 20000000000000; // Starting price
+  const candles: MockPriceHistory[] = [];
 
-    // Create a simple upward trend with volatility
-    const trend = 1 + i * 0.01; // 1% increase per candle
-    const volatility = 0.05; // 5% volatility
+  for (let i = 0; i < count; i++) {
+    const timestamp = new Date(start.getTime() + i * intervalMs[interval]);
 
-    const open = Math.floor(basePrice * trend * (1 - volatility));
-    const close = Math.floor(basePrice * trend * (1 + volatility));
-    const high = Math.max(open, close) * 1.02;
-    const low = Math.min(open, close) * 0.98;
+    // Simulate price movement
+    const change = (Math.random() - 0.48) * 0.1; // Slight upward bias
+    const open = currentPrice;
+    const close = Math.floor(currentPrice * (1 + change));
+    const high = Math.max(open, close) + Math.floor(Math.random() * 1000000000000);
+    const low = Math.min(open, close) - Math.floor(Math.random() * 1000000000000);
 
-    return createMockPriceHistory({
-      tokenAddress,
-      timestamp,
-      interval,
-      open: open.toString(),
-      high: Math.floor(high).toString(),
-      low: Math.floor(low).toString(),
-      close: close.toString(),
-    });
-  });
+    const volumeNativeNum = Math.floor(Math.random() * 10 + 1);
+    const volumeTokenNum = Math.floor(Math.random() * 100 + 10);
+
+    candles.push(
+      createMockPriceHistory({
+        tokenAddress,
+        timestamp,
+        interval,
+        open: open.toString(),
+        high: Math.max(high, open, close).toString(),
+        low: Math.max(low, 1).toString(), // Ensure positive
+        close: close.toString(),
+        volumeNative: volumeNativeNum + '000000000000000000', // 1-10 PUSH
+        volumeToken: volumeTokenNum + '000000000000000000000', // 10K-100K tokens
+        tradeCount: Math.floor(Math.random() * 20 + 1),
+      }),
+    );
+
+    currentPrice = close;
+  }
+
+  return candles;
 }

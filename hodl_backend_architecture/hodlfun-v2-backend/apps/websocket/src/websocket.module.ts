@@ -13,7 +13,7 @@ import { EventListenerService } from './services/event-listener.service';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: ['../../.env.local', '../../.env'],
     }),
     PrismaModule,
     RedisModule,

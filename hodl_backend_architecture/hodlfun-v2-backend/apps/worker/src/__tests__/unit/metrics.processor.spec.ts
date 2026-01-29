@@ -5,7 +5,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MetricsProcessor } from '../../metrics/metrics.processor';
 import { PrismaService } from '@hodlfun/database';
-import { CacheService } from '@hodlfun/redis';
+import { CacheService, PubSubService } from '@hodlfun/redis';
 
 // Mock factories
 const createMockPrismaService = () => ({
@@ -25,20 +25,28 @@ const createMockCacheService = () => ({
   set: jest.fn(),
 });
 
+const createMockPubSubService = () => ({
+  subscribe: jest.fn().mockResolvedValue(undefined),
+  publish: jest.fn().mockResolvedValue(undefined),
+});
+
 describe('MetricsProcessor', () => {
   let processor: MetricsProcessor;
   let mockPrisma: ReturnType<typeof createMockPrismaService>;
   let mockCache: ReturnType<typeof createMockCacheService>;
+  let mockPubsub: ReturnType<typeof createMockPubSubService>;
 
   beforeEach(async () => {
     mockPrisma = createMockPrismaService();
     mockCache = createMockCacheService();
+    mockPubsub = createMockPubSubService();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MetricsProcessor,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: CacheService, useValue: mockCache },
+        { provide: PubSubService, useValue: mockPubsub },
       ],
     }).compile();
 
@@ -49,7 +57,7 @@ describe('MetricsProcessor', () => {
     jest.clearAllMocks();
   });
 
-  describe('handleCalculateLeaderboard', () => {
+  describe('calculateLeaderboard', () => {
     it('should calculate and cache gainers leaderboard', async () => {
       const mockGainers = [
         { address: '0x1', name: 'Token1', price_change_24h: 50 },
@@ -58,8 +66,7 @@ describe('MetricsProcessor', () => {
 
       mockPrisma.$queryRaw.mockResolvedValue(mockGainers);
 
-      const job = { data: { type: 'gainers' } } as any;
-      await processor.handleCalculateLeaderboard(job);
+      await processor.calculateLeaderboard('gainers');
 
       expect(mockPrisma.$queryRaw).toHaveBeenCalled();
       expect(mockCache.set).toHaveBeenCalledWith('leaderboard:gainers', mockGainers, 30);
@@ -73,8 +80,7 @@ describe('MetricsProcessor', () => {
 
       mockPrisma.$queryRaw.mockResolvedValue(mockVolumeLeaders);
 
-      const job = { data: { type: 'volume' } } as any;
-      await processor.handleCalculateLeaderboard(job);
+      await processor.calculateLeaderboard('volume');
 
       expect(mockCache.set).toHaveBeenCalledWith('leaderboard:volume', mockVolumeLeaders, 30);
     });
@@ -87,8 +93,7 @@ describe('MetricsProcessor', () => {
 
       mockPrisma.token.findMany.mockResolvedValue(mockNewTokens);
 
-      const job = { data: { type: 'new' } } as any;
-      await processor.handleCalculateLeaderboard(job);
+      await processor.calculateLeaderboard('new');
 
       expect(mockPrisma.token.findMany).toHaveBeenCalledWith({
         where: { status: 'TRADING' },
@@ -107,8 +112,7 @@ describe('MetricsProcessor', () => {
     });
 
     it('should cache empty array for unknown type', async () => {
-      const job = { data: { type: 'unknown' } } as any;
-      await processor.handleCalculateLeaderboard(job);
+      await processor.calculateLeaderboard('unknown');
 
       expect(mockCache.set).toHaveBeenCalledWith('leaderboard:unknown', [], 30);
     });
@@ -116,8 +120,7 @@ describe('MetricsProcessor', () => {
     it('should use 30 second TTL for cache', async () => {
       mockPrisma.$queryRaw.mockResolvedValue([]);
 
-      const job = { data: { type: 'gainers' } } as any;
-      await processor.handleCalculateLeaderboard(job);
+      await processor.calculateLeaderboard('gainers');
 
       expect(mockCache.set).toHaveBeenCalledWith(
         expect.any(String),
@@ -127,7 +130,7 @@ describe('MetricsProcessor', () => {
     });
   });
 
-  describe('handleUpdateUserPortfolio', () => {
+  describe('updateUserPortfolio', () => {
     const walletAddress = '0xUSER123';
 
     it('should calculate total invested from buy trades', async () => {
@@ -139,8 +142,7 @@ describe('MetricsProcessor', () => {
 
       mockPrisma.trade.findMany.mockResolvedValue(trades);
 
-      const job = { data: { walletAddress } } as any;
-      await processor.handleUpdateUserPortfolio(job);
+      await processor.updateUserPortfolio(walletAddress);
 
       expect(mockPrisma.userPortfolio.upsert).toHaveBeenCalledWith({
         where: { walletAddress: walletAddress.toLowerCase() },
@@ -162,8 +164,7 @@ describe('MetricsProcessor', () => {
 
       mockPrisma.trade.findMany.mockResolvedValue(trades);
 
-      const job = { data: { walletAddress } } as any;
-      await processor.handleUpdateUserPortfolio(job);
+      await processor.updateUserPortfolio(walletAddress);
 
       expect(mockPrisma.userPortfolio.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -183,8 +184,7 @@ describe('MetricsProcessor', () => {
 
       mockPrisma.trade.findMany.mockResolvedValue(trades);
 
-      const job = { data: { walletAddress } } as any;
-      await processor.handleUpdateUserPortfolio(job);
+      await processor.updateUserPortfolio(walletAddress);
 
       expect(mockPrisma.userPortfolio.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -198,8 +198,7 @@ describe('MetricsProcessor', () => {
     it('should normalize wallet address to lowercase', async () => {
       mockPrisma.trade.findMany.mockResolvedValue([]);
 
-      const job = { data: { walletAddress: '0xABC123' } } as any;
-      await processor.handleUpdateUserPortfolio(job);
+      await processor.updateUserPortfolio('0xABC123');
 
       expect(mockPrisma.trade.findMany).toHaveBeenCalledWith({
         where: { traderAddress: '0xabc123' },
@@ -215,8 +214,7 @@ describe('MetricsProcessor', () => {
     it('should handle user with no trades', async () => {
       mockPrisma.trade.findMany.mockResolvedValue([]);
 
-      const job = { data: { walletAddress } } as any;
-      await processor.handleUpdateUserPortfolio(job);
+      await processor.updateUserPortfolio(walletAddress);
 
       expect(mockPrisma.userPortfolio.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -246,8 +244,7 @@ describe('MetricsProcessor', () => {
 
       mockPrisma.trade.findMany.mockResolvedValue(trades);
 
-      const job = { data: { walletAddress } } as any;
-      await processor.handleUpdateUserPortfolio(job);
+      await processor.updateUserPortfolio(walletAddress);
 
       expect(mockPrisma.userPortfolio.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
