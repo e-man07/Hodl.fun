@@ -178,7 +178,7 @@ model CreatorFee {
 }
 
 // =============================================================================
-// USERS (expanded from UserPortfolio)
+// USERS
 // =============================================================================
 
 model User {
@@ -194,7 +194,7 @@ model User {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   lastLoginAt   DateTime? @map("last_login_at")
 
-  // Portfolio data (migrated from UserPortfolio)
+  // Portfolio data
   totalInvested String    @default("0") @map("total_invested")
   totalReturned String    @default("0") @map("total_returned")
   totalTrades   Int       @default(0) @map("total_trades")
@@ -208,19 +208,6 @@ model User {
 enum AuthType {
   WALLET
   SOCIAL
-}
-
-// Legacy alias for backward compatibility during migration
-// TODO: Remove after migration is complete
-model UserPortfolio {
-  id            String   @id @default(uuid())
-  walletAddress String   @unique @map("wallet_address")
-  totalInvested String   @default("0") @map("total_invested")
-  totalReturned String   @default("0") @map("total_returned")
-  totalTrades   Int      @default(0) @map("total_trades")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  @@map("user_portfolios")
 }
 
 // =============================================================================
