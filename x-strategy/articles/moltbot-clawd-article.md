@@ -6,6 +6,10 @@
 
 ---
 
+**TL;DR:** Peter Steinberger's AI project Clawdbot got forced to rebrand. During a 10-second window, scammers grabbed the old Twitter handle and launched a fake token that hit $16M before crashing 90%. This article breaks down what happened and why bonding curve infrastructure would have prevented it.
+
+---
+
 ## The 10-Second Window That Changed Everything
 
 On January 27, 2026, Peter Steinberger made a mistake that would cost strangers millions of dollars.
@@ -153,16 +157,16 @@ Yet most token launches still use the "trust me bro" model that enables exactly 
 
 ## What's Being Built to Fix This
 
-Full disclosure: I'm building in this space.
+Full disclosure: we're building in this space.
 
-**Hodl.fun** is a token launchpad where every token launches on a bonding curve by default. No exceptions.
+**thehodl.fun** is a token launchpad where every token launches on a bonding curve by default. No exceptions.
 
 Here's what that means:
 
-- **Any chain, no bridge**: Launch and trade from ETH, SOL, or whatever chain your assets are on — powered by Push Chain's universal accounts
+- **Any chain, no bridge**: Built on Push Chain's universal account infrastructure — trade from any supported chain without bridging
 - **Bonding curve pricing**: Math sets the price, not insiders
 - **Fair launch by design**: No hidden allocations, no trust required
-- **Graduation mechanics**: Tokens that hit market cap thresholds automatically list on DEXs
+- **Graduation mechanics**: Tokens that hit the market cap threshold automatically list on Uniswap V3
 
 We're currently on testnet, stress-testing the model before mainnet.
 
@@ -205,7 +209,7 @@ The question isn't whether this will happen again. It's whether we'll have built
 
 ---
 
-*Hodl.fun is building fair launch infrastructure on Push Chain. Testnet is live at [thehodl.fun](https://thehodl.fun). If you believe token launches should be fair by default, come help us stress-test it before mainnet.*
+*thehodl.fun is building fair launch infrastructure on Push Chain. Testnet is live now. If you believe token launches should be fair by default, come help us stress-test it before mainnet.*
 
 ---
 
