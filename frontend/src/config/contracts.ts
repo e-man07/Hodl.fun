@@ -4,6 +4,10 @@ export const CONTRACTS = {
     chainId: 42101,
     name: 'Push Chain Testnet',
     rpcUrl: 'https://evm.donut.rpc.push.org/',
+    rpcUrls: [
+      'https://evm.donut.rpc.push.org/',
+      'https://evm.rpc-testnet-donut-node1.push.org/',
+    ],
     blockExplorer: 'https://donut.push.network',
     nativeCurrency: {
       name: 'PUSH',
@@ -27,7 +31,7 @@ export const CONTRACT_ADDRESSES = CURRENT_NETWORK.contracts;
 export const NETWORK_CONFIG = {
   chainId: CURRENT_NETWORK.chainId,
   chainName: CURRENT_NETWORK.name,
-  rpcUrls: [CURRENT_NETWORK.rpcUrl],
+  rpcUrls: CURRENT_NETWORK.rpcUrls,
   blockExplorerUrls: [CURRENT_NETWORK.blockExplorer],
   nativeCurrency: CURRENT_NETWORK.nativeCurrency,
 };

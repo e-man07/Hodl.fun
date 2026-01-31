@@ -5,6 +5,7 @@ import { ethers } from 'ethers';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI, LAUNCHPAD_TOKEN_ABI } from '@/config/abis';
 import { usePushWalletContext, usePushChainClient, PushUI } from '@pushchain/ui-kit';
+import { executeWithFallback, createFallbackProvider } from '@/lib/rpcProvider';
 
 interface TradeResult {
   success: boolean;
@@ -15,46 +16,43 @@ interface TradeResult {
 export const useTokenTrading = () => {
   const { connectionStatus } = usePushWalletContext();
   const { pushChainClient } = usePushChainClient();
-  
+
   const isConnected = connectionStatus === PushUI.CONSTANTS.CONNECTION.STATUS.CONNECTED;
   const address = pushChainClient?.universal?.account;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Create provider using Push Chain RPC
+  // Create provider with fallback RPC support
   const getProvider = () => {
-    return new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+    return createFallbackProvider();
   };
 
   // Clear any previous errors
   const clearError = () => setError(null);
 
-  // Get token balance for the connected wallet
+  // Get token balance for the connected wallet (with RPC fallback)
   const getTokenBalance = async (tokenAddress: string): Promise<string> => {
     try {
       if (!isConnected || !address) {
         return '0';
       }
 
-      const provider = getProvider();
-      if (!provider) {
-        return '0';
-      }
-
-      const tokenContract = new ethers.Contract(
-        tokenAddress,
-        LAUNCHPAD_TOKEN_ABI,
-        provider
-      );
-
-      const balance = await tokenContract.balanceOf(address);
-      return ethers.formatEther(balance);
+      return await executeWithFallback(async (provider) => {
+        const tokenContract = new ethers.Contract(
+          tokenAddress,
+          LAUNCHPAD_TOKEN_ABI,
+          provider
+        );
+        const balance = await tokenContract.balanceOf(address);
+        return ethers.formatEther(balance);
+      });
     } catch (error) {
+      console.error('getTokenBalance failed after retries:', error);
       return '0';
     }
   };
 
-  // Calculate how many tokens you'll get for a given ETH amount
+  // Calculate how many tokens you'll get for a given ETH amount (with RPC fallback)
   const calculateTokensForEth = async (
     tokenAddress: string,
     ethAmount: string
@@ -64,30 +62,28 @@ export const useTokenTrading = () => {
         return '0';
       }
 
-      const provider = getProvider();
-      if (!provider) {
-        return '0';
-      }
+      return await executeWithFallback(async (provider) => {
+        const marketplaceContract = new ethers.Contract(
+          CONTRACT_ADDRESSES.TokenMarketplace,
+          TOKEN_MARKETPLACE_ABI,
+          provider
+        );
 
-      const marketplaceContract = new ethers.Contract(
-        CONTRACT_ADDRESSES.TokenMarketplace,
-        TOKEN_MARKETPLACE_ABI,
-        provider
-      );
+        const weiAmount = ethers.parseEther(ethAmount);
+        const tokensOut = await marketplaceContract.calculatePurchaseReturn(
+          tokenAddress,
+          weiAmount
+        );
 
-      const weiAmount = ethers.parseEther(ethAmount);
-      const tokensOut = await marketplaceContract.calculatePurchaseReturn(
-        tokenAddress,
-        weiAmount
-      );
-
-      return ethers.formatEther(tokensOut);
+        return ethers.formatEther(tokensOut);
+      });
     } catch (error) {
+      console.error('calculateTokensForEth failed after retries:', error);
       return '0';
     }
   };
 
-  // Calculate how much ETH you'll get for a given token amount
+  // Calculate how much ETH you'll get for a given token amount (with RPC fallback)
   const calculateEthForTokens = async (
     tokenAddress: string,
     tokenAmount: string
@@ -97,25 +93,23 @@ export const useTokenTrading = () => {
         return '0';
       }
 
-      const provider = getProvider();
-      if (!provider) {
-        return '0';
-      }
+      return await executeWithFallback(async (provider) => {
+        const marketplaceContract = new ethers.Contract(
+          CONTRACT_ADDRESSES.TokenMarketplace,
+          TOKEN_MARKETPLACE_ABI,
+          provider
+        );
 
-      const marketplaceContract = new ethers.Contract(
-        CONTRACT_ADDRESSES.TokenMarketplace,
-        TOKEN_MARKETPLACE_ABI,
-        provider
-      );
+        const tokenWei = ethers.parseEther(tokenAmount);
+        const ethOut = await marketplaceContract.calculateSaleReturn(
+          tokenAddress,
+          tokenWei
+        );
 
-      const tokenWei = ethers.parseEther(tokenAmount);
-      const ethOut = await marketplaceContract.calculateSaleReturn(
-        tokenAddress,
-        tokenWei
-      );
-
-      return ethers.formatEther(ethOut);
+        return ethers.formatEther(ethOut);
+      });
     } catch (error) {
+      console.error('calculateEthForTokens failed after retries:', error);
       return '0';
     }
   };

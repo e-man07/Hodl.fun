@@ -13,6 +13,7 @@ import { formatCurrency, formatNumber, formatMarketCapUSD } from '@/lib/utils';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { getIPFSImageUrl, createIPFSImageErrorHandler } from '@/utils/ipfsImage';
 import { ethers } from 'ethers';
+import { createFallbackProvider } from '@/lib/rpcProvider';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI, LAUNCHPAD_TOKEN_ABI } from '@/config/abis';
 import { fetchIPFSMetadata } from '@/lib/ipfsCache';
@@ -67,7 +68,7 @@ export default function TokenDetailPage() {
     setError(null);
 
     try {
-      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+      const provider = createFallbackProvider();
       const marketplace = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenMarketplace,
         TOKEN_MARKETPLACE_ABI,

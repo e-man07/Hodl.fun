@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
+import { createFallbackProvider } from '@/lib/rpcProvider';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI } from '@/config/abis';
 import { ArrowUp, ArrowDown } from 'lucide-react';
@@ -45,7 +46,7 @@ export const TradingActivityBanner = () => {
 
   const fetchRecentTransactions = useCallback(async () => {
     try {
-      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+      const provider = createFallbackProvider();
       const marketplaceContract = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenMarketplace,
         TOKEN_MARKETPLACE_ABI,

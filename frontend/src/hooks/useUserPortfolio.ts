@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
+import { createFallbackProvider } from '@/lib/rpcProvider';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI, TOKEN_FACTORY_ABI } from '@/config/abis';
 
@@ -89,7 +90,7 @@ export const useUserPortfolio = (userAddress: string | null) => {
 
     try {
       // Use Push Chain RPC provider for reading data
-      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+      const provider = createFallbackProvider();
       const marketplace = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenMarketplace,
         TOKEN_MARKETPLACE_ABI,

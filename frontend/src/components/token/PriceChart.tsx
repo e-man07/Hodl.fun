@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/utils';
 import { ethers } from 'ethers';
+import { createFallbackProvider } from '@/lib/rpcProvider';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI } from '@/config/abis';
 import { createChart, ColorType, IChartApi, ISeriesApi, Time, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
@@ -127,7 +128,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({ tokenAddress, tokenData 
         // Small delay to ensure RPC is ready
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+        const provider = createFallbackProvider();
         const marketplace = new ethers.Contract(
           CONTRACT_ADDRESSES.TokenMarketplace,
           TOKEN_MARKETPLACE_ABI,
@@ -212,7 +213,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({ tokenAddress, tokenData 
 
       setIsLoading(true);
       try {
-        const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+        const provider = createFallbackProvider();
         const marketplace = new ethers.Contract(
           CONTRACT_ADDRESSES.TokenMarketplace,
           TOKEN_MARKETPLACE_ABI,

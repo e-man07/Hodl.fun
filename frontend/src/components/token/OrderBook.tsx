@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { ethers } from 'ethers';
+import { createFallbackProvider } from '@/lib/rpcProvider';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 import { TOKEN_MARKETPLACE_ABI } from '@/config/abis';
 
@@ -58,7 +59,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({ tokenAddress }) => {
       }
       
       // Get current price from contract
-      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+      const provider = createFallbackProvider();
       const marketplace = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenMarketplace,
         TOKEN_MARKETPLACE_ABI,

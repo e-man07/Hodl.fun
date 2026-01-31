@@ -7,6 +7,7 @@ import { TOKEN_MARKETPLACE_ABI, LAUNCHPAD_TOKEN_ABI } from '@/config/abis';
 import { getCachedToken, setCachedToken, getCachedSortedTokens, setCachedSortedTokens, getCachedTotalTokens, setCachedTotalTokens, removeCachedToken } from '@/lib/tokenCache';
 import { fetchIPFSMetadata } from '@/lib/ipfsCache';
 import { deduplicatedFetch } from '@/lib/requestDeduplication';
+import { createFallbackProvider } from '@/lib/rpcProvider';
 
 interface TokenMetadata {
   name: string;
@@ -121,7 +122,7 @@ export const useMarketplace = () => {
       setIsInitializing(true);
     }
     try {
-      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+      const provider = createFallbackProvider();
       const marketplaceContract = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenMarketplace,
         TOKEN_MARKETPLACE_ABI,
@@ -219,7 +220,7 @@ export const useMarketplace = () => {
       const pageTokenAddresses = sortedAddresses.slice(startIndex, endIndex);
 
       // Create provider for reading data
-      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+      const provider = createFallbackProvider();
 
       // Create marketplace contract instance
       const marketplaceContract = new ethers.Contract(
@@ -340,7 +341,7 @@ export const useMarketplace = () => {
   // Refresh a specific token's data (used after trades)
   const refreshTokenData = useCallback(async (tokenAddress: string) => {
     try {
-      const provider = new ethers.JsonRpcProvider('https://evm.donut.rpc.push.org/');
+      const provider = createFallbackProvider();
       const marketplaceContract = new ethers.Contract(
         CONTRACT_ADDRESSES.TokenMarketplace,
         TOKEN_MARKETPLACE_ABI,
