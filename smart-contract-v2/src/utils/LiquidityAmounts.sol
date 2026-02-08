@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.22;
 
-import "./TickMath.sol";
+import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 
 /**
  * @title LiquidityAmounts

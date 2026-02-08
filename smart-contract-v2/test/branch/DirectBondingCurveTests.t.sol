@@ -11,7 +11,7 @@ import "../../src/Core.sol";
 import "../../src/Token.sol";
 import "../../src/FeeVault.sol";
 import "../../src/WPUSH.sol";
-import "../../src/UniswapV3Factory.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Factory.sol";
 import "../../src/interfaces/IBondingCurve.sol";
 import "../../src/interfaces/IBondingCurveFactory.sol";
 
@@ -62,7 +62,7 @@ contract DirectBondingCurveTests is Test {
             address(0),
             admin
         );
-        core = Core(address(new ERC1967Proxy(address(coreImpl), initData)));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), initData))));
 
         vm.startPrank(admin);
         feeVault.initialize(
@@ -343,7 +343,7 @@ contract DirectBondingCurveTests is Test {
         vm.stopPrank();
 
         // List should succeed
-        address pool = BondingCurve(curve_).listing();
+        address pool = core.triggerListing(token_);
         assertTrue(pool != address(0));
     }
 
@@ -364,7 +364,7 @@ contract DirectBondingCurveTests is Test {
         uint256 supplyBefore = IERC20(token_).totalSupply();
 
         // List - this may burn excess tokens
-        address pool = BondingCurve(curve_).listing();
+        address pool = core.triggerListing(token_);
         assertTrue(pool != address(0));
 
         // Supply may be different after listing due to burns
@@ -389,7 +389,7 @@ contract DirectBondingCurveTests is Test {
 
         // The sqrt function is used during listing
         // Testing that listing completes successfully tests sqrt
-        address pool = BondingCurve(curve_).listing();
+        address pool = core.triggerListing(token_);
         assertTrue(pool != address(0));
     }
 
@@ -437,7 +437,7 @@ contract DirectBondingCurveTests is Test {
         vm.stopPrank();
 
         // Listing uses 500 fee tier
-        address pool = BondingCurve(curve_).listing();
+        address pool = core.triggerListing(token_);
         assertTrue(pool != address(0));
     }
 
@@ -456,7 +456,7 @@ contract DirectBondingCurveTests is Test {
         vm.stopPrank();
 
         // Listing uses 3000 fee tier
-        address pool = BondingCurve(curve_).listing();
+        address pool = core.triggerListing(token_);
         assertTrue(pool != address(0));
     }
 
@@ -477,7 +477,7 @@ contract DirectBondingCurveTests is Test {
         vm.stopPrank();
 
         // Listing uses 10000 fee tier
-        address pool = BondingCurve(curve_).listing();
+        address pool = core.triggerListing(token_);
         assertTrue(pool != address(0));
     }
 

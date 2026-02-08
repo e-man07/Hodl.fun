@@ -10,6 +10,13 @@ import "../interfaces/IBondingCurveFactory.sol";
  * @dev Implements x * y = k constant product AMM mechanics
  */
 library BondingCurveLibrary {
+    /// @notice Custom errors for gas efficiency
+    error InsufficientInputAmount();
+    error InsufficientLiquidity();
+    error InsufficientOutputAmount();
+    error InsufficientOutputReserve();
+    error CurveNotFound();
+
     /**
      * @notice Calculate output amount for given input using constant product formula
      * @dev Formula: (x + Δx) * (y - Δy) = k
@@ -25,19 +32,17 @@ library BondingCurveLibrary {
         uint256 reserveIn,
         uint256 reserveOut
     ) internal pure returns (uint256 amountOut) {
-        require(amountIn > 0, "BondingCurveLibrary: INSUFFICIENT_INPUT_AMOUNT");
-        require(reserveIn > 0 && reserveOut > 0, "BondingCurveLibrary: INSUFFICIENT_LIQUIDITY");
-        
+        if (amountIn == 0) revert InsufficientInputAmount();
+        if (reserveIn == 0 || reserveOut == 0) revert InsufficientLiquidity();
+
         // Calculate new reserve after adding input
         uint256 newReserveIn = reserveIn + amountIn;
-        
+
         // Calculate new output reserve maintaining k
-        // k = reserveIn * reserveOut
-        // newReserveOut = k / newReserveIn
         uint256 newReserveOut = k / newReserveIn;
-        
+
         // Output is the difference
-        require(newReserveOut < reserveOut, "BondingCurveLibrary: INSUFFICIENT_OUTPUT_AMOUNT");
+        if (newReserveOut >= reserveOut) revert InsufficientOutputAmount();
         amountOut = reserveOut - newReserveOut;
     }
 
@@ -56,20 +61,18 @@ library BondingCurveLibrary {
         uint256 reserveIn,
         uint256 reserveOut
     ) internal pure returns (uint256 amountIn) {
-        require(amountOut > 0, "BondingCurveLibrary: INSUFFICIENT_OUTPUT_AMOUNT");
-        require(reserveIn > 0 && reserveOut > 0, "BondingCurveLibrary: INSUFFICIENT_LIQUIDITY");
-        require(amountOut < reserveOut, "BondingCurveLibrary: INSUFFICIENT_OUTPUT_RESERVE");
-        
+        if (amountOut == 0) revert InsufficientOutputAmount();
+        if (reserveIn == 0 || reserveOut == 0) revert InsufficientLiquidity();
+        if (amountOut >= reserveOut) revert InsufficientOutputReserve();
+
         // Calculate new reserve after removing output
         uint256 newReserveOut = reserveOut - amountOut;
-        
+
         // Calculate new input reserve maintaining k
-        // k = reserveIn * reserveOut
-        // newReserveIn = k / newReserveOut
         uint256 newReserveIn = k / newReserveOut;
-        
+
         // Input is the difference
-        require(newReserveIn > reserveIn, "BondingCurveLibrary: INSUFFICIENT_INPUT_AMOUNT");
+        if (newReserveIn <= reserveIn) revert InsufficientInputAmount();
         amountIn = newReserveIn - reserveIn;
     }
 
@@ -92,10 +95,9 @@ library BondingCurveLibrary {
         uint256 k
     ) {
         curve = IBondingCurveFactory(factory).getCurve(token);
-        require(curve != address(0), "BondingCurveLibrary: CURVE_NOT_FOUND");
-        
+        if (curve == address(0)) revert CurveNotFound();
+
         (virtualNative, virtualToken) = IBondingCurve(curve).getVirtualReserves();
         k = IBondingCurve(curve).getK();
     }
 }
-

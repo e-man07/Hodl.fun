@@ -132,7 +132,8 @@ contract TokenTest is Test {
         vm.prank(factory);
         token.setBondingCurve(bondingCurve);
 
-        // Mint to bonding curve
+        // Mint to bonding curve (requires DEFAULT_ADMIN_ROLE)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         assertEq(token.balanceOf(bondingCurve), token.TOTAL_SUPPLY());
@@ -140,17 +141,26 @@ contract TokenTest is Test {
     }
 
     function testMintOnlyOnce() public {
-        // First mint succeeds
+        // First mint succeeds (as admin)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         // Second mint reverts
+        vm.prank(coreContract);
         vm.expectRevert(Token.AlreadyMinted.selector);
         token.mint(user1);
     }
 
-    function testMintCanBeCalledByAnyone() public {
-        // Mint is open to anyone (but only once)
+    function testMintRequiresAdminRole() public {
+        // Non-admin cannot call mint
         vm.prank(user1);
+        vm.expectRevert();
+        token.mint(bondingCurve);
+    }
+
+    function testMintByFactorySucceeds() public {
+        // Factory has admin role and can mint
+        vm.prank(factory);
         token.mint(bondingCurve);
 
         assertEq(token.balanceOf(bondingCurve), token.TOTAL_SUPPLY());
@@ -159,7 +169,8 @@ contract TokenTest is Test {
     // ============ Burn Tests ============
 
     function testBurn() public {
-        // Mint first
+        // Mint first (requires admin role)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         uint256 burnAmount = 1000 * 10**18;
@@ -173,7 +184,8 @@ contract TokenTest is Test {
     }
 
     function testBurnFrom() public {
-        // Mint first
+        // Mint first (requires admin role)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         uint256 burnAmount = 1000 * 10**18;
@@ -193,7 +205,8 @@ contract TokenTest is Test {
     // ============ Transfer Tests ============
 
     function testTransfer() public {
-        // Mint first
+        // Mint first (requires admin role)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         uint256 transferAmount = 1000 * 10**18;
@@ -206,7 +219,8 @@ contract TokenTest is Test {
     }
 
     function testTransferFrom() public {
-        // Mint first
+        // Mint first (requires admin role)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         uint256 transferAmount = 1000 * 10**18;
@@ -225,7 +239,8 @@ contract TokenTest is Test {
     // ============ Approval Tests ============
 
     function testApprove() public {
-        // Mint first
+        // Mint first (requires admin role)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         uint256 approvalAmount = 500 * 10**18;
@@ -237,7 +252,8 @@ contract TokenTest is Test {
     }
 
     function testIncreaseAllowance() public {
-        // Mint first
+        // Mint first (requires admin role)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         vm.startPrank(bondingCurve);
@@ -249,7 +265,8 @@ contract TokenTest is Test {
     }
 
     function testDecreaseAllowance() public {
-        // Mint first
+        // Mint first (requires admin role)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         vm.startPrank(bondingCurve);
@@ -301,7 +318,8 @@ contract TokenTest is Test {
     // ============ Edge Cases ============
 
     function testTransferZeroAmount() public {
-        // Mint first
+        // Mint first (requires admin role)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         vm.prank(bondingCurve);
@@ -312,7 +330,8 @@ contract TokenTest is Test {
     }
 
     function testTransferInsufficientBalanceReverts() public {
-        // Mint first
+        // Mint first (requires admin role)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         // User1 has no tokens
@@ -360,7 +379,8 @@ contract TokenTest is Test {
     // ============ Fuzz Tests ============
 
     function testFuzzTransfer(uint256 amount) public {
-        // Mint first
+        // Mint first (requires admin role)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         // Bound amount to total supply
@@ -373,7 +393,8 @@ contract TokenTest is Test {
     }
 
     function testFuzzBurn(uint256 amount) public {
-        // Mint first
+        // Mint first (requires admin role)
+        vm.prank(coreContract);
         token.mint(bondingCurve);
 
         // Bound amount to total supply

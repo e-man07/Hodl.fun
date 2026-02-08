@@ -96,7 +96,7 @@ contract CoreExtendedTest is Test {
             address(0),
             admin
         );
-        core = Core(address(new ERC1967Proxy(address(coreImpl), initData)));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), initData))));
 
         vm.startPrank(admin);
         feeVault.initialize(

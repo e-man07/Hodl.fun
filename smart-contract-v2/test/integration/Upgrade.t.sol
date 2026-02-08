@@ -10,7 +10,7 @@ import "../../src/BondingCurveFactory.sol";
 import "../../src/Core.sol";
 import "../../src/Token.sol";
 import "../../src/FeeVault.sol";
-import "../../src/UniswapV3Factory.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Factory.sol";
 
 /// @title Mock WPUSH for upgrade testing
 contract MockWNativeUpgrade is ERC20 {
@@ -129,7 +129,7 @@ contract UpgradeIntegrationTest is Test {
 
         // Deploy Core
         Core coreImpl = new Core(address(wNative), address(feeVault));
-        core = Core(address(new ERC1967Proxy(address(coreImpl), bytes(""))));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), bytes("")))));
 
         // Deploy Factory
         BondingCurveFactory factoryImpl = new BondingCurveFactory(address(wNative));
@@ -209,7 +209,7 @@ contract UpgradeIntegrationTest is Test {
         core.upgradeTo(address(newImpl));
 
         // Verify upgrade worked - V2 function should be accessible
-        CoreV2 coreV2 = CoreV2(address(core));
+        CoreV2 coreV2 = CoreV2(payable(address(core)));
         assertEq(coreV2.getVersion(), "v2", "Should be upgraded to v2");
 
         // Test new functionality
@@ -244,7 +244,7 @@ contract UpgradeIntegrationTest is Test {
         core.upgradeTo(address(newImpl));
 
         // Verify state preserved
-        CoreV2 coreV2 = CoreV2(address(core));
+        CoreV2 coreV2 = CoreV2(payable(address(core)));
         assertEq(coreV2.factory(), address(factory), "Factory address should be preserved");
 
         // User balance should be unchanged
@@ -390,7 +390,7 @@ contract UpgradeIntegrationTest is Test {
         feeVault.upgradeTo(address(newVaultImpl));
 
         // Verify all contracts upgraded
-        assertEq(CoreV2(address(core)).getVersion(), "v2", "Core should be v2");
+        assertEq(CoreV2(payable(address(core))).getVersion(), "v2", "Core should be v2");
         assertEq(BondingCurveFactoryV2(address(factory)).getVersion(), "v2", "Factory should be v2");
         assertEq(FeeVaultV2(address(feeVault)).getVersion(), "v2", "FeeVault should be v2");
 
@@ -444,7 +444,7 @@ contract UpgradeIntegrationTest is Test {
         core.upgradeTo(address(newCoreImpl));
 
         // Verify upgrade worked
-        assertEq(CoreV2(address(core)).getVersion(), "v2", "Should be upgraded to v2");
+        assertEq(CoreV2(payable(address(core))).getVersion(), "v2", "Should be upgraded to v2");
 
         // Should still be paused
         assertTrue(core.paused(), "Core should still be paused after upgrade");

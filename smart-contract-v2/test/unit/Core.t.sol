@@ -90,7 +90,7 @@ contract CoreTest is Test {
 
         // Deploy Core with wNative and feeVault
         Core coreImpl = new Core(address(wNative), address(feeVault));
-        core = Core(address(new ERC1967Proxy(address(coreImpl), "")));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), ""))));
 
         // Deploy Factory implementation
         BondingCurveFactory factoryImpl = new BondingCurveFactory(address(wNative));
@@ -151,7 +151,7 @@ contract CoreTest is Test {
 
     function testInitializeWithZeroOwnerReverts() public {
         Core newCoreImpl = new Core(address(wNative), address(feeVault));
-        Core newCore = Core(address(new ERC1967Proxy(address(newCoreImpl), "")));
+        Core newCore = Core(payable(address(new ERC1967Proxy(address(newCoreImpl), ""))));
 
         vm.expectRevert(Core.InvalidAddress.selector);
         newCore.initialize(address(factory), address(0));

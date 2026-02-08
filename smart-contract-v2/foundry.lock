@@ -16,5 +16,17 @@
       "name": "v4.9.6",
       "rev": "2d081f24cac1a867f6f73d512f2022e1fa987854"
     }
+  },
+  "lib/v3-core": {
+    "branch": {
+      "name": "0.8",
+      "rev": "6562c52e8f75f0c10f9deaf44861847585fc8129"
+    }
+  },
+  "lib/v3-periphery": {
+    "branch": {
+      "name": "0.8",
+      "rev": "b325bb0905d922ae61fcc7df85ee802e8df5e96c"
+    }
   }
 }

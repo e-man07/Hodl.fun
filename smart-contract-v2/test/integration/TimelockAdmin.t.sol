@@ -106,7 +106,7 @@ contract TimelockAdminTest is Test {
             address(0),
             deployer
         );
-        core = Core(address(new ERC1967Proxy(address(coreImpl), initData)));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), initData))));
 
         // Initialize FeeVault
         feeVault.initialize(

@@ -16,3 +16,13 @@
 [submodule "smart-contract-v2/lib/openzeppelin-contracts-upgradeable"]
 	path = smart-contract-v2/lib/openzeppelin-contracts-upgradeable
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable
+[submodule "smart-contract-v2/lib/v3-core"]
+	path = smart-contract-v2/lib/v3-core
+	url = https://github.com/Uniswap/v3-core
+[submodule "smart-contract-v2/lib/v3-periphery"]
+	path = smart-contract-v2/lib/v3-periphery
+	url = https://github.com/Uniswap/v3-periphery
+[submodule "lib/v3-core"]
+	branch = 0.8
+[submodule "lib/v3-periphery"]
+	branch = 0.8

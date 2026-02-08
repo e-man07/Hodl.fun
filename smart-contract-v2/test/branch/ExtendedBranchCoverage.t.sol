@@ -11,14 +11,14 @@ import "../../src/Core.sol";
 import "../../src/Token.sol";
 import "../../src/FeeVault.sol";
 import "../../src/WPUSH.sol";
-import "../../src/UniswapV3Factory.sol";
-import "../../src/UniswapV3Pool.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Factory.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Pool.sol";
 import "../../src/interfaces/ICore.sol";
 import "../../src/interfaces/IBondingCurve.sol";
 import "../../src/interfaces/IBondingCurveFactory.sol";
 import "../../src/utils/BondingCurveLibrary.sol";
 import "../../src/utils/LiquidityAmounts.sol";
-import "../../src/utils/TickMath.sol";
+import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 
 /**
  * @title ExtendedBranchCoverageTest
@@ -69,7 +69,7 @@ contract ExtendedBranchCoverageTest is Test {
             address(0),
             admin
         );
-        core = Core(address(new ERC1967Proxy(address(coreImpl), initData)));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), initData))));
 
         vm.startPrank(admin);
         feeVault.initialize(
@@ -121,9 +121,10 @@ contract ExtendedBranchCoverageTest is Test {
     }
 
     // ============ WPUSH Branch Tests ============
+    // Note: Tests for mint(), batchMint(), emergencyWithdraw() removed - these were rug pull vectors
 
     function testWPUSH_DepositZeroAmount() public {
-        vm.expectRevert("Deposit amount must be greater than 0");
+        vm.expectRevert(WPUSH.ZeroDeposit.selector);
         wNative.deposit{value: 0}();
     }
 
@@ -131,7 +132,7 @@ contract ExtendedBranchCoverageTest is Test {
         vm.startPrank(user1);
         wNative.deposit{value: 1 ether}();
 
-        vm.expectRevert("Withdraw amount must be greater than 0");
+        vm.expectRevert(WPUSH.ZeroWithdraw.selector);
         wNative.withdraw(0);
         vm.stopPrank();
     }
@@ -140,7 +141,7 @@ contract ExtendedBranchCoverageTest is Test {
         vm.startPrank(user1);
         wNative.deposit{value: 1 ether}();
 
-        vm.expectRevert("Insufficient balance");
+        vm.expectRevert(WPUSH.InsufficientBalance.selector);
         wNative.withdraw(2 ether);
         vm.stopPrank();
     }
@@ -149,7 +150,7 @@ contract ExtendedBranchCoverageTest is Test {
         vm.startPrank(user1);
         wNative.deposit{value: 1 ether}();
 
-        vm.expectRevert("Withdraw amount must be greater than 0");
+        vm.expectRevert(WPUSH.ZeroWithdraw.selector);
         wNative.withdrawWithPermit(user1, 0, block.timestamp + 1000, 0, bytes32(0), bytes32(0));
         vm.stopPrank();
     }
@@ -158,84 +159,16 @@ contract ExtendedBranchCoverageTest is Test {
         vm.startPrank(user1);
         wNative.deposit{value: 1 ether}();
 
-        vm.expectRevert("Insufficient balance");
+        vm.expectRevert(WPUSH.InsufficientBalance.selector);
         wNative.withdrawWithPermit(user1, 2 ether, block.timestamp + 1000, 0, bytes32(0), bytes32(0));
         vm.stopPrank();
-    }
-
-    function testWPUSH_MintInvalidRecipient() public {
-        vm.expectRevert("Invalid recipient");
-        wNative.mint(address(0), 1 ether);
-    }
-
-    function testWPUSH_MintZeroAmount() public {
-        vm.expectRevert("Mint amount must be greater than 0");
-        wNative.mint(user1, 0);
-    }
-
-    function testWPUSH_MintSuccess() public {
-        wNative.mint(user1, 1 ether);
-        assertEq(wNative.balanceOf(user1), 1 ether);
-    }
-
-    function testWPUSH_BatchMintArrayMismatch() public {
-        address[] memory recipients = new address[](2);
-        recipients[0] = user1;
-        recipients[1] = user2;
-
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = 1 ether;
-
-        vm.expectRevert("Array length mismatch");
-        wNative.batchMint(recipients, amounts);
-    }
-
-    function testWPUSH_BatchMintInvalidRecipient() public {
-        address[] memory recipients = new address[](2);
-        recipients[0] = user1;
-        recipients[1] = address(0); // Invalid
-
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 1 ether;
-        amounts[1] = 1 ether;
-
-        vm.expectRevert("Invalid recipient");
-        wNative.batchMint(recipients, amounts);
-    }
-
-    function testWPUSH_BatchMintZeroAmount() public {
-        address[] memory recipients = new address[](2);
-        recipients[0] = user1;
-        recipients[1] = user2;
-
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 1 ether;
-        amounts[1] = 0; // Invalid
-
-        vm.expectRevert("Mint amount must be greater than 0");
-        wNative.batchMint(recipients, amounts);
-    }
-
-    function testWPUSH_BatchMintSuccess() public {
-        address[] memory recipients = new address[](2);
-        recipients[0] = user1;
-        recipients[1] = user2;
-
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 1 ether;
-        amounts[1] = 2 ether;
-
-        wNative.batchMint(recipients, amounts);
-
-        assertEq(wNative.balanceOf(user1), 1 ether);
-        assertEq(wNative.balanceOf(user2), 2 ether);
     }
 
     function testWPUSH_BurnZeroAmount() public {
         vm.startPrank(user1);
         wNative.deposit{value: 1 ether}();
 
-        vm.expectRevert("Burn amount must be greater than 0");
+        vm.expectRevert(WPUSH.ZeroBurn.selector);
         wNative.burn(0);
         vm.stopPrank();
     }
@@ -255,7 +188,7 @@ contract ExtendedBranchCoverageTest is Test {
         vm.stopPrank();
 
         vm.startPrank(user2);
-        vm.expectRevert("Insufficient allowance");
+        vm.expectRevert(WPUSH.InsufficientBalance.selector);
         wNative.burnFrom(user1, 0.5 ether);
         vm.stopPrank();
     }
@@ -271,23 +204,6 @@ contract ExtendedBranchCoverageTest is Test {
         vm.stopPrank();
 
         assertEq(wNative.balanceOf(user1), 0.5 ether);
-    }
-
-    function testWPUSH_EmergencyWithdrawNoFunds() public {
-        vm.expectRevert("No funds to withdraw");
-        wNative.emergencyWithdraw();
-    }
-
-    function testWPUSH_EmergencyWithdrawSuccess() public {
-        // First deposit some funds
-        vm.prank(user1);
-        wNative.deposit{value: 1 ether}();
-
-        uint256 ownerBalanceBefore = address(wNative.owner()).balance;
-        wNative.emergencyWithdraw();
-        uint256 ownerBalanceAfter = address(wNative.owner()).balance;
-
-        assertEq(ownerBalanceAfter - ownerBalanceBefore, 1 ether);
     }
 
     function testWPUSH_ReceiveFunction() public {
@@ -306,186 +222,9 @@ contract ExtendedBranchCoverageTest is Test {
     }
 
     // ============ UniswapV3Factory Branch Tests ============
-
-    function testV3Factory_CreatePoolInvalidFee() public {
-        vm.expectRevert(UniswapV3Factory.InvalidFee.selector);
-        uniswapFactory.createPool(address(wNative), address(0x123), 100); // Invalid fee tier
-    }
-
-    function testV3Factory_CreatePoolAlreadyExists() public {
-        address tokenA = address(new MockERC20("TokenA", "TKA"));
-        address tokenB = address(new MockERC20("TokenB", "TKB"));
-
-        uniswapFactory.createPool(tokenA, tokenB, 3000);
-
-        vm.expectRevert(UniswapV3Factory.PoolAlreadyExists.selector);
-        uniswapFactory.createPool(tokenA, tokenB, 3000);
-    }
-
-    function testV3Factory_CreatePoolSuccess() public {
-        address tokenA = address(new MockERC20("TokenA", "TKA"));
-        address tokenB = address(new MockERC20("TokenB", "TKB"));
-
-        address pool = uniswapFactory.createPool(tokenA, tokenB, 3000);
-        assertTrue(pool != address(0));
-
-        // Verify mapping both directions
-        assertEq(uniswapFactory.getPool(tokenA, tokenB, 3000), pool);
-        assertEq(uniswapFactory.getPool(tokenB, tokenA, 3000), pool);
-    }
-
-    function testV3Factory_EnableFeeAmountUnauthorized() public {
-        vm.prank(user1);
-        vm.expectRevert(UniswapV3Factory.Unauthorized.selector);
-        uniswapFactory.enableFeeAmount(100, 1);
-    }
-
-    function testV3Factory_EnableFeeAmountAlreadyEnabled() public {
-        vm.expectRevert(UniswapV3Factory.InvalidFee.selector);
-        uniswapFactory.enableFeeAmount(3000, 60); // Already enabled in constructor
-    }
-
-    function testV3Factory_EnableFeeAmountSuccess() public {
-        uniswapFactory.enableFeeAmount(100, 1);
-        assertTrue(uniswapFactory.feeAmountTickSpacing(100));
-    }
-
-    function testV3Factory_PoolsLength() public {
-        assertEq(uniswapFactory.poolsLength(), 0);
-
-        address tokenA = address(new MockERC20("TokenA", "TKA"));
-        address tokenB = address(new MockERC20("TokenB", "TKB"));
-
-        uniswapFactory.createPool(tokenA, tokenB, 3000);
-        assertEq(uniswapFactory.poolsLength(), 1);
-    }
-
-    function testV3Factory_GetPoolAtIndex() public {
-        address tokenA = address(new MockERC20("TokenA", "TKA"));
-        address tokenB = address(new MockERC20("TokenB", "TKB"));
-
-        address pool = uniswapFactory.createPool(tokenA, tokenB, 3000);
-        assertEq(uniswapFactory.getPoolAtIndex(0), pool);
-    }
-
-    // ============ UniswapV3Pool Branch Tests ============
-
-    function testV3Pool_InitializeAlreadyInitialized() public {
-        address tokenA = address(new MockERC20("TokenA", "TKA"));
-        address tokenB = address(new MockERC20("TokenB", "TKB"));
-
-        UniswapV3Pool pool = new UniswapV3Pool(tokenA, tokenB, 3000);
-        pool.initialize(79228162514264337593543950336); // Valid sqrtPriceX96
-
-        vm.expectRevert(UniswapV3Pool.InvalidPrice.selector);
-        pool.initialize(79228162514264337593543950336);
-    }
-
-    function testV3Pool_InitializeZeroPrice() public {
-        address tokenA = address(new MockERC20("TokenA", "TKA"));
-        address tokenB = address(new MockERC20("TokenB", "TKB"));
-
-        UniswapV3Pool pool = new UniswapV3Pool(tokenA, tokenB, 3000);
-
-        vm.expectRevert(UniswapV3Pool.InvalidPrice.selector);
-        pool.initialize(0);
-    }
-
-    function testV3Pool_MintZeroAmount() public {
-        address tokenA = address(new MockERC20("TokenA", "TKA"));
-        address tokenB = address(new MockERC20("TokenB", "TKB"));
-
-        UniswapV3Pool pool = new UniswapV3Pool(tokenA, tokenB, 3000);
-        pool.initialize(79228162514264337593543950336);
-
-        vm.expectRevert(UniswapV3Pool.InvalidAmount.selector);
-        pool.mint(user1, -100, 100, 0, "");
-    }
-
-    function testV3Pool_MintInvalidTick() public {
-        address tokenA = address(new MockERC20("TokenA", "TKA"));
-        address tokenB = address(new MockERC20("TokenB", "TKB"));
-
-        UniswapV3Pool pool = new UniswapV3Pool(tokenA, tokenB, 3000);
-        pool.initialize(79228162514264337593543950336);
-
-        // tickLower >= tickUpper
-        vm.expectRevert(UniswapV3Pool.InvalidTick.selector);
-        pool.mint(user1, 100, 100, 1000, "");
-
-        vm.expectRevert(UniswapV3Pool.InvalidTick.selector);
-        pool.mint(user1, 100, 50, 1000, "");
-    }
-
-    function testV3Pool_BurnZeroAmount() public {
-        address tokenA = address(new MockERC20("TokenA", "TKA"));
-        address tokenB = address(new MockERC20("TokenB", "TKB"));
-
-        UniswapV3Pool pool = new UniswapV3Pool(tokenA, tokenB, 3000);
-        pool.initialize(79228162514264337593543950336);
-
-        vm.expectRevert(UniswapV3Pool.InvalidAmount.selector);
-        pool.burn(-100, 100, 0);
-    }
-
-    function testV3Pool_BurnInsufficientLiquidity() public {
-        address tokenA = address(new MockERC20("TokenA", "TKA"));
-        address tokenB = address(new MockERC20("TokenB", "TKB"));
-
-        UniswapV3Pool pool = new UniswapV3Pool(tokenA, tokenB, 3000);
-        pool.initialize(79228162514264337593543950336);
-
-        vm.expectRevert(UniswapV3Pool.InvalidAmount.selector);
-        pool.burn(-100, 100, 1000); // No position exists
-    }
-
-    function testV3Pool_Slot0() public {
-        address tokenA = address(new MockERC20("TokenA", "TKA"));
-        address tokenB = address(new MockERC20("TokenB", "TKB"));
-
-        UniswapV3Pool pool = new UniswapV3Pool(tokenA, tokenB, 3000);
-        pool.initialize(79228162514264337593543950336);
-
-        (uint160 sqrtPriceX96, int24 tick,,,,, bool unlocked) = pool.slot0();
-        assertEq(sqrtPriceX96, 79228162514264337593543950336);
-        assertEq(tick, 0);
-        assertTrue(unlocked);
-    }
-
-    function testV3Pool_CollectWithZeroAmounts() public {
-        MockERC20 tokenA = new MockERC20("TokenA", "TKA");
-        MockERC20 tokenB = new MockERC20("TokenB", "TKB");
-
-        UniswapV3Pool pool = new UniswapV3Pool(address(tokenA), address(tokenB), 3000);
-        pool.initialize(79228162514264337593543950336);
-
-        // Collect with zero amounts (both branches: amount0 > 0 and amount1 > 0)
-        (uint256 amount0, uint256 amount1) = pool.collect(user1, -100, 100, 0, 0);
-        assertEq(amount0, 0);
-        assertEq(amount1, 0);
-    }
-
-    function testV3Pool_CollectWithAmounts() public {
-        MockERC20 tokenA = new MockERC20("TokenA", "TKA");
-        MockERC20 tokenB = new MockERC20("TokenB", "TKB");
-
-        // Sort tokens
-        (address token0, address token1) = address(tokenA) < address(tokenB)
-            ? (address(tokenA), address(tokenB))
-            : (address(tokenB), address(tokenA));
-
-        UniswapV3Pool pool = new UniswapV3Pool(token0, token1, 3000);
-        pool.initialize(79228162514264337593543950336);
-
-        // Fund the pool
-        MockERC20(token0).mint(address(pool), 1000 ether);
-        MockERC20(token1).mint(address(pool), 1000 ether);
-
-        // Collect with amounts
-        (uint256 amount0, uint256 amount1) = pool.collect(user1, -100, 100, 100, 200);
-        assertEq(amount0, 100);
-        assertEq(amount1, 200);
-    }
+    // REMOVED: These tests were for the old minimal V3 implementation.
+    // The official v3-core contracts have a different API and are already audited.
+    // Our code only uses the V3 contracts via interfaces in the listing() function.
 
     // ============ BondingCurve Additional Branch Tests ============
 
@@ -526,7 +265,7 @@ contract ExtendedBranchCoverageTest is Test {
 
         // Check if graduated
         if (BondingCurve(curve500).getLock()) {
-            address pool = BondingCurve(curve500).listing();
+            address pool = core.triggerListing(token500);
             assertTrue(pool != address(0));
         }
 
@@ -544,7 +283,7 @@ contract ExtendedBranchCoverageTest is Test {
         vm.stopPrank();
 
         if (BondingCurve(curve10000).getLock()) {
-            address pool = BondingCurve(curve10000).listing();
+            address pool = core.triggerListing(token10000);
             assertTrue(pool != address(0));
         }
     }
@@ -566,7 +305,7 @@ contract ExtendedBranchCoverageTest is Test {
                 : (token_, address(wNative));
 
             // The pool might already exist or will be created in listing()
-            address pool = BondingCurve(curve_).listing();
+            address pool = core.triggerListing(token_);
             assertTrue(pool != address(0));
         }
     }
@@ -668,7 +407,7 @@ contract ExtendedBranchCoverageTest is Test {
 
         // If graduated, list on DEX (this calls LiquidityAmounts internally)
         if (BondingCurve(curve_).getLock()) {
-            address pool = BondingCurve(curve_).listing();
+            address pool = core.triggerListing(token_);
             assertTrue(pool != address(0));
         }
     }

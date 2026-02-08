@@ -11,11 +11,11 @@ import "../../src/BondingCurveFactory.sol";
 import "../../src/Core.sol";
 import "../../src/Token.sol";
 import "../../src/FeeVault.sol";
-import "../../src/UniswapV3Factory.sol";
-import "../../src/UniswapV3Pool.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Factory.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Pool.sol";
 import "../../src/interfaces/IBondingCurve.sol";
-import "../../src/interfaces/IUniswapV3Pool.sol";
-import "../../src/utils/TickMath.sol";
+import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 
 /// @title Mock WPUSH for stress testing
 contract MockWPUSH is ERC20 {
@@ -89,7 +89,7 @@ contract StressTest is Test {
 
         // Deploy Core
         Core coreImpl = new Core(address(wNative), address(feeVault));
-        core = Core(address(new ERC1967Proxy(address(coreImpl), "")));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), ""))));
 
         // Deploy Factory
         BondingCurveFactory factoryImpl = new BondingCurveFactory(address(wNative));
@@ -271,7 +271,7 @@ contract StressTest is Test {
         console.log("Total native for LP:", totalNativeForLP);
 
         // List and verify liquidity reserve is used
-        bc.listing();
+        core.triggerListing(token_);
 
         // Liquidity reserve should be reset to 0
         uint256 liqReserveAfter = bc.liquidityReserve();
@@ -357,7 +357,7 @@ contract StressTest is Test {
 
         // Graduate and list
         graduateCurve(curve_, token_);
-        bc.listing();
+        core.triggerListing(token_);
 
         // Get LP position details
         int24 tickLower = bc.lpTickLower();
@@ -389,7 +389,7 @@ contract StressTest is Test {
 
         // Graduate and list
         graduateCurve(curve_, token_);
-        bc.listing();
+        core.triggerListing(token_);
 
         int24 tickLower = bc.lpTickLower();
         int24 tickUpper = bc.lpTickUpper();
@@ -432,7 +432,7 @@ contract StressTest is Test {
 
         // Graduate and list
         graduateCurve(curve_, token_);
-        bc.listing();
+        core.triggerListing(token_);
 
         // Verify LP position details are stored
         int24 tickLower = bc.lpTickLower();
@@ -453,7 +453,7 @@ contract StressTest is Test {
 
         // Graduate and list
         graduateCurve(curve_, token_);
-        bc.listing();
+        core.triggerListing(token_);
 
         // Verify no withdrawal function exists
         // The BondingCurve contract should NOT have any function to:
@@ -489,7 +489,7 @@ contract StressTest is Test {
         vm.expectEmit(true, false, false, false);
         emit IBondingCurve.LPBurned(token_, address(0), 0, 0, 0);
 
-        bc.listing();
+        core.triggerListing(token_);
     }
 
     // ============================================================
@@ -512,7 +512,7 @@ contract StressTest is Test {
         console.log("Token reserves before listing:", tokenReserves);
 
         // List
-        bc.listing();
+        core.triggerListing(token_);
 
         uint256 totalSupplyAfter = tokenContract.totalSupply();
         console.log("Total supply after listing:", totalSupplyAfter);
@@ -786,7 +786,7 @@ contract StressTest is Test {
 
         // 5. List on DEX
         console.log("5. Listing on DEX...");
-        address pool = bc.listing();
+        address pool = core.triggerListing(token_);
 
         assertTrue(bc.getIsListing(), "Should be listed");
         assertTrue(pool != address(0), "Pool should exist");
@@ -962,7 +962,7 @@ contract StressTest is Test {
         if (!bc.getLock()) {
             graduateCurve(curve_, token_);
         }
-        bc.listing();
+        core.triggerListing(token_);
 
         // After listing, supply may decrease due to burn
         uint256 finalSupply = tokenContract.totalSupply();

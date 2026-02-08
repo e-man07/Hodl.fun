@@ -10,7 +10,7 @@ import "../../src/Core.sol";
 import "../../src/Token.sol";
 import "../../src/FeeVault.sol";
 import "../../src/WPUSH.sol";
-import "../../src/UniswapV3Factory.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Factory.sol";
 import "../../src/interfaces/IBondingCurve.sol";
 import "../../src/interfaces/IBondingCurveFactory.sol";
 
@@ -62,7 +62,7 @@ contract SellBranchCoverageTest is Test {
             address(0),
             admin
         );
-        core = Core(address(new ERC1967Proxy(address(coreImpl), initData)));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), initData))));
 
         vm.startPrank(admin);
         feeVault.initialize(

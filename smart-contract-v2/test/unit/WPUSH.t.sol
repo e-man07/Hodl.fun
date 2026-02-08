@@ -7,7 +7,6 @@ import "../../src/WPUSH.sol";
 contract WPUSHTest is Test {
     WPUSH wpush;
 
-    address owner = address(0x1);
     address user1 = address(0x2);
     address user2 = address(0x3);
 
@@ -16,19 +15,16 @@ contract WPUSHTest is Test {
 
     event Deposit(address indexed sender, uint256 amount);
     event Withdrawal(address indexed recipient, uint256 amount);
-    event Minted(address indexed to, uint256 amount);
     event Burned(address indexed from, uint256 amount);
 
     function setUp() public {
         // Create signer address from private key
         user1Signer = vm.addr(user1PrivateKey);
 
-        // Deploy WPUSH as owner
-        vm.prank(owner);
+        // Deploy WPUSH (no owner - Ownable removed for security)
         wpush = new WPUSH();
 
         // Fund accounts
-        vm.deal(owner, 1000 ether);
         vm.deal(user1, 1000 ether);
         vm.deal(user2, 1000 ether);
         vm.deal(user1Signer, 1000 ether);
@@ -41,7 +37,6 @@ contract WPUSHTest is Test {
         assertEq(wpush.symbol(), "WPUSH");
         assertEq(wpush.decimals(), 18);
         assertEq(wpush.totalSupply(), 0);
-        assertEq(wpush.owner(), owner);
     }
 
     // ============ Deposit Tests ============
@@ -75,7 +70,7 @@ contract WPUSHTest is Test {
 
     function testDepositZeroAmountReverts() public {
         vm.prank(user1);
-        vm.expectRevert("Deposit amount must be greater than 0");
+        vm.expectRevert(WPUSH.ZeroDeposit.selector);
         wpush.deposit{value: 0}();
     }
 
@@ -90,6 +85,14 @@ contract WPUSHTest is Test {
 
         assertTrue(success);
         assertEq(wpush.balanceOf(user1), depositAmount);
+    }
+
+    function testReceiveZeroAmountReverts() public {
+        vm.prank(user1);
+        // Low-level call with 0 value should fail (receive() reverts with ZeroDeposit)
+        // Note: vm.expectRevert doesn't work with low-level calls that catch their own reverts
+        (bool success, ) = address(wpush).call{value: 0}("");
+        assertFalse(success, "Sending 0 value should fail");
     }
 
     // ============ Withdraw Tests ============
@@ -132,7 +135,7 @@ contract WPUSHTest is Test {
         wpush.deposit{value: 10 ether}();
 
         vm.prank(user1);
-        vm.expectRevert("Withdraw amount must be greater than 0");
+        vm.expectRevert(WPUSH.ZeroWithdraw.selector);
         wpush.withdraw(0);
     }
 
@@ -141,7 +144,7 @@ contract WPUSHTest is Test {
         wpush.deposit{value: 5 ether}();
 
         vm.prank(user1);
-        vm.expectRevert("Insufficient balance");
+        vm.expectRevert(WPUSH.InsufficientBalance.selector);
         wpush.withdraw(10 ether);
     }
 
@@ -187,6 +190,16 @@ contract WPUSHTest is Test {
         assertEq(user1Signer.balance, signerBalanceBefore + withdrawAmount);
     }
 
+    function testWithdrawWithPermitZeroAmountReverts() public {
+        uint256 deadline = block.timestamp + 1 hours;
+
+        vm.prank(user1);
+        wpush.deposit{value: 10 ether}();
+
+        vm.expectRevert(WPUSH.ZeroWithdraw.selector);
+        wpush.withdrawWithPermit(user1, 0, deadline, 0, bytes32(0), bytes32(0));
+    }
+
     function testWithdrawWithPermitInsufficientBalance() public {
         uint256 depositAmount = 5 ether;
         uint256 withdrawAmount = 10 ether;
@@ -216,92 +229,8 @@ contract WPUSHTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1PrivateKey, permitHash);
 
         vm.prank(user2);
-        vm.expectRevert("Insufficient balance");
+        vm.expectRevert(WPUSH.InsufficientBalance.selector);
         wpush.withdrawWithPermit(user1Signer, withdrawAmount, deadline, v, r, s);
-    }
-
-    // ============ Mint Tests (Owner Only) ============
-
-    function testMintByOwner() public {
-        uint256 mintAmount = 100 ether;
-
-        vm.expectEmit(true, false, false, true);
-        emit Minted(user1, mintAmount);
-
-        vm.prank(owner);
-        wpush.mint(user1, mintAmount);
-
-        assertEq(wpush.balanceOf(user1), mintAmount);
-        assertEq(wpush.totalSupply(), mintAmount);
-    }
-
-    function testMintByNonOwnerReverts() public {
-        vm.prank(user1);
-        vm.expectRevert();
-        wpush.mint(user1, 100 ether);
-    }
-
-    function testMintZeroAddressReverts() public {
-        vm.prank(owner);
-        vm.expectRevert("Invalid recipient");
-        wpush.mint(address(0), 100 ether);
-    }
-
-    function testMintZeroAmountReverts() public {
-        vm.prank(owner);
-        vm.expectRevert("Mint amount must be greater than 0");
-        wpush.mint(user1, 0);
-    }
-
-    // ============ BatchMint Tests ============
-
-    function testBatchMint() public {
-        address[] memory recipients = new address[](3);
-        recipients[0] = user1;
-        recipients[1] = user2;
-        recipients[2] = address(0x5);
-
-        uint256[] memory amounts = new uint256[](3);
-        amounts[0] = 10 ether;
-        amounts[1] = 20 ether;
-        amounts[2] = 30 ether;
-
-        vm.prank(owner);
-        wpush.batchMint(recipients, amounts);
-
-        assertEq(wpush.balanceOf(user1), 10 ether);
-        assertEq(wpush.balanceOf(user2), 20 ether);
-        assertEq(wpush.balanceOf(address(0x5)), 30 ether);
-        assertEq(wpush.totalSupply(), 60 ether);
-    }
-
-    function testBatchMintArrayMismatchReverts() public {
-        address[] memory recipients = new address[](2);
-        recipients[0] = user1;
-        recipients[1] = user2;
-
-        uint256[] memory amounts = new uint256[](3);
-        amounts[0] = 10 ether;
-        amounts[1] = 20 ether;
-        amounts[2] = 30 ether;
-
-        vm.prank(owner);
-        vm.expectRevert("Array length mismatch");
-        wpush.batchMint(recipients, amounts);
-    }
-
-    function testBatchMintWithZeroAddressReverts() public {
-        address[] memory recipients = new address[](2);
-        recipients[0] = user1;
-        recipients[1] = address(0);
-
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 10 ether;
-        amounts[1] = 20 ether;
-
-        vm.prank(owner);
-        vm.expectRevert("Invalid recipient");
-        wpush.batchMint(recipients, amounts);
     }
 
     // ============ Burn Tests ============
@@ -327,7 +256,7 @@ contract WPUSHTest is Test {
         wpush.deposit{value: 10 ether}();
 
         vm.prank(user1);
-        vm.expectRevert("Burn amount must be greater than 0");
+        vm.expectRevert(WPUSH.ZeroBurn.selector);
         wpush.burn(0);
     }
 
@@ -350,6 +279,18 @@ contract WPUSHTest is Test {
         assertEq(wpush.allowance(user1, user2), 0);
     }
 
+    function testBurnFromZeroAmountReverts() public {
+        vm.prank(user1);
+        wpush.deposit{value: 10 ether}();
+
+        vm.prank(user1);
+        wpush.approve(user2, 10 ether);
+
+        vm.prank(user2);
+        vm.expectRevert(WPUSH.ZeroBurn.selector);
+        wpush.burnFrom(user1, 0);
+    }
+
     function testBurnFromInsufficientAllowanceReverts() public {
         vm.prank(user1);
         wpush.deposit{value: 10 ether}();
@@ -358,7 +299,7 @@ contract WPUSHTest is Test {
         wpush.approve(user2, 3 ether);
 
         vm.prank(user2);
-        vm.expectRevert("Insufficient allowance");
+        vm.expectRevert(WPUSH.InsufficientBalance.selector);
         wpush.burnFrom(user1, 5 ether);
     }
 
@@ -373,35 +314,21 @@ contract WPUSHTest is Test {
         assertEq(wpush.getBalance(), 10 ether);
     }
 
-    // ============ EmergencyWithdraw Tests ============
+    // ============ IsFullyBacked Tests ============
 
-    function testEmergencyWithdraw() public {
-        // Deposit some funds
-        vm.prank(user1);
-        wpush.deposit{value: 100 ether}();
+    function testIsFullyBacked() public {
+        // Empty contract is fully backed (0 <= 0)
+        assertTrue(wpush.isFullyBacked());
 
-        uint256 ownerBalanceBefore = owner.balance;
-
-        vm.prank(owner);
-        wpush.emergencyWithdraw();
-
-        assertEq(address(wpush).balance, 0);
-        assertEq(owner.balance, ownerBalanceBefore + 100 ether);
-    }
-
-    function testEmergencyWithdrawNoFundsReverts() public {
-        vm.prank(owner);
-        vm.expectRevert("No funds to withdraw");
-        wpush.emergencyWithdraw();
-    }
-
-    function testEmergencyWithdrawByNonOwnerReverts() public {
+        // After deposit, should be fully backed
         vm.prank(user1);
         wpush.deposit{value: 10 ether}();
+        assertTrue(wpush.isFullyBacked());
 
+        // After burn, totalSupply decreases but balance stays (burn doesn't unlock ETH)
         vm.prank(user1);
-        vm.expectRevert();
-        wpush.emergencyWithdraw();
+        wpush.burn(5 ether);
+        assertTrue(wpush.isFullyBacked()); // Still fully backed since balance >= supply
     }
 
     // ============ Transfer Tests ============

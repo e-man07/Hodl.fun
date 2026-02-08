@@ -110,7 +110,7 @@ contract CreatorFeeTest is Test {
             address(0), // factory set later
             admin
         );
-        core = Core(address(new ERC1967Proxy(address(coreImpl), initData)));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), initData))));
 
         // Initialize FeeVault with core address
         vm.startPrank(admin);

@@ -1,0 +1,401 @@
+# thehodl.fun Infrastructure Cost Estimate
+
+**Document Version:** 1.0
+**Date:** February 2, 2026
+**Target Scale:** 1,000 - 5,000 Concurrent Users
+**Cloud Provider:** Google Cloud Platform (GCP)
+
+---
+
+## Executive Summary
+
+This document outlines the monthly infrastructure costs required to operate the thehodl.fun backend platform at growth stage, supporting 1,000 to 5,000 concurrent users. The architecture is designed for high availability, real-time performance, and cost efficiency using modern cloud-native services.
+
+**Total Estimated Monthly Cost: $1,000 USD**
+
+---
+
+## Platform Overview
+
+thehodl.fun is a universal token launchpad platform built on Push Chain, enabling users to launch and trade ERC20 tokens with bonding curve mechanics. The backend infrastructure supports:
+
+- **REST API** for token operations and user management
+- **Real-time WebSocket** connections for live price updates and trade notifications
+- **Blockchain Indexer** for synchronizing on-chain events
+- **Background Workers** for metrics calculation, alerts, and data processing
+
+---
+
+## Architecture Overview
+
+```
++---------------------------------------------------------------------+
+|                         LOAD BALANCER                                |
+|                    (Cloud Load Balancing)                            |
++---------------------------+-----------------------------------------+
+                            |
+           +----------------+----------------+
+           |                |                |
+           v                v                v
+    +-------------+  +-------------+  +-------------+
+    |  API Server |  |  WebSocket  |  |   Worker    |
+    |  (Cloud Run)|  | (Cloud Run) |  | (Cloud Run) |
+    |  Auto-scale |  |  2 min inst |  |  Auto-scale |
+    |    1-4      |  |             |  |    0-3      |
+    +------+------+  +------+------+  +------+------+
+           |                |                |
+           +----------------+----------------+
+                            |
+           +----------------+----------------+
+           |                |                |
+           v                v                v
+    +-------------+  +-------------+  +-------------+
+    |  Cloud SQL  |  | Memorystore |  |   Indexer   |
+    | PostgreSQL  |  |    Redis    |  | (Cloud Run) |
+    |   2 vCPU    |  |    3 GB     |  |   Always-on |
+    +-------------+  +-------------+  +-------------+
+```
+
+---
+
+## Detailed Cost Breakdown
+
+### 1. Compute Services (Cloud Run)
+
+Cloud Run provides serverless container hosting with automatic scaling and pay-per-use billing.
+
+| Service | vCPU | Memory | Min Instances | Max Instances | Monthly Cost |
+|---------|------|--------|---------------|---------------|--------------|
+| API Server | 2 | 2 GiB | 1 | 6 | $250 |
+| WebSocket Server | 1 | 2 GiB | 2 | 6 | $150 |
+| Blockchain Indexer | 1 | 1 GiB | 1 | 2 | $90 |
+| Background Worker | 1 | 1 GiB | 1 | 4 | $80 |
+
+**Compute Subtotal: $570/month**
+
+#### Pricing Basis:
+- CPU: $0.000024 per vCPU-second
+- Memory: $0.0000025 per GiB-second
+- Source: https://cloud.google.com/run/pricing
+
+#### Service Justifications:
+
+**API Server**
+- Handles REST API requests for token creation, trading, and user operations
+- Rate-limited to 10 req/sec per client with 3-tier throttling
+- Auto-scales based on request volume and CPU utilization
+
+**WebSocket Server**
+- Maintains persistent connections for real-time price and trade updates
+- Redis adapter enables horizontal scaling across multiple instances
+- Minimum 2 instances ensure high availability for connected clients
+
+**Blockchain Indexer**
+- Polls Push Chain every 5 seconds for contract events
+- Processes CreateCurve, Buy, Sell, and graduation events
+- Single instance with circuit breaker pattern for RPC resilience
+
+**Background Worker**
+- Calculates OHLC candlestick data across 6 time intervals
+- Updates leaderboards every 30 seconds
+- Processes portfolio updates and alert notifications
+- Scales to zero during low activity periods
+
+---
+
+### 2. Database (Cloud SQL for PostgreSQL)
+
+| Specification | Value |
+|---------------|-------|
+| Instance Type | db-custom-2-8192 |
+| vCPU | 2 |
+| Memory | 8 GB |
+| Storage Type | SSD |
+| Storage Size | 100 GB |
+| High Availability | Yes (multi-zone) |
+| Automated Backups | Daily with 7-day retention |
+
+**Database Subtotal: $180/month**
+
+#### Pricing Basis:
+- Base instance: ~$180/month with HA configuration
+- Storage: $0.222 per GB/month (included in estimate)
+- Source: https://cloud.google.com/sql/docs/postgres/pricing
+
+#### Database Schema Highlights:
+- **Token**: Metadata, reserves, graduation status
+- **Trade**: Transaction history with pricing data
+- **Holder**: User token balances
+- **PriceHistory**: OHLC candlestick data
+- **UserPortfolio**: Aggregated holdings and P&L
+
+---
+
+### 3. Caching & Message Queue (Memorystore for Redis)
+
+| Specification | Value |
+|---------------|-------|
+| Tier | Standard (High Availability) |
+| Capacity | 5 GB |
+| Replicas | 1 (automatic failover) |
+
+**Redis Subtotal: $165/month**
+
+#### Pricing Basis:
+- Standard tier: ~$0.046/GB-hour
+- Source: https://cloud.google.com/memorystore/docs/redis/pricing
+
+#### Redis Usage:
+- **Caching**: Token data (10s TTL), prices (5s TTL), leaderboards (30s TTL)
+- **Pub/Sub**: Real-time event distribution to WebSocket servers
+- **Session**: WebSocket connection state across instances
+- **Queues**: Bull queue for background job processing
+
+---
+
+### 4. Networking
+
+| Component | Specification | Monthly Cost |
+|-----------|--------------|--------------|
+| Cloud Load Balancer | 3 forwarding rules | $22 |
+| Network Egress | ~300 GB (Standard tier) | $26 |
+| Static IP Addresses | 2 reserved IPs | $7 |
+| Internal Traffic | Same region | Free |
+
+**Networking Subtotal: $55/month**
+
+#### Pricing Basis:
+- Load Balancer: $0.025/hour per forwarding rule
+- Egress: $0.085/GB (Standard tier)
+- Source: https://cloud.google.com/vpc/network-pricing
+
+---
+
+### 5. Monitoring & Operations
+
+| Component | Specification | Monthly Cost |
+|-----------|--------------|--------------|
+| Cloud Monitoring | Custom metrics & dashboards | $15 |
+| Cloud Logging | 100 GB/month ingestion | $10 |
+| Cloud Trace | Distributed tracing | $5 |
+| Error Reporting | Included | Free |
+
+**Operations Subtotal: $30/month**
+
+---
+
+## Cost Summary
+
+| Category | Monthly Cost | Percentage |
+|----------|--------------|------------|
+| Compute (Cloud Run) | $570 | 57% |
+| Database (Cloud SQL) | $180 | 18% |
+| Caching (Redis) | $165 | 16.5% |
+| Networking | $55 | 5.5% |
+| Monitoring & Operations | $30 | 3% |
+| **TOTAL** | **$1,000** | **100%** |
+
+---
+
+## Capacity & Performance Specifications
+
+| Metric | Target | Configuration |
+|--------|--------|---------------|
+| Concurrent Users | 1,000 - 5,000 | Auto-scaling compute |
+| Daily Active Users | ~50,000 | Database capacity |
+| API Requests | ~1M/day | Rate limiting + caching |
+| WebSocket Connections | ~5,000 sustained | 2+ WebSocket instances |
+| Trades per Minute | ~100 average | Event-driven processing |
+| API Response Time | <100ms p95 | In-memory caching |
+| WebSocket Latency | <50ms | Redis pub/sub |
+| Blockchain Sync Lag | <2 blocks | 5-second polling |
+
+---
+
+## Cost Optimization Measures
+
+The following optimizations are applied to minimize costs while maintaining performance:
+
+| Optimization | Savings | Implementation |
+|--------------|---------|----------------|
+| Cloud Run Auto-scaling | 40-60% | Scale based on traffic demand |
+| Standard Network Tier | 30% | Reduced egress costs |
+| Aggressive Caching | Variable | 5-30 second TTLs reduce database load |
+| Request-based Billing | Variable | Pay only for actual API traffic |
+
+---
+
+## Scaling Considerations
+
+### Vertical Scaling (within current architecture)
+- Cloud SQL can scale to 8 vCPU, 32 GB without migration
+- Redis can expand to 10 GB within same tier
+- Cloud Run instances can scale to 8 vCPU, 32 GB per container
+
+### Horizontal Scaling (future growth beyond 5K users)
+- Add read replicas to Cloud SQL for query distribution
+- Implement Redis Cluster for sharded caching
+- Deploy to multiple regions for global low-latency access
+
+### Estimated Costs at Scale
+
+| User Scale | Monthly Cost |
+|------------|--------------|
+| 100-500 | $250 |
+| 1,000-5,000 | $1,000 |
+| 10,000+ | $2,500 |
+
+---
+
+## Technical Stack
+
+| Component | Technology | Version |
+|-----------|------------|---------|
+| Runtime | Node.js | 20.x LTS |
+| Framework | NestJS | 10.x |
+| Database ORM | Prisma | 5.x |
+| Cache Client | ioredis | 5.x |
+| WebSocket | Socket.IO | 4.x |
+| Container | Docker | Alpine-based |
+
+---
+
+## Assumptions & Notes
+
+1. **Traffic Pattern**: Estimates assume typical trading platform usage with peak hours (2x average) and off-peak scaling
+2. **Data Retention**: 90-day trade history, 1-year price history
+3. **Region**: us-central1 (Iowa) - pricing may vary by region
+4. **Currency**: All costs in USD
+5. **Billing**: Monthly estimates based on sustained usage
+6. **Free Tier**: GCP free tier credits not applied to ensure conservative estimates
+
+---
+
+## References
+
+- Google Cloud Run Pricing: https://cloud.google.com/run/pricing
+- Google Cloud SQL Pricing: https://cloud.google.com/sql/docs/postgres/pricing
+- Google Memorystore Pricing: https://cloud.google.com/memorystore/docs/redis/pricing
+- Google Cloud VPC Pricing: https://cloud.google.com/vpc/network-pricing
+- Google Cloud Pricing Calculator: https://cloud.google.com/products/calculator
+
+---
+
+---
+
+# Smart Contract Security Audit Cost Estimate
+
+## Overview
+
+A professional security audit is essential before mainnet deployment to ensure the safety of user funds. The thehodl.fun smart contract suite implements complex DeFi mechanics including bonding curves, AMM trading, UUPS upgradeable proxies, and Uniswap V3 integration for token graduation.
+
+---
+
+## Codebase Summary
+
+| Metric | Value |
+|--------|-------|
+| Total Lines of Code | ~3,500 SLOC |
+| Number of Contracts | 6 core contracts + libraries |
+| Complexity Level | High (DeFi/AMM) |
+
+### Core Contracts
+
+| Contract | Description | Complexity |
+|----------|-------------|------------|
+| Core.sol | Entry point for all user interactions (buy, sell, create) | High |
+| BondingCurveFactory.sol | Deploys token + bonding curve pairs, manages configuration | High |
+| BondingCurve.sol | AMM logic with constant product formula (k = x * y) | High |
+| Token.sol | ERC20 upgradeable with controlled minting | Medium |
+| FeeVault.sol | ERC4626 vault for platform and creator fees | Medium |
+| WPUSH.sol | Wrapped native token for ERC20 compatibility | Low |
+
+### Security-Critical Areas
+
+- **AMM Mathematics**: Bonding curve price calculations and virtual reserve mechanics
+- **Reentrancy Protection**: Multiple external calls during trading operations
+- **Access Control**: Role-based permissions with UUPS upgrade authorization
+- **Integer Precision**: Handling large token supplies (1 billion) with 18 decimals
+- **DEX Integration**: Uniswap V3 pool creation during graduation
+
+---
+
+## Audit Cost Breakdown
+
+The audit will be conducted by a small boutique security firm specializing in DeFi and smart contract audits. Boutique firms offer personalized attention, direct access to senior auditors, and cost-effective pricing while maintaining high-quality security review standards.
+
+### Pricing Model
+
+| Parameter | Value |
+|-----------|-------|
+| Audit Provider | Small Boutique Security Firm |
+| Daily Rate | $1,000 - $2,000 USD |
+| Estimated Duration | 10 - 14 days |
+| Codebase Size | ~3,500 lines |
+
+### Audit Phases
+
+| Phase | Duration | Description |
+|-------|----------|-------------|
+| Initial Review | 2-3 days | Architecture analysis, documentation review, threat modeling |
+| Manual Code Review | 5-7 days | Line-by-line analysis of all contracts, identifying vulnerabilities |
+| Automated Analysis | 1-2 days | Static analysis tools (Slither, Mythril), test coverage review |
+| Report & Remediation | 2 days | Findings documentation, severity classification, fix verification |
+
+### Cost Estimate
+
+| Scenario | Duration | Daily Rate | Total Cost |
+|----------|----------|------------|------------|
+| Standard | 10 days | $1,500/day | $15,000 |
+| Comprehensive | 14 days | $1,500/day | $21,000 |
+| **Recommended** | **12 days** | **$1,500/day** | **$18,000** |
+
+---
+
+## Combined Cost Summary
+
+### One-Time Costs (Pre-Launch)
+
+| Category | Cost |
+|----------|------|
+| Smart Contract Security Audit (Boutique Firm) | $18,000 |
+
+### Recurring Monthly Costs
+
+| Category | Monthly Cost |
+|----------|--------------|
+| Cloud Infrastructure | $1,000 |
+
+### 6-Month Cost Projection
+
+#### Option A: Infrastructure Only (Without Audit)
+
+For keeping the platform up and running:
+
+| Period | Cost |
+|--------|------|
+| Cloud Infrastructure (6 months) | $6,000 |
+| **Total Without Audit** | **$6,000** |
+
+#### Option B: Infrastructure + Security Audit (Recommended)
+
+For production-ready mainnet deployment with security assurance:
+
+| Period | Cost |
+|--------|------|
+| One-Time Security Audit | $18,000 |
+| Cloud Infrastructure (6 months) | $6,000 |
+| **Total With Audit** | **$24,000** |
+
+---
+
+## Document History
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2026-02-02 | thehodl.fun Team | Initial infrastructure estimate |
+| 1.1 | 2026-02-03 | thehodl.fun Team | Added smart contract audit costs |
+
+---
+
+*This document was prepared for grant application purposes. Actual costs may vary based on audit firm selection and usage patterns.*

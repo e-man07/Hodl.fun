@@ -4,7 +4,7 @@ pragma solidity ^0.8.22;
 import "forge-std/Test.sol";
 import "../../src/utils/BondingCurveLibrary.sol";
 import "../../src/utils/LiquidityAmounts.sol";
-import "../../src/utils/TickMath.sol";
+import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 
 /**
  * @title LibraryWrapper
@@ -44,22 +44,22 @@ contract PureLibraryTests is Test {
     // ========== BondingCurveLibrary.getAmountOut Tests ==========
 
     function testGetAmountOut_ZeroAmountIn_Reverts() public {
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_INPUT_AMOUNT");
+        vm.expectRevert(BondingCurveLibrary.InsufficientInputAmount.selector);
         wrapper.getAmountOut(0, 1e36, 1e18, 1e18);
     }
 
     function testGetAmountOut_ZeroReserveIn_Reverts() public {
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_LIQUIDITY");
+        vm.expectRevert(BondingCurveLibrary.InsufficientLiquidity.selector);
         wrapper.getAmountOut(1e18, 1e36, 0, 1e18);
     }
 
     function testGetAmountOut_ZeroReserveOut_Reverts() public {
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_LIQUIDITY");
+        vm.expectRevert(BondingCurveLibrary.InsufficientLiquidity.selector);
         wrapper.getAmountOut(1e18, 1e36, 1e18, 0);
     }
 
     function testGetAmountOut_BothReservesZero_Reverts() public {
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_LIQUIDITY");
+        vm.expectRevert(BondingCurveLibrary.InsufficientLiquidity.selector);
         wrapper.getAmountOut(1e18, 1e36, 0, 0);
     }
 
@@ -100,28 +100,28 @@ contract PureLibraryTests is Test {
     // ========== BondingCurveLibrary.getAmountIn Tests ==========
 
     function testGetAmountIn_ZeroAmountOut_Reverts() public {
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_OUTPUT_AMOUNT");
+        vm.expectRevert(BondingCurveLibrary.InsufficientOutputAmount.selector);
         wrapper.getAmountIn(0, 1e36, 1e18, 1e18);
     }
 
     function testGetAmountIn_ZeroReserveIn_Reverts() public {
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_LIQUIDITY");
+        vm.expectRevert(BondingCurveLibrary.InsufficientLiquidity.selector);
         wrapper.getAmountIn(0.5e18, 1e36, 0, 1e18);
     }
 
     function testGetAmountIn_ZeroReserveOut_Reverts() public {
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_LIQUIDITY");
+        vm.expectRevert(BondingCurveLibrary.InsufficientLiquidity.selector);
         wrapper.getAmountIn(0.5e18, 1e36, 1e18, 0);
     }
 
     function testGetAmountIn_AmountOutEqualsReserveOut_Reverts() public {
         // amountOut >= reserveOut should revert
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_OUTPUT_RESERVE");
+        vm.expectRevert(BondingCurveLibrary.InsufficientOutputReserve.selector);
         wrapper.getAmountIn(1e18, 1e36, 1e18, 1e18);
     }
 
     function testGetAmountIn_AmountOutExceedsReserveOut_Reverts() public {
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_OUTPUT_RESERVE");
+        vm.expectRevert(BondingCurveLibrary.InsufficientOutputReserve.selector);
         wrapper.getAmountIn(2e18, 1e36, 1e18, 1e18);
     }
 

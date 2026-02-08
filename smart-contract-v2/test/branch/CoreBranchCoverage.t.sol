@@ -9,7 +9,7 @@ import "../../src/BondingCurveFactory.sol";
 import "../../src/Core.sol";
 import "../../src/FeeVault.sol";
 import "../../src/WPUSH.sol";
-import "../../src/UniswapV3Factory.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Factory.sol";
 import "../../src/interfaces/IBondingCurveFactory.sol";
 
 /**
@@ -51,7 +51,7 @@ contract CoreBranchCoverageTest is Test {
             address(0), // factory is zero!
             admin
         );
-        core = Core(address(new ERC1967Proxy(address(coreImpl), initData)));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), initData))));
 
         vm.startPrank(admin);
         feeVault.initialize(
@@ -244,7 +244,7 @@ contract CoreNotInitializedTest is Test {
             address(0),
             address(this)
         );
-        Core core = Core(address(new ERC1967Proxy(address(coreImpl), initData)));
+        Core core = Core(payable(address(new ERC1967Proxy(address(coreImpl), initData))));
 
         // Try to create curve without setting factory - will fail due to factory being 0
         wNative.deposit{value: 1 ether}();

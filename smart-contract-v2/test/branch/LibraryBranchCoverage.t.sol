@@ -10,7 +10,7 @@ import "../../src/Core.sol";
 import "../../src/Token.sol";
 import "../../src/FeeVault.sol";
 import "../../src/WPUSH.sol";
-import "../../src/UniswapV3Factory.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Factory.sol";
 import "../../src/interfaces/IBondingCurveFactory.sol";
 import "../../src/utils/BondingCurveLibrary.sol";
 
@@ -60,7 +60,7 @@ contract LibraryBranchCoverageTest is Test {
             address(0),
             admin
         );
-        core = Core(address(new ERC1967Proxy(address(coreImpl), initData)));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), initData))));
 
         vm.startPrank(admin);
         feeVault.initialize(
@@ -109,7 +109,7 @@ contract LibraryBranchCoverageTest is Test {
         wNative.approve(address(core), 1 ether);
 
         // Branch: amountIn == 0 - triggers library revert
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_INPUT_AMOUNT");
+        vm.expectRevert(BondingCurveLibrary.InsufficientInputAmount.selector);
         core.exactInBuy(0, 0, token_, user1, block.timestamp + 1000);
         vm.stopPrank();
     }

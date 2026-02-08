@@ -60,7 +60,7 @@ contract TransferAdminToTimelockScript is Script {
         console.log("========================================\n");
 
         // Load contract instances
-        Core core = Core(coreProxy);
+        Core core = Core(payable(coreProxy));
         BondingCurveFactory factory = BondingCurveFactory(factoryProxy);
         FeeVault feeVault = FeeVault(payable(feeVaultProxy));
 

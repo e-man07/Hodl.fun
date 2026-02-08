@@ -11,8 +11,8 @@ import "../../src/Core.sol";
 import "../../src/Token.sol";
 import "../../src/FeeVault.sol";
 import "../../src/WPUSH.sol";
-import "../../src/UniswapV3Factory.sol";
-import "../../src/UniswapV3Pool.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Factory.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Pool.sol";
 import "../../src/interfaces/ICore.sol";
 import "../../src/interfaces/IBondingCurve.sol";
 import "../../src/interfaces/IBondingCurveFactory.sol";
@@ -72,7 +72,7 @@ contract BondingCurveBranchCoverageTest is Test {
             address(0),
             admin
         );
-        core = Core(address(new ERC1967Proxy(address(coreImpl), initData)));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), initData))));
 
         vm.startPrank(admin);
         feeVault.initialize(
@@ -322,11 +322,11 @@ contract BondingCurveBranchCoverageTest is Test {
     // ============ BondingCurve.listing() Branch Tests ============
 
     function testListing_FailsWhenNotLocked() public {
-        (address curve_, ) = createTestToken();
+        (, address token_) = createTestToken();
 
-        // Try to list before graduation
+        // Direct call to listing() fails with access control, so test via Core
         vm.expectRevert(BondingCurve.OnlyLock.selector);
-        BondingCurve(curve_).listing();
+        core.triggerListing(token_);
     }
 
     function testListing_FailsWhenAlreadyListed() public {
@@ -342,12 +342,12 @@ contract BondingCurveBranchCoverageTest is Test {
         }
         vm.stopPrank();
 
-        // First listing should succeed
-        BondingCurve(curve_).listing();
+        // First listing should succeed via Core
+        core.triggerListing(token_);
 
         // Second listing should fail
         vm.expectRevert(BondingCurve.AlreadyListed.selector);
-        BondingCurve(curve_).listing();
+        core.triggerListing(token_);
     }
 
     function testListing_InsufficientNativeForListingFee() public {
@@ -369,7 +369,7 @@ contract BondingCurveBranchCoverageTest is Test {
 
         // Listing should fail because reserves < listingFee
         vm.expectRevert(BondingCurve.InsufficientNativeReserves.selector);
-        BondingCurve(curve_).listing();
+        core.triggerListing(token_);
     }
 
     // ============ BondingCurve Pause/Unpause Tests ============
@@ -615,8 +615,8 @@ contract BondingCurveBranchCoverageTest is Test {
 
         assertTrue(BondingCurve(curve_).getLock());
 
-        // List on DEX
-        address pool = BondingCurve(curve_).listing();
+        // List on DEX via Core
+        address pool = core.triggerListing(token_);
         assertTrue(pool != address(0));
         assertTrue(BondingCurve(curve_).getIsListing());
         assertEq(BondingCurve(curve_).pool(), pool);

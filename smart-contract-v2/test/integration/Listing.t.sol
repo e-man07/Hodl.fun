@@ -10,8 +10,8 @@ import "../../src/BondingCurveFactory.sol";
 import "../../src/Core.sol";
 import "../../src/Token.sol";
 import "../../src/FeeVault.sol";
-import "../../src/UniswapV3Factory.sol";
-import "../../src/UniswapV3Pool.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Factory.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Pool.sol";
 
 /// @title Mock WPUSH for integration testing
 contract MockWNativeIntegration is ERC20 {
@@ -74,7 +74,7 @@ contract ListingIntegrationTest is Test {
 
         // Deploy Core
         Core coreImpl = new Core(address(wNative), address(feeVault));
-        core = Core(address(new ERC1967Proxy(address(coreImpl), "")));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), ""))));
 
         // Deploy Factory
         BondingCurveFactory factoryImpl = new BondingCurveFactory(address(wNative));
@@ -237,8 +237,8 @@ contract ListingIntegrationTest is Test {
         assertTrue(bc.getLock(), "Curve should be locked");
         assertFalse(bc.getIsListing(), "Should not be listed yet");
 
-        // Call listing
-        address pool = bc.listing();
+        // Call listing via Core
+        address pool = core.triggerListing(token_);
 
         assertTrue(bc.getIsListing(), "Should be listed after listing()");
         assertTrue(pool != address(0), "Pool address should not be zero");
@@ -252,13 +252,12 @@ contract ListingIntegrationTest is Test {
     }
 
     function testListingRevertsIfNotLocked() public {
-        (address curve_, ) = createTestToken(creator);
-        BondingCurve bc = BondingCurve(curve_);
+        (, address token_) = createTestToken(creator);
 
-        assertFalse(bc.getLock(), "Should not be locked");
-
+        // Calling directly on curve fails with access control
+        // So we test via Core.triggerListing which has access
         vm.expectRevert(BondingCurve.OnlyLock.selector);
-        bc.listing();
+        core.triggerListing(token_);
     }
 
     function testListingRevertsIfAlreadyListed() public {
@@ -270,12 +269,12 @@ contract ListingIntegrationTest is Test {
             buyTokens(user1, token_, 10 ether);
         }
 
-        bc.listing();
+        core.triggerListing(token_);
         assertTrue(bc.getIsListing(), "Should be listed");
 
         // Try to list again
         vm.expectRevert(BondingCurve.AlreadyListed.selector);
-        bc.listing();
+        core.triggerListing(token_);
     }
 
     function testListingTransfersFeesToVault() public {
@@ -289,7 +288,7 @@ contract ListingIntegrationTest is Test {
 
         uint256 vaultBalBefore = wNative.balanceOf(address(feeVault));
 
-        bc.listing();
+        core.triggerListing(token_);
 
         uint256 vaultBalAfter = wNative.balanceOf(address(feeVault));
 
@@ -309,7 +308,7 @@ contract ListingIntegrationTest is Test {
         (uint256 nativeResBefore, uint256 tokenResBefore) = bc.getReserves();
         assertGt(nativeResBefore, 0, "Should have native reserves before listing");
 
-        bc.listing();
+        core.triggerListing(token_);
 
         (uint256 nativeResAfter, uint256 tokenResAfter) = bc.getReserves();
         assertEq(nativeResAfter, 0, "Native reserves should be 0 after listing");
@@ -328,7 +327,7 @@ contract ListingIntegrationTest is Test {
         vm.expectEmit(true, true, false, false);
         emit IBondingCurve.Listing(curve_, token_, address(0), 0, 0, 0);
 
-        bc.listing();
+        core.triggerListing(token_);
     }
 
     // ==================== Pool State Tests ====================
@@ -342,7 +341,7 @@ contract ListingIntegrationTest is Test {
             buyTokens(user1, token_, 10 ether);
         }
 
-        address pool = bc.listing();
+        address pool = core.triggerListing(token_);
 
         IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
         uint128 poolLiquidity = poolContract.liquidity();
@@ -359,7 +358,7 @@ contract ListingIntegrationTest is Test {
             buyTokens(user1, token_, 10 ether);
         }
 
-        address pool = bc.listing();
+        address pool = core.triggerListing(token_);
 
         IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
 
@@ -402,7 +401,7 @@ contract ListingIntegrationTest is Test {
         assertTrue(bc.getLock(), "Curve should be locked");
 
         // 4. List on DEX
-        address pool = bc.listing();
+        address pool = core.triggerListing(token_);
 
         assertTrue(bc.getIsListing(), "Should be listed");
         assertTrue(pool != address(0), "Pool should exist");
@@ -509,7 +508,7 @@ contract ListingIntegrationTest is Test {
         }
 
         // List
-        bc.listing();
+        core.triggerListing(token_);
 
         // Creator claims fees
         uint256 accumulatedFees = factory.creatorFees(creator);

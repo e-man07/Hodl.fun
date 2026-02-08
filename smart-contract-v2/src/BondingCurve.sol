@@ -10,13 +10,14 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IBondingCurve.sol";
 import "./interfaces/IToken.sol";
-import "./interfaces/IUniswapV3Factory.sol";
-import "./interfaces/IUniswapV3Pool.sol";
-import "./interfaces/IUniswapV3MintCallback.sol";
+import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
+import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
 import "./interfaces/IBondingCurveFactory.sol";
 import "./interfaces/ICore.sol";
-import "./utils/TickMath.sol";
+import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import "./utils/LiquidityAmounts.sol";
+import "@uniswap/v3-core/contracts/libraries/FullMath.sol";
 
 /**
  * @title BondingCurve
@@ -263,18 +264,27 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
             revert InsufficientVirtualTokenReserves();
         }
         uint256 expectedAmountOut = _virtualToken - newReserveOut;
-        
+
         // CRITICAL SECURITY FIX: Validate provided amountOut matches expected output
         // Both Core and BondingCurve use the same formula (BondingCurveLibrary.getAmountOut),
-        // so they should match exactly. Any mismatch indicates manipulation.
-        // Note: Integer division rounding is deterministic, so exact match is required
-        if (amountOut != expectedAmountOut) {
+        // so they should match within rounding tolerance. Integer division in getAmountIn()
+        // followed by getAmountOut() can cause rounding differences due to truncation.
+        // Allow tolerance of max(1000 wei, 0.0001% of amount) to handle rounding errors
+        // while still preventing manipulation. 0.0001% is negligible but handles large k values.
+        uint256 tolerance = amountOut / 1_000_000; // 0.0001%
+        if (tolerance < 1000) tolerance = 1000; // minimum 1000 wei
+        if (amountOut > expectedAmountOut + tolerance ||
+            (expectedAmountOut > tolerance && amountOut + tolerance < expectedAmountOut)) {
             revert InvalidAmountOut();
         }
 
         // Calculate fee: deduct fee from token output
+        // SECURITY FIX: Enforce minimum 1 wei fee to prevent zero-fee trades
         Fee memory fee = feeConfig;
         uint256 feeTokenAmount = (amountOut * fee.numerator) / fee.denominator;
+        if (feeTokenAmount == 0 && amountOut > 0) {
+            feeTokenAmount = 1; // Minimum 1 wei fee
+        }
         uint256 tokensToUser = amountOut - feeTokenAmount;
 
         // Effects: Update virtual reserves
@@ -364,18 +374,27 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
             revert InsufficientVirtualNativeReserves();
         }
         uint256 expectedAmountOut = _virtualNative - newReserveIn;
-        
+
         // CRITICAL SECURITY FIX: Validate provided amountOut matches expected output
         // Both Core and BondingCurve use the same formula (BondingCurveLibrary.getAmountOut),
-        // so they should match exactly. Any mismatch indicates manipulation.
-        // Note: Integer division rounding is deterministic, so exact match is required
-        if (amountOut != expectedAmountOut) {
+        // so they should match within rounding tolerance. Integer division in getAmountIn()
+        // followed by getAmountOut() can cause rounding differences due to truncation.
+        // Allow tolerance of max(1000 wei, 0.0001% of amount) to handle rounding errors
+        // while still preventing manipulation. 0.0001% is negligible but handles large k values.
+        uint256 tolerance = amountOut / 1_000_000; // 0.0001%
+        if (tolerance < 1000) tolerance = 1000; // minimum 1000 wei
+        if (amountOut > expectedAmountOut + tolerance ||
+            (expectedAmountOut > tolerance && amountOut + tolerance < expectedAmountOut)) {
             revert InvalidAmountOut();
         }
 
         // Calculate fee: deduct fee from native output
+        // SECURITY FIX: Enforce minimum 1 wei fee to prevent zero-fee trades
         Fee memory fee = feeConfig;
         uint256 feeAmount = (amountOut * fee.numerator) / fee.denominator;
+        if (feeAmount == 0 && amountOut > 0) {
+            feeAmount = 1; // Minimum 1 wei fee
+        }
         uint256 nativeToUser = amountOut - feeAmount;
 
         // Use state variable storedCore (for proxies) or fallback to immutable core
@@ -461,7 +480,7 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
      * @dev Uses ADAPTIVE concentrated liquidity with ASYMMETRIC price range (0.25x to 4x)
      * @dev LP is PERMANENTLY LOCKED - no function exists to remove liquidity (effectively burned)
      */
-    function listing() external override nonReentrant returns (address pool_) {
+    function listing() external override nonReentrant onlyRole(CORE_ROLE) returns (address pool_) {
         if (!lock) {
             revert OnlyLock();
         }
@@ -545,11 +564,14 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
 
         uint160 sqrtPriceX96;
         if (token0IsNative) {
-            uint256 priceRatioX192 = (listingTokenAmount << 192) / listingNativeAmount;
+            // FIX: Use FullMath.mulDiv to avoid overflow when listingTokenAmount << 192 exceeds uint256
+            // Previously: (listingTokenAmount << 192) / listingNativeAmount would overflow for large token amounts
+            uint256 priceRatioX192 = FullMath.mulDiv(listingTokenAmount, 1 << 192, listingNativeAmount);
             uint256 sqrtPriceRatio = _sqrt(priceRatioX192);
             sqrtPriceX96 = uint160(sqrtPriceRatio / 1e9);
         } else {
-            uint256 priceRatioX192 = (listingNativeAmount << 192) / listingTokenAmount;
+            // FIX: Use FullMath.mulDiv to avoid overflow when listingNativeAmount << 192 exceeds uint256
+            uint256 priceRatioX192 = FullMath.mulDiv(listingNativeAmount, 1 << 192, listingTokenAmount);
             uint256 sqrtPriceRatio = _sqrt(priceRatioX192);
             sqrtPriceX96 = uint160(sqrtPriceRatio / 1e9);
         }
@@ -691,44 +713,6 @@ contract BondingCurve is IBondingCurve, IUniswapV3MintCallback, Initializable, U
         }
         
         return y;
-    }
-
-    /**
-     * @notice Update virtual and real reserves after trades
-     * @param amountIn Amount coming in
-     * @param amountOut Amount going out
-     * @param isBuy Whether this is a buy order
-     */
-    function _update(uint256 amountIn, uint256 amountOut, bool isBuy) private {
-        // Update real reserves from actual balances
-        realNativeReserves = IERC20(wNative).balanceOf(address(this));
-        realTokenReserves = IERC20(token).balanceOf(address(this));
-
-        if (isBuy) {
-            virtualNative += amountIn;
-            // Check for underflow (Solidity 0.8+ will revert, but explicit check is clearer)
-            if (virtualToken < amountOut) {
-                revert InsufficientVirtualTokenReserves();
-            }
-            virtualToken -= amountOut;
-        } else {
-            // Check for underflow (Solidity 0.8+ will revert, but explicit check is clearer)
-            if (virtualNative < amountOut) {
-                revert InsufficientVirtualNativeReserves();
-            }
-            virtualNative -= amountOut;
-            virtualToken += amountIn;
-        }
-
-        // SECURITY FIX: Prevent division by zero
-        if (virtualToken == 0) {
-            revert InvalidReserves();
-        }
-
-        // Calculate price from virtual reserves: price per token = virtualNative / virtualToken (scaled by 1e18)
-        uint256 price = (virtualNative * 1e18) / virtualToken;
-
-        emit Sync(token, realNativeReserves, realTokenReserves, virtualNative, virtualToken, price, block.timestamp);
     }
 
     /**

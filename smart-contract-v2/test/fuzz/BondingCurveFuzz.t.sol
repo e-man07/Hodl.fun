@@ -83,7 +83,7 @@ contract BondingCurveFuzzTest is Test {
         feeVault = FeeVault(address(new ERC1967Proxy(address(feeVaultImpl), "")));
 
         Core coreImpl = new Core(address(wNative), address(feeVault));
-        core = Core(address(new ERC1967Proxy(address(coreImpl), "")));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), ""))));
 
         BondingCurveFactory factoryImpl = new BondingCurveFactory(address(wNative));
         factory = BondingCurveFactory(address(new ERC1967Proxy(address(factoryImpl), "")));

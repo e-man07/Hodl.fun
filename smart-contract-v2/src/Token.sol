@@ -91,11 +91,15 @@ contract Token is
     /**
      * @notice Mint all tokens to the bonding curve (one-time operation during initialization)
      * @param curve Bonding curve address to receive all tokens
+     * @dev SECURITY: Restricted to DEFAULT_ADMIN_ROLE to prevent front-running attacks
      * @dev Can only be called once. Called by factory during token creation.
      */
-    function mint(address curve) external override {
+    function mint(address curve) external override onlyRole(DEFAULT_ADMIN_ROLE) {
         if (hasMinted) {
             revert AlreadyMinted();
+        }
+        if (curve == address(0)) {
+            revert InvalidAddress();
         }
         hasMinted = true;
         _mint(curve, TOTAL_SUPPLY);

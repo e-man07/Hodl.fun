@@ -11,8 +11,8 @@ import "../../src/Core.sol";
 import "../../src/Token.sol";
 import "../../src/FeeVault.sol";
 import "../../src/WPUSH.sol";
-import "../../src/UniswapV3Factory.sol";
-import "../../src/UniswapV3Pool.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Factory.sol";
+import "@uniswap/v3-core/contracts/UniswapV3Pool.sol";
 import "../../src/interfaces/ICore.sol";
 import "../../src/interfaces/IBondingCurve.sol";
 import "../../src/interfaces/IBondingCurveFactory.sol";
@@ -66,7 +66,7 @@ contract BranchCoverageTest is Test {
             address(0),
             admin
         );
-        core = Core(address(new ERC1967Proxy(address(coreImpl), initData)));
+        core = Core(payable(address(new ERC1967Proxy(address(coreImpl), initData))));
 
         vm.startPrank(admin);
         feeVault.initialize(
@@ -646,37 +646,28 @@ contract BranchCoverageTest is Test {
     }
 
     // ============ WPUSH Branch Tests ============
+    // Note: mint(), batchMint(), emergencyWithdraw() tests removed - functions were rug pull vectors
 
     function testWPUSHDepositZeroAmount() public {
-        vm.expectRevert("Deposit amount must be greater than 0");
+        vm.expectRevert(WPUSH.ZeroDeposit.selector);
         wNative.deposit{value: 0}();
     }
 
     function testWPUSHWithdrawZeroAmount() public {
         vm.prank(user1);
-        vm.expectRevert("Withdraw amount must be greater than 0");
+        vm.expectRevert(WPUSH.ZeroWithdraw.selector);
         wNative.withdraw(0);
     }
 
     function testWPUSHWithdrawInsufficientBalance() public {
         vm.prank(user1);
-        vm.expectRevert("Insufficient balance");
+        vm.expectRevert(WPUSH.InsufficientBalance.selector);
         wNative.withdraw(1 ether);
-    }
-
-    function testWPUSHMintZeroAddress() public {
-        vm.expectRevert("Invalid recipient");
-        wNative.mint(address(0), 1 ether);
-    }
-
-    function testWPUSHMintZeroAmount() public {
-        vm.expectRevert("Mint amount must be greater than 0");
-        wNative.mint(user1, 0);
     }
 
     function testWPUSHBurnZeroAmount() public {
         vm.prank(user1);
-        vm.expectRevert("Burn amount must be greater than 0");
+        vm.expectRevert(WPUSH.ZeroBurn.selector);
         wNative.burn(0);
     }
 
@@ -685,85 +676,17 @@ contract BranchCoverageTest is Test {
         wNative.deposit{value: 1 ether}();
 
         vm.prank(user2);
-        vm.expectRevert("Insufficient allowance");
+        vm.expectRevert(WPUSH.InsufficientBalance.selector);
         wNative.burnFrom(user1, 1 ether);
     }
 
-    function testWPUSHBatchMintArrayLengthMismatch() public {
-        address[] memory recipients = new address[](2);
-        recipients[0] = user1;
-        recipients[1] = user2;
-
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = 1 ether;
-
-        vm.expectRevert("Array length mismatch");
-        wNative.batchMint(recipients, amounts);
-    }
-
-    function testWPUSHBatchMintWithZeroAddress() public {
-        address[] memory recipients = new address[](2);
-        recipients[0] = user1;
-        recipients[1] = address(0);
-
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 1 ether;
-        amounts[1] = 1 ether;
-
-        vm.expectRevert("Invalid recipient");
-        wNative.batchMint(recipients, amounts);
-    }
-
-    function testWPUSHBatchMintWithZeroAmount() public {
-        address[] memory recipients = new address[](2);
-        recipients[0] = user1;
-        recipients[1] = user2;
-
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 1 ether;
-        amounts[1] = 0;
-
-        vm.expectRevert("Mint amount must be greater than 0");
-        wNative.batchMint(recipients, amounts);
-    }
-
-    function testWPUSHEmergencyWithdrawNoFunds() public {
-        vm.expectRevert("No funds to withdraw");
-        wNative.emergencyWithdraw();
-    }
-
-    function testWPUSHEmergencyWithdrawWithFunds() public {
-        // Deposit some funds and withdraw the WPUSH tokens without withdrawing ETH
-        // This simulates stuck funds scenario
-        vm.prank(user1);
-        wNative.deposit{value: 1 ether}();
-
-        // Burn the WPUSH tokens (user loses them without withdrawing ETH)
-        // This leaves ETH in the contract
-        vm.prank(user1);
-        wNative.burn(1 ether);
-
-        // The contract still has the ETH, so emergency withdraw should work
-        uint256 contractBalance = address(wNative).balance;
-        assertTrue(contractBalance > 0, "Contract should have balance");
-
-        address ownerAddr = wNative.owner();
-        uint256 ownerBalanceBefore = ownerAddr.balance;
-
-        vm.prank(ownerAddr);
-        wNative.emergencyWithdraw();
-
-        uint256 ownerBalanceAfter = ownerAddr.balance;
-        assertEq(ownerBalanceAfter - ownerBalanceBefore, contractBalance);
-    }
-
     function testWPUSHWithdrawWithPermitZeroAmount() public {
-        vm.expectRevert("Withdraw amount must be greater than 0");
+        vm.expectRevert(WPUSH.ZeroWithdraw.selector);
         wNative.withdrawWithPermit(user1, 0, block.timestamp + 1000, 0, bytes32(0), bytes32(0));
     }
 
     function testWPUSHWithdrawWithPermitInsufficientBalance() public {
-        vm.expectRevert("Insufficient balance");
+        vm.expectRevert(WPUSH.InsufficientBalance.selector);
         wNative.withdrawWithPermit(user1, 1 ether, block.timestamp + 1000, 0, bytes32(0), bytes32(0));
     }
 
@@ -812,7 +735,7 @@ contract BranchCoverageTest is Test {
         wNative.approve(address(core), 1 ether);
 
         // Zero amountOut triggers library revert
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_OUTPUT_AMOUNT");
+        vm.expectRevert(BondingCurveLibrary.InsufficientOutputAmount.selector);
         core.exactOutBuy(0, 1 ether, token_, user1, block.timestamp + 1000);
         vm.stopPrank();
     }
@@ -830,7 +753,7 @@ contract BranchCoverageTest is Test {
         IERC20(token_).approve(address(core), tokenBalance);
 
         // Zero amountOut triggers library revert
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_OUTPUT_AMOUNT");
+        vm.expectRevert(BondingCurveLibrary.InsufficientOutputAmount.selector);
         core.exactOutSell(0, tokenBalance, token_, user1, user1, block.timestamp + 1000);
         vm.stopPrank();
     }
@@ -838,10 +761,11 @@ contract BranchCoverageTest is Test {
     // ============ Listing Flow Branch Tests ============
 
     function testListingWhenNotLocked() public {
-        (address curve_, ) = createTestToken();
+        (, address token_) = createTestToken();
 
+        // Direct call fails with access control, so test via Core.triggerListing
         vm.expectRevert(BondingCurve.OnlyLock.selector);
-        BondingCurve(curve_).listing();
+        core.triggerListing(token_);
     }
 
     function testListingAlreadyListed() public {
@@ -856,12 +780,12 @@ contract BranchCoverageTest is Test {
 
         assertTrue(BondingCurve(curve_).lock());
 
-        // First listing
-        BondingCurve(curve_).listing();
+        // First listing via Core
+        core.triggerListing(token_);
 
         // Second listing should fail
         vm.expectRevert(BondingCurve.AlreadyListed.selector);
-        BondingCurve(curve_).listing();
+        core.triggerListing(token_);
     }
 
     // ============ getTickSpacing Branch Tests ============
@@ -880,7 +804,7 @@ contract BranchCoverageTest is Test {
         vm.stopPrank();
 
         assertTrue(BondingCurve(curve1).lock());
-        address pool1 = BondingCurve(curve1).listing();
+        address pool1 = core.triggerListing(token1);
         assertTrue(pool1 != address(0));
 
         // Test with 10000 fee tier
@@ -907,7 +831,7 @@ contract BranchCoverageTest is Test {
         vm.stopPrank();
 
         assertTrue(BondingCurve(curve2).lock());
-        address pool2 = BondingCurve(curve2).listing();
+        address pool2 = core.triggerListing(token2);
         assertTrue(pool2 != address(0));
     }
 
@@ -1084,7 +1008,7 @@ contract BranchCoverageTest is Test {
 
         // The library call for getAmountOut with 0 input returns 0 output
         // BondingCurve checks amountOut == 0 and reverts
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_INPUT_AMOUNT");
+        vm.expectRevert(BondingCurveLibrary.InsufficientInputAmount.selector);
         core.exactInBuy(0, 0, token_, user1, block.timestamp + 1000);
         vm.stopPrank();
     }
@@ -1101,7 +1025,7 @@ contract BranchCoverageTest is Test {
         IERC20(token_).approve(address(core), type(uint256).max);
 
         // Try to sell zero amount
-        vm.expectRevert("BondingCurveLibrary: INSUFFICIENT_INPUT_AMOUNT");
+        vm.expectRevert(BondingCurveLibrary.InsufficientInputAmount.selector);
         core.exactInSell(0, 0, token_, user1, user1, block.timestamp + 1000);
         vm.stopPrank();
     }
@@ -1206,7 +1130,7 @@ contract BranchCoverageTest is Test {
         assertTrue(BondingCurve(curve1).lock());
 
         // First listing creates the pool
-        address pool1 = BondingCurve(curve1).listing();
+        address pool1 = core.triggerListing(token1);
         assertTrue(pool1 != address(0));
         assertTrue(BondingCurve(curve1).isListing());
 
@@ -1295,24 +1219,7 @@ contract BranchCoverageTest is Test {
     }
 
     // ============ WPUSH Edge Case Tests ============
-
-    function testWPUSHSuccessfulBatchMint() public {
-        address[] memory recipients = new address[](3);
-        recipients[0] = user1;
-        recipients[1] = user2;
-        recipients[2] = admin;
-
-        uint256[] memory amounts = new uint256[](3);
-        amounts[0] = 1 ether;
-        amounts[1] = 2 ether;
-        amounts[2] = 3 ether;
-
-        wNative.batchMint(recipients, amounts);
-
-        assertEq(wNative.balanceOf(user1), 1 ether);
-        assertEq(wNative.balanceOf(user2), 2 ether);
-        assertEq(wNative.balanceOf(admin), 3 ether);
-    }
+    // Note: testWPUSHSuccessfulBatchMint removed - batchMint was a rug pull vector
 
     function testWPUSHSuccessfulBurnFrom() public {
         // Deposit first

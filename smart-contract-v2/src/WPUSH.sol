@@ -3,16 +3,17 @@ pragma solidity ^0.8.22;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 /**
  * @title WPUSH
  * @notice Wrapped PUSH token for Hodl.fun and Push Chain ecosystem
  * @dev ERC20 + ERC2612 Permit for gasless approvals
  *      Implements standard deposit/withdraw pattern for native PUSH wrapping
- *      Can be used as fallback if Push Chain doesn't deploy official WPUSH
+ *      SECURITY: Maintains strict 1:1 backing - tokens only created via deposit
+ *      REMOVED: mint(), batchMint(), emergencyWithdraw() functions (rug pull vectors)
  */
-contract WPUSH is ERC20, ERC20Permit, Ownable {
+contract WPUSH is ERC20, ERC20Permit, ReentrancyGuard {
     /**
      * @notice Emitted when native PUSH is deposited and wrapped
      * @param sender Address that deposited
@@ -28,20 +29,18 @@ contract WPUSH is ERC20, ERC20Permit, Ownable {
     event Withdrawal(address indexed recipient, uint256 amount);
 
     /**
-     * @notice Emitted when tokens are minted (emergency/initialization only)
-     * @param to Recipient address
-     * @param amount Amount minted
-     */
-    event Minted(address indexed to, uint256 amount);
-
-    /**
      * @notice Emitted when tokens are burned
      * @param from Address that burned
      * @param amount Amount burned
      */
     event Burned(address indexed from, uint256 amount);
 
+    /// @notice Custom errors for gas efficiency
+    error ZeroDeposit();
+    error ZeroWithdraw();
     error InsufficientBalance();
+    error WithdrawalFailed();
+    error ZeroBurn();
 
     constructor() ERC20("Wrapped PUSH", "WPUSH") ERC20Permit("Wrapped PUSH") {}
 
@@ -49,8 +48,8 @@ contract WPUSH is ERC20, ERC20Permit, Ownable {
      * @notice Deposit native PUSH and receive WPUSH
      * @dev Can be called with ETH value to wrap
      */
-    function deposit() external payable {
-        require(msg.value > 0, "Deposit amount must be greater than 0");
+    function deposit() external payable nonReentrant {
+        if (msg.value == 0) revert ZeroDeposit();
         _mint(msg.sender, msg.value);
         emit Deposit(msg.sender, msg.value);
     }
@@ -59,14 +58,14 @@ contract WPUSH is ERC20, ERC20Permit, Ownable {
      * @notice Withdraw WPUSH to receive native PUSH
      * @param amount Amount of WPUSH to withdraw
      */
-    function withdraw(uint256 amount) external {
-        require(amount > 0, "Withdraw amount must be greater than 0");
-        require(balanceOf(msg.sender) >= amount, "Insufficient balance");
+    function withdraw(uint256 amount) external nonReentrant {
+        if (amount == 0) revert ZeroWithdraw();
+        if (balanceOf(msg.sender) < amount) revert InsufficientBalance();
 
         _burn(msg.sender, amount);
 
         (bool success, ) = payable(msg.sender).call{value: amount}("");
-        require(success, "Withdrawal failed");
+        if (!success) revert WithdrawalFailed();
 
         emit Withdrawal(msg.sender, amount);
     }
@@ -87,9 +86,9 @@ contract WPUSH is ERC20, ERC20Permit, Ownable {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external {
-        require(amount > 0, "Withdraw amount must be greater than 0");
-        require(balanceOf(owner) >= amount, "Insufficient balance");
+    ) external nonReentrant {
+        if (amount == 0) revert ZeroWithdraw();
+        if (balanceOf(owner) < amount) revert InsufficientBalance();
 
         // Use permit to approve spending
         permit(owner, msg.sender, amount, deadline, v, r, s);
@@ -97,7 +96,7 @@ contract WPUSH is ERC20, ERC20Permit, Ownable {
         _burn(owner, amount);
 
         (bool success, ) = payable(owner).call{value: amount}("");
-        require(success, "Withdrawal failed");
+        if (!success) revert WithdrawalFailed();
 
         emit Withdrawal(owner, amount);
     }
@@ -107,35 +106,9 @@ contract WPUSH is ERC20, ERC20Permit, Ownable {
      * Automatically wraps received PUSH
      */
     receive() external payable {
+        if (msg.value == 0) revert ZeroDeposit();
         _mint(msg.sender, msg.value);
         emit Deposit(msg.sender, msg.value);
-    }
-
-    /**
-     * @notice Emergency mint function (only owner, for initialization or recovery)
-     * @param to Recipient address
-     * @param amount Amount to mint
-     */
-    function mint(address to, uint256 amount) external onlyOwner {
-        require(to != address(0), "Invalid recipient");
-        require(amount > 0, "Mint amount must be greater than 0");
-        _mint(to, amount);
-        emit Minted(to, amount);
-    }
-
-    /**
-     * @notice Batch mint for initial distribution
-     * @param recipients Array of recipient addresses
-     * @param amounts Array of amounts to mint
-     */
-    function batchMint(address[] calldata recipients, uint256[] calldata amounts) external onlyOwner {
-        require(recipients.length == amounts.length, "Array length mismatch");
-        for (uint256 i = 0; i < recipients.length; i++) {
-            require(recipients[i] != address(0), "Invalid recipient");
-            require(amounts[i] > 0, "Mint amount must be greater than 0");
-            _mint(recipients[i], amounts[i]);
-            emit Minted(recipients[i], amounts[i]);
-        }
     }
 
     /**
@@ -143,7 +116,7 @@ contract WPUSH is ERC20, ERC20Permit, Ownable {
      * @param amount Amount to burn
      */
     function burn(uint256 amount) external {
-        require(amount > 0, "Burn amount must be greater than 0");
+        if (amount == 0) revert ZeroBurn();
         _burn(msg.sender, amount);
         emit Burned(msg.sender, amount);
     }
@@ -154,8 +127,9 @@ contract WPUSH is ERC20, ERC20Permit, Ownable {
      * @param amount Amount to burn
      */
     function burnFrom(address account, uint256 amount) external {
+        if (amount == 0) revert ZeroBurn();
         uint256 currentAllowance = allowance(account, msg.sender);
-        require(currentAllowance >= amount, "Insufficient allowance");
+        if (currentAllowance < amount) revert InsufficientBalance();
 
         _approve(account, msg.sender, currentAllowance - amount);
         _burn(account, amount);
@@ -171,14 +145,10 @@ contract WPUSH is ERC20, ERC20Permit, Ownable {
     }
 
     /**
-     * @notice Emergency withdrawal by owner (in case of stuck funds)
-     * @dev Only callable by owner as last resort
+     * @notice Verify 1:1 backing (view function for transparency)
+     * @return isFullyBacked True if totalSupply <= contract balance
      */
-    function emergencyWithdraw() external onlyOwner {
-        uint256 balance = address(this).balance;
-        require(balance > 0, "No funds to withdraw");
-
-        (bool success, ) = payable(owner()).call{value: balance}("");
-        require(success, "Emergency withdrawal failed");
+    function isFullyBacked() external view returns (bool) {
+        return totalSupply() <= address(this).balance;
     }
 }

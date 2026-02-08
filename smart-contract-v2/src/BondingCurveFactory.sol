@@ -4,6 +4,7 @@ pragma solidity ^0.8.22;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -18,7 +19,7 @@ import "./Token.sol";
  * @notice Upgradeable factory for creating bonding curves and tokens
  * @dev Uses UUPS upgradeable pattern, manages global configuration
  */
-contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgradeable, AccessControlUpgradeable {
+contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
     
     /// @notice Role for core contract
@@ -54,6 +55,9 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
 
     /// @notice Mapping from creator to accumulated fees (in wrapped native)
     mapping(address => uint256) public creatorFees;
+
+    /// @notice Total accumulated creator fees across all creators
+    uint256 public totalAccumulatedFees;
 
     /// @notice BondingCurve implementation contract (deployed once, reused for all proxies)
     address public immutable bondingCurveImplementation;
@@ -92,6 +96,7 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
 
         __UUPSUpgradeable_init();
         __AccessControl_init();
+        __ReentrancyGuard_init();
 
         // Validate reserves
         if (params.virtualNative == 0 || params.virtualToken == 0) {
@@ -412,15 +417,17 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
             revert InvalidAddress(); // Caller is not a known bonding curve
         }
 
-        // SECURITY: Verify contract actually has the tokens being accumulated
+        // SECURITY FIX: Verify contract has received the new tokens
+        // Balance must be at least totalAccumulatedFees + amount (old fees + new deposit)
         uint256 balance = IERC20(wNative).balanceOf(address(this));
-        if (balance < amount) {
+        if (balance < totalAccumulatedFees + amount) {
             revert InvalidReserves();
         }
 
         // Tokens should already be transferred to this contract by the bonding curve
         // We just accumulate the fees for the creator
         creatorFees[creator] += amount;
+        totalAccumulatedFees += amount;
         emit CreatorFeesAccumulated(creator, amount, creatorFees[creator]);
     }
 
@@ -428,13 +435,14 @@ contract BondingCurveFactory is IBondingCurveFactory, Initializable, UUPSUpgrade
      * @notice Claim accumulated creator fees
      * @dev Creators can claim their accumulated fees
      */
-    function claimCreatorFees() external {
+    function claimCreatorFees() external nonReentrant {
         uint256 amount = creatorFees[msg.sender];
         if (amount == 0) {
             revert NoFeesToClaim();
         }
 
         creatorFees[msg.sender] = 0;
+        totalAccumulatedFees -= amount;
         IERC20(wNative).safeTransfer(msg.sender, amount);
         emit CreatorFeesClaimed(msg.sender, amount);
     }
